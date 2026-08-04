@@ -1,15 +1,49 @@
 {
   "name": "voicetoclipboard",
   "version": "1.0.0",
-  "description": "A simple voice to clipboard STT tool.",
-  "main": "index.js",
+  "description": "Ultra-lightweight, floating voice-to-text widget powered by Gemini Multimodal AI with live subtitles & auto-clipboard.",
+  "main": "main.js",
+  "author": "Open Source Community",
+  "license": "MIT",
+  "keywords": [
+    "speech-to-text",
+    "stt",
+    "gemini-ai",
+    "clipboard",
+    "floating-widget",
+    "electron",
+    "subtitles",
+    "windows",
+    "productivity"
+  ],
   "scripts": {
-    "start": "node index.js"
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.voicetoclipboard.app",
+    "productName": "VoiceToClipboard",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "renderer.js",
+      "package.json"
+    ]
   },
   "dependencies": {
-    "@google/genai": "^0.1.2",
-    "clipboardy": "^4.0.0",
-    "dotenv": "^16.4.5",
-    "node-record-lpcm16": "^1.0.1"
+    "@google/genai": "^2.15.0"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
   }
 }
