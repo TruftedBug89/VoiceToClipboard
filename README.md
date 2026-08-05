@@ -1,5 +1,10 @@
 # 🎙️ VoiceToClipboard
 
+> [!NOTE]
+> **Project Status:** 🟢 **Working / Functional**  
+> *This status must not be changed by AI unless explicitly instructed by the repository owner.*
+
+
 > **A featherweight, always-on-top Windows widget that turns your microphone into an instant clipboard.**
 > Speak — it transcribes with Google Gemini and copies the text to your clipboard automatically.
 
