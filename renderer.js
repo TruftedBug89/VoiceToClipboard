@@ -7,6 +7,8 @@ const settingsModal = document.getElementById('settings-modal');
 const closeModalBtn = document.getElementById('close-modal-btn');
 const apiKeyInput = document.getElementById('api-key-input');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
+const apiKeyNote = document.getElementById('api-key-note');
+const removeKeyBtn = document.getElementById('remove-key-btn');
 const canvas = document.getElementById('visualizer-canvas');
 const canvasCtx = canvas.getContext('2d');
 const micContainer = document.getElementById('mic-container');
@@ -60,8 +62,9 @@ let pointerDrag = null;
 document.addEventListener('pointerdown', (e) => {
     if (settingsModal.classList.contains('active')) return;
     if (micContainer.contains(e.target)) {
-        pointerDrag = { pid: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false };
+        pointerDrag = { pid: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false };
         try { micContainer.setPointerCapture(e.pointerId); } catch (err) {}
+        ipcRenderer.send('drag-start');
     }
 });
 
@@ -73,9 +76,7 @@ document.addEventListener('pointermove', (e) => {
         micContainer.classList.add('dragging');
     }
     if (pointerDrag.moved) {
-        ipcRenderer.send('drag-window', e.clientX - pointerDrag.lastX, e.clientY - pointerDrag.lastY);
-        pointerDrag.lastX = e.clientX;
-        pointerDrag.lastY = e.clientY;
+        ipcRenderer.send('drag-move');
     }
 });
 
@@ -83,6 +84,7 @@ function endPointerDrag() {
     if (pointerDrag) {
         pointerDrag = null;
         micContainer.classList.remove('dragging');
+        ipcRenderer.send('drag-end');
     }
 }
 
@@ -94,7 +96,7 @@ document.addEventListener('pointerup', (e) => {
         if (!isRecording) {
             startRecording();
         } else {
-            cancelRecording();
+            stopRecording(); // click during recording = submit & transcribe
         }
     }
 });
@@ -162,28 +164,45 @@ function openSettings() {
     hideStatus();
     mouseIgnored = false;
     ipcRenderer.send('set-ignore-mouse', false);
-    ipcRenderer.invoke('get-api-key-status').then(status => {
-        apiKeyInput.value = status.key || '';
-        settingsModal.classList.add('active');
-    });
+    ipcRenderer.send('set-settings-open', true);
+    settingsModal.classList.add('active');
+    refreshSettingsUi();
+}
+
+async function refreshSettingsUi() {
+    const status = await ipcRenderer.invoke('get-api-key-status');
+    apiKeyInput.value = '';
+    removeKeyBtn.style.display = status.source === 'config' ? 'inline-block' : 'none';
+    if (status.source === 'env') {
+        apiKeyNote.innerHTML = 'Key comes from the <code>GEMINI_API_KEY</code> environment variable.';
+    } else if (status.source === 'config') {
+        apiKeyNote.textContent = '✓ Key saved in this app.';
+    } else {
+        apiKeyNote.innerHTML = 'No key yet — get a free one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
+    }
 }
 
 function closeSettings() {
     settingsModal.classList.remove('active');
+    ipcRenderer.send('set-settings-open', false);
     refreshMouseIgnore();
 }
 
 saveSettingsBtn.addEventListener('click', async () => {
     const val = apiKeyInput.value.trim();
-    if (val) {
-        const res = await ipcRenderer.invoke('save-api-key', val);
-        if (res.success) {
-            setStatus('done', 'KEY SAVED');
-            setTimeout(hideStatus, 1600);
-            closeSettings();
-            setTimeout(() => checkApiKeyStatus(), 2000);
-        }
+    if (!val) { closeSettings(); return; }
+    const res = await ipcRenderer.invoke('save-api-key', val);
+    if (res.success) {
+        setStatus('done', 'KEY SAVED');
+        setTimeout(hideStatus, 1600);
+        closeSettings();
+        setTimeout(() => checkApiKeyStatus(), 2000);
     }
+});
+
+removeKeyBtn.addEventListener('click', async () => {
+    await ipcRenderer.invoke('remove-api-key');
+    refreshSettingsUi();
 });
 
 settingsBtn.addEventListener('click', openSettings);

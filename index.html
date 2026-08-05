@@ -258,15 +258,16 @@
             to { stroke-dashoffset: 0; }
         }
 
-        /* Cancel (✕) icon shown while recording */
-        #cancel-icon {
+        /* Submit (✓) icon shown while recording — click to finish & transcribe */
+        #submit-icon {
             position: absolute;
             width: 20px;
             height: 20px;
             fill: none;
-            stroke: #fff;
+            stroke: #4ade80;
             stroke-width: 2.6;
             stroke-linecap: round;
+            stroke-linejoin: round;
             opacity: 0;
             transform: scale(0.5) rotate(90deg);
             transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -278,13 +279,13 @@
             transform: scale(0.4) rotate(-30deg);
         }
 
-        #mic-button.recording #cancel-icon {
+        #mic-button.recording #submit-icon {
             opacity: 1;
             transform: scale(1) rotate(0deg);
         }
 
         /* Transcribing state: button breathes, ring spins fast */
-        #mic-button.transcribing #cancel-icon {
+        #mic-button.transcribing #submit-icon {
             opacity: 0;
             transform: scale(0.4) rotate(90deg);
         }
@@ -461,6 +462,34 @@
             color: var(--text-dim);
         }
 
+        #api-key-note {
+            font-size: 11px;
+            color: var(--text-dim);
+            line-height: 1.4;
+        }
+
+        #api-key-note code {
+            font-size: 10.5px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        #api-key-note a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .modal-actions .btn-save {
+            flex: 1;
+        }
+
         .input-group input {
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid var(--border-glass);
@@ -487,6 +516,27 @@
         }
 
         .btn-save:hover {
+            background: #b3283a;
+        }
+
+        .btn-remove {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-dim);
+            border: 1px solid var(--border-glass);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            display: none;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .btn-remove:hover {
+            background: rgba(230, 57, 70, 0.15);
+            color: #ff8f9d;
+        }
+
+        .btn-save:hover {
             background: var(--primary-hover);
         }
     </style>
@@ -506,13 +556,13 @@
         <div class="sonar-ring ring-2"></div>
         <div class="sonar-ring ring-3"></div>
         <div class="spin-ring"></div>
-        <div id="mic-button" title="Click to record · Drag to move · Ctrl+Alt+V">
+        <div id="mic-button" title="Click to record · Click again to submit · Drag to move · Ctrl+Alt+V">
             <svg id="mic-icon" viewBox="0 0 24 24">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
-            <svg id="cancel-icon" viewBox="0 0 24 24">
-                <path d="M6 6l12 12M18 6L6 18"/>
+            <svg id="submit-icon" viewBox="0 0 24 24">
+                <path d="M5 12.5l4.5 4.5L19 7.5"/>
             </svg>
             <svg id="check-icon" viewBox="0 0 24 24">
                 <path d="M5 12.5l4.5 4.5L19 7.5"/>
@@ -534,10 +584,14 @@
             <div class="icon-btn" id="close-modal-btn">✕</div>
         </div>
         <div class="input-group">
-            <label for="api-key-input">Gemini API Key <span style="color:var(--text-dim);font-weight:400">(required — get a free key from <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--primary)">Google AI Studio</a>)</span></label>
-            <input type="password" id="api-key-input" placeholder="Paste your GEMINI_API_KEY here..." />
+            <label for="api-key-input">Gemini API Key</label>
+            <input type="password" id="api-key-input" placeholder="Paste your API key here..." autocomplete="off" />
+            <div id="api-key-note"></div>
         </div>
-        <button class="btn-save" id="save-settings-btn">Save Key</button>
+        <div class="modal-actions">
+            <button class="btn-save" id="save-settings-btn">Save Key</button>
+            <button class="btn-remove" id="remove-key-btn">Remove</button>
+        </div>
     </div>
 
     <script src="renderer.js"></script>

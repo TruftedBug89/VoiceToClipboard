@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, globalShortcut, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, globalShortcut, Tray, Menu, nativeImage, screen } = require('electron');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
@@ -179,8 +179,12 @@ app.on('window-all-closed', () => {
 
 // IPC Handlers
 ipcMain.handle('get-api-key-status', () => {
-    const key = getApiKey();
-    return { hasKey: !!key, key: key ? `${key.substring(0, 4)}...${key.substring(key.length - 4)}` : '' };
+    const envKey = process.env.GEMINI_API_KEY;
+    const config = loadConfig();
+    return {
+        hasKey: !!((envKey && envKey.trim()) || config.apiKey),
+        source: (envKey && envKey.trim()) ? 'env' : (config.apiKey ? 'config' : 'none')
+    };
 });
 
 ipcMain.handle('save-api-key', (event, newKey) => {
@@ -188,11 +192,45 @@ ipcMain.handle('save-api-key', (event, newKey) => {
     return { success };
 });
 
-// Custom window drag (hold + move on the mic/subtitles; never triggers recording)
-ipcMain.on('drag-window', (event, dx, dy) => {
+ipcMain.handle('remove-api-key', () => {
+    const success = saveConfig({ apiKey: '' });
+    return { success };
+});
+
+// Resize window to fit the settings modal while it is open
+const WIDGET_HEIGHT = 130;
+const SETTINGS_HEIGHT = 214;
+
+ipcMain.on('set-settings-open', (event, open) => {
     if (!mainWindow) return;
     const [x, y] = mainWindow.getPosition();
-    mainWindow.setPosition(x + dx, y + dy);
+    mainWindow.setBounds({ x, y, width: 220, height: open ? SETTINGS_HEIGHT : WIDGET_HEIGHT }, false);
+});
+
+// Custom window drag — absolute positioning. The window target is derived from
+// the cursor's SCREEN coordinates (independent of window position), so there is
+// no relative-drag feedback loop and the window tracks 1:1 with zero lag.
+let dragState = null;
+
+ipcMain.on('drag-start', () => {
+    if (!mainWindow) return;
+    dragState = {
+        win: mainWindow.getPosition(),
+        cursor: screen.getCursorScreenPoint()
+    };
+});
+
+ipcMain.on('drag-move', () => {
+    if (!mainWindow || !dragState) return;
+    const cursor = screen.getCursorScreenPoint();
+    mainWindow.setPosition(
+        dragState.win[0] + (cursor.x - dragState.cursor.x),
+        dragState.win[1] + (cursor.y - dragState.cursor.y)
+    );
+});
+
+ipcMain.on('drag-end', () => {
+    dragState = null;
 });
 
 // Toggle click-through for transparent areas

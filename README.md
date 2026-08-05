@@ -28,7 +28,7 @@
 - ⌨️ **Global shortcut** — record anywhere with `Ctrl + Alt + V`
 - 🤖 **Gemini Multimodal STT** — high-accuracy transcription with automatic language detection
 - 🖱️ **Drag anywhere** — hold the mic button and drag to reposition; quick click to record
-- ⏹️ **Cancel anytime** — click the ✕ button (or press `Esc`) to discard a recording
+- ⏹️ **Submit or cancel** — click the ✓ to finish & transcribe; press `Esc` to discard
 - 🪟 **Click-through design** — transparent areas never block your mouse; clicks pass straight through to apps underneath
 - 🎨 **Minimal glass UI** — breathing glow, sonar rings, spinner feedback, and a hand-drawn checkmark on success
 - 📌 **System tray** — always-on-top toggle, tray controls, and window position memory
@@ -40,8 +40,8 @@
 | Action | Shortcut / Control |
 | :--- | :--- |
 | **Start recording** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> or click the mic button |
-| **Finish & transcribe** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> (while recording) |
-| **Cancel recording** | Click the ✕ button or press <kbd>Esc</kbd> |
+| **Finish & transcribe** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> or click the ✓ button (while recording) |
+| **Cancel recording** | Press <kbd>Esc</kbd> |
 | **Move the widget** | Hold-click the mic button and drag |
 | **Open settings** | Hover the widget and click ⚙️, or right-click the tray icon |
 | **Quit app** | Hover the widget and click ✕, or tray icon → Quit |
@@ -114,7 +114,7 @@ shortcut and uninstaller. Installed shortcuts pin cleanly to the taskbar.
 1. You start recording (shortcut or mic click) — audio is captured with the native **Web Audio API**.
 2. Press the shortcut again to finish: the clip is sent to **Gemini 2.5 Flash** for transcription.
 3. The transcript is written straight to your **clipboard** — ready to paste.
-4. Prefer to start over? **Cancel** discards the audio instantly.
+4. Prefer to start over? Press <kbd>Esc</kbd> to **cancel** — the audio is discarded instantly.
 
 ## 🧱 Tech Stack
 
