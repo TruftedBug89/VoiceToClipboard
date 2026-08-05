@@ -107,20 +107,21 @@ process.on('uncaughtException', (err) => {
     console.error('MAIN UNCAUGHT:', err);
 });
 
+function sanitizeErrorMessage(err) {
+    if (!err) return "Unknown error";
+    let msg = typeof err === 'string' ? err : (err.message || String(err));
+    return msg.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
+}
+
 function createTray() {
     const iconPath = path.join(__dirname, 'build', 'icon.ico');
     let icon;
     if (fs.existsSync(iconPath)) {
         icon = nativeImage.createFromPath(iconPath);
     } else {
-        const svgIcon = `
-        <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="8" cy="8" r="6" fill="#e63946"/>
-            <path d="M8 4v5M6 7l2 2 2-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-        icon = nativeImage.createFromBuffer(Buffer.from(svgIcon));
+        const iconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACYSURBVDhPzZExDsMgDEVf6tCld+m+U0+To0TkAhUjy5ZIVUq/xI/tf3ADcM49+oA7Y/5hF5i71oO5G+269wP4jPntA0Tkg1Kq/wNEpAFKqQ9O1wZ8YEqzT9cGTFA3+3RtwAR1s0/XBkxQN/t0bcAER6v26dqACeq2eBtw07X/B1y/G/A13QGk688BpOv/Ac492gE24D70BUt0i16n37dGAAAAAElFTkSuQmCC';
+        icon = nativeImage.createFromDataURL('data:image/png;base64,' + iconBase64);
     }
-
     tray = new Tray(icon);
     tray.setToolTip('VoiceToClipboard (Ctrl+Alt+V)');
 
@@ -410,26 +411,7 @@ ipcMain.handle('download-local-model', async (event, modelId) => {
     }
 });
 
-ipcMain.handle('get-hotkey', () => {
-    const config = loadConfig();
-    return config.hotkey || 'CommandOrControl+Alt+V';
-});
 
-ipcMain.handle('save-hotkey', (event, newHotkey) => {
-    if (typeof newHotkey !== 'string' || !newHotkey.trim()) {
-        return { success: false, error: 'Invalid hotkey format' };
-    }
-    const sanitizedHotkey = newHotkey.trim();
-    const success = registerHotkey(sanitizedHotkey);
-    if (success) {
-        saveConfig({ hotkey: sanitizedHotkey });
-        return { success: true, hotkey: sanitizedHotkey };
-    } else {
-        const defaultConfig = loadConfig().hotkey || 'CommandOrControl+Alt+V';
-        registerHotkey(defaultConfig);
-        return { success: false, error: 'Failed to register hotkey with Windows OS.' };
-    }
-});
 
 ipcMain.handle('save-api-key', (event, newKey) => {
     const success = saveConfig({ apiKey: newKey.trim() });
@@ -518,12 +500,6 @@ ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
                 "Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language."
             ]
         });
-
-function sanitizeErrorMessage(err) {
-    if (!err) return "Unknown error";
-    let msg = typeof err === 'string' ? err : (err.message || String(err));
-    return msg.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
-}
 
         const transcript = (response.text ?? '').trim();
 
