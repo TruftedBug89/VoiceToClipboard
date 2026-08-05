@@ -116,6 +116,12 @@ shortcut and uninstaller. Installed shortcuts pin cleanly to the taskbar.
 3. The transcript is written straight to your **clipboard** — ready to paste.
 4. Prefer to start over? Press <kbd>Esc</kbd> to **cancel** — the audio is discarded instantly.
 
+### Local Whisper Offline Mode
+> [!WARNING]
+> **Language limitations:** The Local Whisper models (like Base or Tiny) mostly work well only for English and Spanish. They may struggle to recognize smaller languages. For full language support, the Gemini API is recommended.
+> 
+> **Memory usage:** The Local Whisper mode temporarily loads the AI model into memory, which can spike RAM usage up to 1 GB (or more for larger models). If you only transcribe occasionally and want to save RAM, enable **Low Memory Mode** in the settings. This unloads the model from RAM after every use.
+
 ## 🧱 Tech Stack
 
 | Layer | Technology |

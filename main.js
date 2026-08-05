@@ -1,12 +1,29 @@
-const { app, BrowserWindow, ipcMain, clipboard, globalShortcut, Tray, Menu, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen } = require('electron');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
+const { uIOhook, UiohookKey } = require('uiohook-napi');
+
+const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
 
 app.disableHardwareAcceleration();
 // Windows App User Model ID — required before windows are created so the
 // taskbar groups the app correctly and pinning the icon works properly.
 app.setAppUserModelId('com.voicetoclipboard.app');
+
+// Ensure single instance
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+            mainWindow.show();
+        }
+    });
+}
 
 let mainWindow;
 let tray = null;
@@ -54,7 +71,7 @@ function createWindow() {
         y: config.windowY,
         transparent: true,
         frame: false,
-        alwaysOnTop: true,
+        alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
         resizable: false,
         skipTaskbar: false,
         webPreferences: {
@@ -91,14 +108,19 @@ process.on('uncaughtException', (err) => {
 });
 
 function createTray() {
-    // Generate a simple 16x16 red/gray circle icon for tray
-    const svgIcon = `
-    <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="8" cy="8" r="6" fill="#e63946"/>
-        <path d="M8 4v5M6 7l2 2 2-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
-    
-    const icon = nativeImage.createFromBuffer(Buffer.from(svgIcon));
+    const iconPath = path.join(__dirname, 'build', 'icon.ico');
+    let icon;
+    if (fs.existsSync(iconPath)) {
+        icon = nativeImage.createFromPath(iconPath);
+    } else {
+        const svgIcon = `
+        <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="6" fill="#e63946"/>
+            <path d="M8 4v5M6 7l2 2 2-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+        icon = nativeImage.createFromBuffer(Buffer.from(svgIcon));
+    }
+
     tray = new Tray(icon);
     tray.setToolTip('VoiceToClipboard (Ctrl+Alt+V)');
 
@@ -119,9 +141,13 @@ function createTray() {
         { 
             label: '📌 Always on Top', 
             type: 'checkbox', 
-            checked: true, 
+            checked: typeof loadConfig().alwaysOnTop === 'boolean' ? loadConfig().alwaysOnTop : true, 
             click: (item) => {
+                const cfg = loadConfig();
+                cfg.alwaysOnTop = item.checked;
+                saveConfig({ alwaysOnTop: item.checked });
                 if (mainWindow) mainWindow.setAlwaysOnTop(item.checked);
+                if (mainWindow) mainWindow.webContents.send('sync-settings');
             } 
         },
         { type: 'separator' },
@@ -134,7 +160,8 @@ function createTray() {
     ]);
 
     tray.setContextMenu(contextMenu);
-    tray.on('double-click', () => {
+
+    const toggleWindow = () => {
         if (mainWindow) {
             if (mainWindow.isVisible()) {
                 mainWindow.focus();
@@ -142,23 +169,79 @@ function createTray() {
                 mainWindow.show();
             }
         }
-    });
+    };
+
+    tray.on('click', toggleWindow);
+    tray.on('double-click', toggleWindow);
 }
+
+let currentHotkeyConfig = null;
+
+function applyHotkeyConfig(hk) {
+    if (!hk) {
+        currentHotkeyConfig = { type: 'keyboard', keycode: UiohookKey.V, ctrl: true, alt: true, shift: false };
+    } else {
+        currentHotkeyConfig = hk;
+    }
+}
+
+uIOhook.on('keydown', (e) => {
+    if (mainWindow && mainWindow.webContents && mainWindow.webContents.isFocused()) {
+        // let the renderer handle its own keydown if focused and recording? 
+        // We moved recording to main process.
+    }
+    
+    if (isRecordingHotkey) {
+        if ([UiohookKey.Ctrl, UiohookKey.Alt, UiohookKey.Shift, UiohookKey.CtrlRight, UiohookKey.AltRight, UiohookKey.ShiftRight, UiohookKey.Meta].includes(e.keycode)) return;
+        isRecordingHotkey = false;
+        const hk = { type: 'keyboard', keycode: e.keycode, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+        if (hotkeyPromiseResolve) {
+            hotkeyPromiseResolve(hk);
+            hotkeyPromiseResolve = null;
+        }
+        return;
+    }
+    
+    if (currentHotkeyConfig && currentHotkeyConfig.type === 'keyboard') {
+        if (e.keycode === currentHotkeyConfig.keycode && 
+            !!e.ctrlKey === !!currentHotkeyConfig.ctrl &&
+            !!e.altKey === !!currentHotkeyConfig.alt &&
+            !!e.shiftKey === !!currentHotkeyConfig.shift) {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
+        }
+    }
+});
+
+uIOhook.on('mousedown', (e) => {
+    if (isRecordingHotkey) {
+        if (e.button === 1 && !e.ctrlKey && !e.altKey && !e.shiftKey) return; // Ignore plain left click
+        isRecordingHotkey = false;
+        const hk = { type: 'mouse', button: e.button, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+        if (hotkeyPromiseResolve) {
+            hotkeyPromiseResolve(hk);
+            hotkeyPromiseResolve = null;
+        }
+        return;
+    }
+
+    if (currentHotkeyConfig && currentHotkeyConfig.type === 'mouse') {
+        if (e.button === currentHotkeyConfig.button &&
+            !!e.ctrlKey === !!currentHotkeyConfig.ctrl &&
+            !!e.altKey === !!currentHotkeyConfig.alt &&
+            !!e.shiftKey === !!currentHotkeyConfig.shift) {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
+        }
+    }
+});
+
+uIOhook.start();
 
 app.whenReady().then(() => {
     createWindow();
     createTray();
 
-    // Register Global Shortcut
-    const registered = globalShortcut.register('CommandOrControl+Alt+V', () => {
-        if (mainWindow) {
-            mainWindow.webContents.send('toggle-recording');
-        }
-    });
-
-    if (!registered) {
-        console.warn('Global shortcut registration failed!');
-    }
+    const config = loadConfig();
+    applyHotkeyConfig(config.customHotkey); // We use customHotkey instead of hotkey to avoid conflict with old format
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -168,7 +251,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
+    uIOhook.stop();
 });
 
 app.on('window-all-closed', () => {
@@ -176,6 +259,57 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
+
+// Local Transformers.js / Whisper setup
+let pipelineFn = null;
+const modelsDir = path.join(app.getPath('userData'), 'models');
+if (!fs.existsSync(modelsDir)) {
+    try { fs.mkdirSync(modelsDir, { recursive: true }); } catch (e) {}
+}
+
+async function getPipelineModule() {
+    if (!pipelineFn) {
+        const { pipeline, env } = require('@xenova/transformers');
+        env.cacheDir = modelsDir;
+        if (env.backends && env.backends.onnx && env.backends.onnx.wasm) {
+            env.backends.onnx.wasm.numThreads = 1;
+        }
+        pipelineFn = pipeline;
+    }
+    return pipelineFn;
+}
+
+let transcriberCache = null;
+let loadedModelId = null;
+
+function unloadLocalModel() {
+    if (transcriberCache) {
+        if (typeof transcriberCache.dispose === 'function') {
+            transcriberCache.dispose();
+        }
+        transcriberCache = null;
+        loadedModelId = null;
+    }
+}
+
+async function getTranscriber(modelId, progressCallback) {
+    const pipeline = await getPipelineModule();
+    if (transcriberCache && loadedModelId === modelId) {
+        return transcriberCache;
+    }
+    transcriberCache = await pipeline('automatic-speech-recognition', modelId, {
+        progress_callback: progressCallback
+    });
+    loadedModelId = modelId;
+    return transcriberCache;
+}
+
+function isModelDownloaded(modelId) {
+    const sanitizeName = modelId.replace('/', '--');
+    const folder1 = path.join(modelsDir, `models--${sanitizeName}`);
+    const folder2 = path.join(modelsDir, modelId);
+    return fs.existsSync(folder1) || fs.existsSync(folder2);
+}
 
 // IPC Handlers
 ipcMain.handle('get-api-key-status', () => {
@@ -185,6 +319,116 @@ ipcMain.handle('get-api-key-status', () => {
         hasKey: !!((envKey && envKey.trim()) || config.apiKey),
         source: (envKey && envKey.trim()) ? 'env' : (config.apiKey ? 'config' : 'none')
     };
+});
+
+ipcMain.handle('get-stt-config', () => {
+    const config = loadConfig();
+    return {
+        sttEngine: config.sttEngine || 'gemini',
+        localModel: config.localModel || 'Xenova/whisper-base',
+        isDownloaded: config.localModel ? fs.existsSync(path.join(modelsDir, config.localModel)) : false,
+        autoStopEnabled: !!config.autoStopEnabled,
+        autoStopSeconds: typeof config.autoStopSeconds === 'number' ? config.autoStopSeconds : 3.5,
+        silenceThreshold: typeof config.silenceThreshold === 'number' ? config.silenceThreshold : 12,
+        ecoMode: !!config.ecoMode,
+        alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
+        idleFadeEnabled: !!config.idleFadeEnabled,
+        idleOpacity: typeof config.idleOpacity === 'number' ? config.idleOpacity : 0.3
+    };
+});
+
+ipcMain.handle('save-stt-config', (event, { sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode, alwaysOnTop, idleFadeEnabled, idleOpacity }) => {
+    const success = saveConfig({ sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode, alwaysOnTop, idleFadeEnabled, idleOpacity });
+    
+    if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop);
+
+    if (sttEngine !== 'local' || ecoMode) {
+        unloadLocalModel();
+    }
+    
+    // Update tray checkbox
+    if (tray) {
+        const menu = tray.ContextMenu || Menu.buildFromTemplate([ ...tray.getContextMenu().items.map(i => {
+            if (i.label === '📌 Always on Top') i.checked = alwaysOnTop;
+            return i;
+        }) ]);
+        tray.setContextMenu(menu);
+    }
+
+    return { success };
+});
+
+function formatHotkey(hk) {
+    if (!hk) return 'Ctrl + Alt + V';
+    let parts = [];
+    if (hk.ctrl) parts.push('Ctrl');
+    if (hk.alt) parts.push('Alt');
+    if (hk.shift) parts.push('Shift');
+    if (hk.type === 'mouse') {
+        parts.push(`Mouse ${hk.button}`);
+    } else {
+        let keyName = reverseKeyMap[hk.keycode] || `Keycode ${hk.keycode}`;
+        parts.push(keyName);
+    }
+    return parts.join(' + ');
+}
+
+let isRecordingHotkey = false;
+let hotkeyPromiseResolve = null;
+
+ipcMain.handle('get-hotkey', () => {
+    const config = loadConfig();
+    return formatHotkey(config.customHotkey);
+});
+
+ipcMain.handle('start-recording-hotkey', async () => {
+    isRecordingHotkey = true;
+    return new Promise((resolve) => {
+        hotkeyPromiseResolve = (hk) => {
+            applyHotkeyConfig(hk);
+            saveConfig({ customHotkey: hk });
+            resolve(formatHotkey(hk));
+        };
+    });
+});
+
+ipcMain.handle('check-model-downloaded', (event, modelId) => {
+    return { downloaded: isModelDownloaded(modelId) };
+});
+
+ipcMain.handle('download-local-model', async (event, modelId) => {
+    try {
+        await getTranscriber(modelId, (data) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('download-progress', data);
+            }
+        });
+        return { success: true };
+    } catch (err) {
+        console.error("Model download error:", err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('get-hotkey', () => {
+    const config = loadConfig();
+    return config.hotkey || 'CommandOrControl+Alt+V';
+});
+
+ipcMain.handle('save-hotkey', (event, newHotkey) => {
+    if (typeof newHotkey !== 'string' || !newHotkey.trim()) {
+        return { success: false, error: 'Invalid hotkey format' };
+    }
+    const sanitizedHotkey = newHotkey.trim();
+    const success = registerHotkey(sanitizedHotkey);
+    if (success) {
+        saveConfig({ hotkey: sanitizedHotkey });
+        return { success: true, hotkey: sanitizedHotkey };
+    } else {
+        const defaultConfig = loadConfig().hotkey || 'CommandOrControl+Alt+V';
+        registerHotkey(defaultConfig);
+        return { success: false, error: 'Failed to register hotkey with Windows OS.' };
+    }
 });
 
 ipcMain.handle('save-api-key', (event, newKey) => {
@@ -198,13 +442,17 @@ ipcMain.handle('remove-api-key', () => {
 });
 
 // Resize window to fit the settings modal while it is open
+const WIDGET_WIDTH = 220;
 const WIDGET_HEIGHT = 130;
-const SETTINGS_HEIGHT = 214;
+const SETTINGS_WIDTH = 320;
+const SETTINGS_HEIGHT = 580;
 
 ipcMain.on('set-settings-open', (event, open) => {
-    if (!mainWindow) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     const [x, y] = mainWindow.getPosition();
-    mainWindow.setBounds({ x, y, width: 220, height: open ? SETTINGS_HEIGHT : WIDGET_HEIGHT }, false);
+    const width = open ? SETTINGS_WIDTH : WIDGET_WIDTH;
+    const height = open ? SETTINGS_HEIGHT : WIDGET_HEIGHT;
+    mainWindow.setBounds({ x, y, width, height }, false);
 });
 
 // Custom window drag — absolute positioning. The window target is derived from
@@ -213,20 +461,29 @@ ipcMain.on('set-settings-open', (event, open) => {
 let dragState = null;
 
 ipcMain.on('drag-start', () => {
-    if (!mainWindow) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const [x, y] = mainWindow.getPosition();
+    const [w, h] = mainWindow.getSize();
     dragState = {
-        win: mainWindow.getPosition(),
+        winX: x,
+        winY: y,
+        width: w,
+        height: h,
         cursor: screen.getCursorScreenPoint()
     };
 });
 
 ipcMain.on('drag-move', () => {
-    if (!mainWindow || !dragState) return;
+    if (!mainWindow || mainWindow.isDestroyed() || !dragState) return;
     const cursor = screen.getCursorScreenPoint();
-    mainWindow.setPosition(
-        dragState.win[0] + (cursor.x - dragState.cursor.x),
-        dragState.win[1] + (cursor.y - dragState.cursor.y)
-    );
+    const newX = dragState.winX + (cursor.x - dragState.cursor.x);
+    const newY = dragState.winY + (cursor.y - dragState.cursor.y);
+    mainWindow.setBounds({
+        x: newX,
+        y: newY,
+        width: dragState.width,
+        height: dragState.height
+    }, false);
 });
 
 ipcMain.on('drag-end', () => {
@@ -262,6 +519,12 @@ ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
             ]
         });
 
+function sanitizeErrorMessage(err) {
+    if (!err) return "Unknown error";
+    let msg = typeof err === 'string' ? err : (err.message || String(err));
+    return msg.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
+}
+
         const transcript = (response.text ?? '').trim();
 
         if (transcript) {
@@ -271,7 +534,69 @@ ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
             return { success: false, error: "No speech detected." };
         }
     } catch (error) {
-        console.error("Transcription error:", error);
+        const cleanMsg = sanitizeErrorMessage(error);
+        console.error("Transcription error:", cleanMsg);
+        return { success: false, error: cleanMsg };
+    }
+});
+
+function cleanWhisperHallucinations(text) {
+    if (!text) return '';
+    let cleaned = text;
+    // Remove repeated single words (3 or more consecutive repetitions, e.g. "The The The The")
+    cleaned = cleaned.replace(/(\b\w+\b)(?:\s+\1){2,}/gi, '$1');
+    // Remove repeated 2-word phrases (2 or more consecutive repetitions)
+    cleaned = cleaned.replace(/(\b\w+\s+\w+\b)(?:\s+\1){2,}/gi, '$1');
+    // Remove repeated 3-word phrases
+    cleaned = cleaned.replace(/(\b\w+\s+\w+\s+\w+\b)(?:\s+\1){2,}/gi, '$1');
+    return cleaned.trim();
+}
+
+ipcMain.handle('transcribe-audio-local', async (event, float32Buffer) => {
+    try {
+        const config = loadConfig();
+        const modelId = config.localModel || 'Xenova/whisper-base';
+
+        if (!isModelDownloaded(modelId)) {
+            return { success: false, error: "Model weights not downloaded yet." };
+        }
+
+        const transcriber = await getTranscriber(modelId);
+        const float32Array = new Float32Array(
+            float32Buffer.buffer,
+            float32Buffer.byteOffset,
+            float32Buffer.byteLength / 4
+        );
+
+        const output = await transcriber(float32Array, {
+            task: 'transcribe',
+            return_timestamps: false,
+            chunk_length_s: 30,
+            stride_length_s: 5,
+            repetition_penalty: 1.2,
+            no_repeat_ngram_size: 3,
+            condition_on_previous_text: false
+        });
+
+        const rawText = (output && output.text ? output.text : '').trim();
+        const transcript = cleanWhisperHallucinations(rawText);
+
+        if (config.ecoMode) {
+            unloadLocalModel();
+        }
+
+        if (transcript) {
+            clipboard.writeText(transcript);
+            return { success: true, text: transcript };
+        } else {
+            return { success: false, error: "No speech detected." };
+        }
+    } catch (error) {
+        console.error("Local Whisper transcription error:", error);
+        if (loadConfig().ecoMode) {
+            unloadLocalModel();
+        }
         return { success: false, error: error.message };
     }
 });
+

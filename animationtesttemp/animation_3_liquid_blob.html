@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Option 3: Fluid Liquid Blob & Dynamic Wave Metamorphism</title>
+  <style>
+    :root {
+      --bg-dark: #0a0c14;
+      --card-bg: rgba(22, 27, 46, 0.75);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --accent-orange: #ff5500;
+      --accent-red: #ff0055;
+      --accent-yellow: #ffb700;
+      --accent-green: #10b981;
+      --text-main: #f3f4f6;
+      --text-dim: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at 50% 30%, #151a30 0%, #080910 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      align-items: center;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-yellow), var(--accent-orange), var(--accent-red));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+    }
+
+    .demo-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 32px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 85, 0, 0.1);
+    }
+
+    .stage {
+      position: relative;
+      width: 320px;
+      height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 16px 0 24px 0;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+    }
+
+    .status-badge {
+      position: absolute;
+      bottom: -12px;
+      background: rgba(10, 12, 20, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s ease;
+    }
+
+    .controls-panel {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      background: rgba(10, 12, 20, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .control-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn.active {
+      background: linear-gradient(135deg, var(--accent-orange), var(--accent-red));
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(255, 85, 0, 0.4);
+    }
+
+    .btn-mic {
+      grid-column: span 4;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px dashed rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-mic.recording {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-style: solid;
+      border-color: transparent;
+      animation: pulse-border 1.5s infinite;
+    }
+
+    @keyframes pulse-border {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .sliders-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .slider-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-item div {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent-orange);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Option 3: Fluid Liquid Blob & Wave Metamorphism</h1>
+    <p>Gooey metaball spring physics, multi-hue gradient shifts & real-time Web Audio integration</p>
+  </header>
+
+  <div class="demo-card">
+    <div class="stage">
+      <canvas id="blobCanvas" width="320" height="320"></canvas>
+      <div class="status-badge">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">IDLE</span>
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="control-group">
+        <label>Widget State Simulation</label>
+        <div class="btn-grid">
+          <button class="btn active" id="btnIdle" onclick="setState('idle')">Idle</button>
+          <button class="btn" id="btnRecord" onclick="setState('recording')">Record</button>
+          <button class="btn" id="btnTranscribe" onclick="setState('transcribing')">Transcribe</button>
+          <button class="btn" id="btnDone" onclick="setState('done')">Done</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Live Audio Input (Web Audio API)</label>
+        <button class="btn btn-mic" id="btnMicToggle" onclick="toggleMicrophone()">
+          🎤 Enable Real Microphone Testing
+        </button>
+      </div>
+
+      <div class="control-group">
+        <label>Physics & Fluid Controls</label>
+        <div class="sliders-grid">
+          <div class="slider-item">
+            <div><span>Deformation Sensitivity</span><span id="valSens">1.2</span></div>
+            <input type="range" id="sliderSens" min="0.2" max="3.0" step="0.1" value="1.2">
+          </div>
+          <div class="slider-item">
+            <div><span>Spring Stiffness</span><span id="valStiff">0.08</span></div>
+            <input type="range" id="sliderStiff" min="0.02" max="0.2" step="0.01" value="0.08">
+          </div>
+          <div class="slider-item">
+            <div><span>Fluid Damping</span><span id="valDamp">0.85</span></div>
+            <input type="range" id="sliderDamp" min="0.7" max="0.98" step="0.01" value="0.85">
+          </div>
+          <div class="slider-item">
+            <div><span>Gradient Shift Speed</span><span id="valColorSpeed">1.0</span></div>
+            <input type="range" id="sliderColorSpeed" min="0.2" max="3.0" step="0.1" value="1.0">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('blobCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // UI Elements
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const btnMicToggle = document.getElementById('btnMicToggle');
+
+  // Sliders
+  const sliderSens = document.getElementById('sliderSens');
+  const sliderStiff = document.getElementById('sliderStiff');
+  const sliderDamp = document.getElementById('sliderDamp');
+  const sliderColorSpeed = document.getElementById('sliderColorSpeed');
+
+  const valSens = document.getElementById('valSens');
+  const valStiff = document.getElementById('valStiff');
+  const valDamp = document.getElementById('valDamp');
+  const valColorSpeed = document.getElementById('valColorSpeed');
+
+  sliderSens.oninput = () => valSens.textContent = sliderSens.value;
+  sliderStiff.oninput = () => valStiff.textContent = sliderStiff.value;
+  sliderDamp.oninput = () => valDamp.textContent = sliderDamp.value;
+  sliderColorSpeed.oninput = () => valColorSpeed.textContent = sliderColorSpeed.value;
+
+  // State Management
+  let currentState = 'idle'; // 'idle', 'recording', 'transcribing', 'done'
+  let useLiveMic = false;
+  let audioContext = null;
+  let analyser = null;
+  let micStream = null;
+  let frequencyData = new Uint8Array(0);
+
+  // Blob Physics Simulation setup
+  const NUM_POINTS = 36;
+  const CENTER_X = canvas.width / 2;
+  const CENTER_Y = canvas.height / 2;
+  let BASE_RADIUS = 75;
+
+  class Point {
+    constructor(angle) {
+      this.angle = angle;
+      this.baseRadius = BASE_RADIUS;
+      this.radius = BASE_RADIUS;
+      this.targetRadius = BASE_RADIUS;
+      this.velocity = 0;
+    }
+
+    update(stiffness, damping) {
+      const force = (this.targetRadius - this.radius) * stiffness;
+      this.velocity += force;
+      this.velocity *= damping;
+      this.radius += this.velocity;
+    }
+  }
+
+  const points = [];
+  for (let i = 0; i < NUM_POINTS; i++) {
+    const angle = (i / NUM_POINTS) * Math.PI * 2;
+    points.push(new Point(angle));
+  }
+
+  // Floating metaball droplets
+  const droplets = Array.from({ length: 6 }, (_, i) => ({
+    angle: (i / 6) * Math.PI * 2,
+    orbitRadius: 95 + Math.random() * 20,
+    size: 6 + Math.random() * 8,
+    speed: (0.01 + Math.random() * 0.02) * (i % 2 === 0 ? 1 : -1),
+    pulsePhase: Math.random() * Math.PI * 2
+  }));
+
+  // Ripple Waves
+  const ripples = [];
+
+  function spawnRipple() {
+    ripples.push({
+      radius: BASE_RADIUS,
+      maxRadius: BASE_RADIUS + 70 + Math.random() * 30,
+      alpha: 0.7,
+      colorHue: Math.random() * 60 // Sunset hue spectrum (0: Red, 60: Yellow)
+    });
+  }
+
+  // Gradient Color Animation State
+  let colorHueOffset = 0;
+
+  function setState(state) {
+    currentState = state;
+    document.querySelectorAll('.btn-grid .btn').forEach(btn => btn.classList.remove('active'));
+    
+    if (state === 'idle') {
+      document.getElementById('btnIdle').classList.add('active');
+      statusDot.style.background = '#9ca3af';
+      statusText.textContent = 'IDLE';
+    } else if (state === 'recording') {
+      document.getElementById('btnRecord').classList.add('active');
+      statusDot.style.background = '#ef4444';
+      statusText.textContent = 'RECORDING...';
+    } else if (state === 'transcribing') {
+      document.getElementById('btnTranscribe').classList.add('active');
+      statusDot.style.background = '#f59e0b';
+      statusText.textContent = 'TRANSCRIBING...';
+    } else if (state === 'done') {
+      document.getElementById('btnDone').classList.add('active');
+      statusDot.style.background = '#10b981';
+      statusText.textContent = 'COPIED TO CLIPBOARD';
+    }
+  }
+
+  async function toggleMicrophone() {
+    if (!useLiveMic) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 128;
+        const source = audioContext.createMediaStreamSource(micStream);
+        source.connect(analyser);
+        frequencyData = new Uint8Array(analyser.frequencyBinCount);
+        
+        useLiveMic = true;
+        btnMicToggle.textContent = '🛑 Stop Live Microphone';
+        btnMicToggle.classList.add('recording');
+        setState('recording');
+      } catch (err) {
+        alert('Could not access microphone: ' + err.message);
+      }
+    } else {
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+      }
+      if (audioContext) {
+        audioContext.close();
+      }
+      useLiveMic = false;
+      btnMicToggle.textContent = '🎤 Enable Real Microphone Testing';
+      btnMicToggle.classList.remove('recording');
+      setState('idle');
+    }
+  }
+
+  // Audio Amplitude Generator (Simulated or Live)
+  let simTime = 0;
+  function getAudioLevels() {
+    let volume = 0;
+    const freqs = [];
+
+    if (useLiveMic && analyser) {
+      analyser.getByteFrequencyData(frequencyData);
+      let sum = 0;
+      for (let i = 0; i < frequencyData.length; i++) {
+        sum += frequencyData[i];
+        freqs.push(frequencyData[i] / 255.0);
+      }
+      volume = sum / (frequencyData.length * 255.0);
+    } else {
+      simTime += 0.05;
+      if (currentState === 'recording') {
+        // Simulated voice rhythm (combination of sine waves + noise bursts)
+        const speechEnvelope = Math.max(0, Math.sin(simTime * 1.5) * Math.cos(simTime * 0.7));
+        volume = speechEnvelope * 0.6 + (Math.random() * 0.15);
+        for (let i = 0; i < NUM_POINTS; i++) {
+          freqs.push(Math.sin(simTime * 3 + i * 0.4) * 0.5 + 0.5);
+        }
+      } else if (currentState === 'transcribing') {
+        // Pulsing rhythmic energy
+        volume = 0.2 + Math.sin(simTime * 8) * 0.1;
+      } else if (currentState === 'done') {
+        volume = 0.05;
+      } else {
+        // Idle subtle breathing
+        volume = 0.02 + Math.sin(simTime * 0.8) * 0.015;
+      }
+    }
+
+    return { volume, freqs };
+  }
+
+  // Main Render Loop
+  let frameCount = 0;
+  function render() {
+    frameCount++;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const sensitivity = parseFloat(sliderSens.value);
+    const stiffness = parseFloat(sliderStiff.value);
+    const damping = parseFloat(sliderDamp.value);
+    const colorSpeed = parseFloat(sliderColorSpeed.value);
+
+    const { volume, freqs } = getAudioLevels();
+
+    // Spawn ripples on high volume peaks
+    if (volume > 0.45 && frameCount % 12 === 0 && currentState === 'recording') {
+      spawnRipple();
+    }
+
+    // Dynamic Target Radius calculation per point
+    colorHueOffset += colorSpeed * (0.5 + volume * 2);
+
+    BASE_RADIUS = currentState === 'transcribing' ? 68 + Math.sin(frameCount * 0.15) * 5 : 75;
+
+    points.forEach((pt, i) => {
+      let noiseOffset = 0;
+      if (currentState === 'recording') {
+        const freqVal = freqs[i % freqs.length] || volume;
+        const wave = Math.sin(frameCount * 0.1 + pt.angle * 3) * 15 * freqVal;
+        noiseOffset = wave * sensitivity * (1 + volume * 2.5);
+      } else if (currentState === 'transcribing') {
+        noiseOffset = Math.sin(frameCount * 0.2 + pt.angle * 6) * 6;
+      } else if (currentState === 'done') {
+        noiseOffset = Math.sin(frameCount * 0.05 + pt.angle * 2) * 3;
+      } else {
+        // Idle gentle morphing
+        noiseOffset = Math.sin(frameCount * 0.03 + pt.angle * 2) * 4;
+      }
+
+      pt.targetRadius = BASE_RADIUS + noiseOffset;
+      pt.update(stiffness, damping);
+    });
+
+    // 1. Draw Expanding Ripples
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.radius += 2.5;
+      r.alpha -= 0.015;
+
+      if (r.alpha <= 0 || r.radius >= r.maxRadius) {
+        ripples.splice(i, 1);
+        continue;
+      }
+
+      ctx.beginPath();
+      ctx.arc(CENTER_X, CENTER_Y, r.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${20 + r.colorHue}, 100%, 60%, ${r.alpha})`;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = `hsl(${20 + r.colorHue}, 100%, 50%)`;
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 2. Draw Orbiting Droplets (Metaball gooey particles)
+    droplets.forEach((drop) => {
+      drop.angle += drop.speed * (1 + volume * 2);
+      const dropRadius = drop.orbitRadius + (currentState === 'recording' ? volume * 25 : 0);
+      const dx = CENTER_X + Math.cos(drop.angle) * dropRadius;
+      const dy = CENTER_Y + Math.sin(drop.angle) * dropRadius;
+
+      ctx.beginPath();
+      ctx.arc(dx, dy, drop.size + Math.sin(frameCount * 0.1 + drop.pulsePhase) * 2, 0, Math.PI * 2);
+      
+      let dropGrad = ctx.createRadialGradient(dx, dy, 0, dx, dy, drop.size * 1.5);
+      if (currentState === 'done') {
+        dropGrad.addColorStop(0, '#34d399');
+        dropGrad.addColorStop(1, '#059669');
+      } else {
+        dropGrad.addColorStop(0, '#ffb700');
+        dropGrad.addColorStop(1, '#ff0055');
+      }
+      ctx.fillStyle = dropGrad;
+      ctx.shadowColor = currentState === 'done' ? '#10b981' : '#ff5500';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+
+    // 3. Construct Smooth Fluid Closed Curve (Catmull-Rom spline / Bezier interpolation)
+    ctx.beginPath();
+
+    const getPointCoords = (index) => {
+      const idx = (index + NUM_POINTS) % NUM_POINTS;
+      const pt = points[idx];
+      return {
+        x: CENTER_X + Math.cos(pt.angle) * pt.radius,
+        y: CENTER_Y + Math.sin(pt.angle) * pt.radius
+      };
+    };
+
+    const p0 = getPointCoords(NUM_POINTS - 1);
+    const p1 = getPointCoords(0);
+    ctx.moveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+
+    for (let i = 0; i < NUM_POINTS; i++) {
+      const curr = getPointCoords(i);
+      const next = getPointCoords(i + 1);
+      const midX = (curr.x + next.x) / 2;
+      const midY = (curr.y + next.y) / 2;
+      ctx.quadraticCurveTo(curr.x, curr.y, midX, midY);
+    }
+    ctx.closePath();
+
+    // 4. Fill Multi-Hue Liquid Gradient
+    let mainGradient = ctx.createRadialGradient(
+      CENTER_X - 20, CENTER_Y - 20, 10,
+      CENTER_X, CENTER_Y, BASE_RADIUS + 40
+    );
+
+    if (currentState === 'done') {
+      // Emerald Success Theme
+      mainGradient.addColorStop(0, '#a7f3d0');
+      mainGradient.addColorStop(0.4, '#10b981');
+      mainGradient.addColorStop(1, '#047857');
+    } else if (currentState === 'transcribing') {
+      // Amber Processing Glow
+      mainGradient.addColorStop(0, '#fef08a');
+      mainGradient.addColorStop(0.5, '#f59e0b');
+      mainGradient.addColorStop(1, '#b45309');
+    } else {
+      // Sunset Multi-Hue Shift: Golden Yellow -> Hot Red -> Deep Orange/Magenta
+      const hue1 = (colorHueOffset) % 360;
+      const hue2 = (colorHueOffset + 40) % 360;
+      const hue3 = (colorHueOffset + 80) % 360;
+
+      mainGradient.addColorStop(0, `hsl(${hue1}, 100%, 65%)`);
+      mainGradient.addColorStop(0.5, `hsl(${hue2}, 100%, 55%)`);
+      mainGradient.addColorStop(1, `hsl(${hue3}, 100%, 40%)`);
+    }
+
+    ctx.fillStyle = mainGradient;
+    ctx.shadowColor = currentState === 'done' ? 'rgba(16, 185, 129, 0.6)' : `hsl(${(colorHueOffset) % 360}, 100%, 50%)`;
+    ctx.shadowBlur = 25 + volume * 20;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 5. Liquid Specular Highlight Rim
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.stroke();
+
+    // 6. Transcribing Spinner Ring
+    if (currentState === 'transcribing') {
+      ctx.beginPath();
+      ctx.arc(CENTER_X, CENTER_Y, BASE_RADIUS + 25, frameCount * 0.08, frameCount * 0.08 + Math.PI * 1.4);
+      ctx.strokeStyle = 'rgba(255, 183, 0, 0.8)';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = '#ffb700';
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 7. Icon overlay (Mic or Checkmark)
+    if (currentState === 'done') {
+      // Draw Checkmark
+      ctx.beginPath();
+      ctx.moveTo(CENTER_X - 15, CENTER_Y);
+      ctx.lineTo(CENTER_X - 4, CENTER_Y + 12);
+      ctx.lineTo(CENTER_X + 16, CENTER_Y - 10);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  // Start Animation Loop
+  requestAnimationFrame(render);
+</script>
+</body>
+</html>

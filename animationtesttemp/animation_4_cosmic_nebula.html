@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyperdrive Cosmic Nebula & Solar Flare Widget</title>
+  <style>
+    :root {
+      --bg-color: #05050f;
+      --card-bg: rgba(13, 12, 29, 0.85);
+      --primary-violet: #8a2be2;
+      --primary-indigo: #4b0082;
+      --flare-orange: #ff5500;
+      --flare-gold: #ffaa00;
+      --neon-cyan: #00f0ff;
+      --text-main: #f0f3fe;
+      --text-muted: #8e99b7;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(circle at 50% 40%, rgba(75, 0, 130, 0.25) 0%, transparent 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 85, 0, 0.1) 0%, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .demo-container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+      padding: 20px;
+      z-index: 10;
+    }
+
+    .header {
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #00f0ff 0%, #a855f7 50%, #ff5500 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Floating Widget Box */
+    .widget-box {
+      position: relative;
+      width: 380px;
+      height: 380px;
+      background: var(--card-bg);
+      border: 1px solid rgba(138, 43, 226, 0.3);
+      border-radius: 28px;
+      box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.8),
+        0 0 30px rgba(138, 43, 226, 0.2),
+        inset 0 0 20px rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Cosmic Canvas */
+    #cosmic-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Central Mic Wrapper */
+    .mic-container {
+      position: relative;
+      z-index: 2;
+      width: 120px;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    /* Core Mic Button */
+    .mic-button {
+      position: relative;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #2a1b4e 0%, #0d0a1a 80%);
+      border: 2px solid rgba(168, 85, 247, 0.5);
+      box-shadow: 
+        0 0 20px rgba(138, 43, 226, 0.4),
+        inset 0 0 15px rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .mic-button:hover {
+      transform: scale(1.05);
+      border-color: rgba(255, 170, 0, 0.8);
+      box-shadow: 
+        0 0 30px rgba(255, 85, 0, 0.6),
+        inset 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+
+    .mic-button:active {
+      transform: scale(0.96);
+    }
+
+    /* SVG Icon */
+    .mic-icon {
+      width: 38px;
+      height: 38px;
+      fill: none;
+      stroke: var(--text-main);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+      transition: stroke 0.3s ease, transform 0.3s ease;
+    }
+
+    /* Active Recording State */
+    .mic-container.recording .mic-button {
+      border-color: #ff5500;
+      animation: pulse-border 1.5s infinite alternate ease-in-out;
+      box-shadow: 
+        0 0 35px rgba(255, 85, 0, 0.8),
+        inset 0 0 25px rgba(255, 170, 0, 0.4);
+    }
+
+    .mic-container.recording .mic-icon {
+      stroke: #ffaa00;
+      filter: drop-shadow(0 0 10px rgba(255, 170, 0, 0.9));
+    }
+
+    /* Transcribing State */
+    .mic-container.transcribing .mic-button {
+      border-color: #00f0ff;
+      animation: breathing-glow 1.2s infinite alternate ease-in-out;
+    }
+
+    .mic-container.transcribing .mic-icon {
+      stroke: #00f0ff;
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.9));
+    }
+
+    /* Done / Copied State */
+    .mic-container.done .mic-button {
+      border-color: #10b981;
+      box-shadow: 
+        0 0 40px rgba(16, 185, 129, 0.8),
+        inset 0 0 25px rgba(16, 185, 129, 0.4);
+    }
+
+    .mic-container.done .mic-icon {
+      stroke: #10b981;
+    }
+
+    /* Status Badge Floating Below Button */
+    .status-badge {
+      position: absolute;
+      bottom: 40px;
+      z-index: 2;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      background: rgba(20, 15, 38, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .status-badge.recording {
+      border-color: rgba(255, 85, 0, 0.5);
+      color: #ffaa00;
+    }
+    .status-badge.recording .dot {
+      background: #ff5500;
+      box-shadow: 0 0 8px #ff5500;
+      animation: blink 0.8s infinite alternate;
+    }
+
+    .status-badge.transcribing {
+      border-color: rgba(0, 240, 255, 0.5);
+      color: #00f0ff;
+    }
+    .status-badge.transcribing .dot {
+      background: #00f0ff;
+      box-shadow: 0 0 8px #00f0ff;
+      animation: blink 0.5s infinite alternate;
+    }
+
+    .status-badge.done {
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #34d399;
+      background: rgba(6, 78, 59, 0.4);
+    }
+    .status-badge.done .dot {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    /* Simulation Control Deck */
+    .control-deck {
+      width: 100%;
+      background: rgba(15, 14, 33, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      backdrop-filter: blur(10px);
+    }
+
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .control-group label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .btn.active {
+      background: linear-gradient(135deg, var(--primary-violet), var(--flare-orange));
+      border-color: transparent;
+      box-shadow: 0 0 12px rgba(138, 43, 226, 0.4);
+    }
+
+    .btn-mic {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(138, 43, 226, 0.2));
+      border-color: rgba(0, 240, 255, 0.4);
+      color: var(--neon-cyan);
+    }
+
+    .btn-mic.active {
+      background: linear-gradient(135deg, #00f0ff, #8a2be2);
+      color: #fff;
+    }
+
+    /* Slider Container */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .slider-container input[type="range"] {
+      flex: 1;
+      accent-color: var(--flare-orange);
+      cursor: pointer;
+    }
+
+    .level-meter {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .level-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #8a2be2, #ff5500, #ffaa00);
+      transition: width 0.05s ease-out;
+      box-shadow: 0 0 8px rgba(255, 170, 0, 0.8);
+    }
+
+    /* Animations */
+    @keyframes blink {
+      0% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+
+    @keyframes pulse-border {
+      0% { box-shadow: 0 0 20px rgba(255, 85, 0, 0.5), inset 0 0 15px rgba(255, 85, 0, 0.2); }
+      100% { box-shadow: 0 0 45px rgba(255, 85, 0, 0.9), inset 0 0 30px rgba(255, 170, 0, 0.6); }
+    }
+
+    @keyframes breathing-glow {
+      0% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.2); transform: scale(0.98); }
+      100% { box-shadow: 0 0 45px rgba(0, 240, 255, 0.9), inset 0 0 25px rgba(0, 240, 255, 0.5); transform: scale(1.02); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="demo-container">
+    <div class="header">
+      <h1>Cosmic Nebula & Solar Flare</h1>
+      <p>Option 4 Animation Showcase for VoiceToClipboard</p>
+    </div>
+
+    <!-- Floating Widget Sandbox -->
+    <div class="widget-box" id="widget-box">
+      <canvas id="cosmic-canvas"></canvas>
+
+      <div class="mic-container" id="mic-container">
+        <div class="mic-button" id="mic-button">
+          <!-- Mic SVG Icon -->
+          <svg class="mic-icon" id="mic-icon" viewBox="0 0 24 24">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="8" y1="22" x2="16" y2="22"></line>
+          </svg>
+        </div>
+      </div>
+
+      <div class="status-badge" id="status-badge">
+        <span class="dot"></span>
+        <span id="badge-text">READY</span>
+      </div>
+    </div>
+
+    <!-- Simulation Control Deck -->
+    <div class="control-deck">
+      <!-- State Controls -->
+      <div class="control-group">
+        <label>Widget State Preset:</label>
+        <div class="btn-group">
+          <button class="btn active" onclick="setState('idle')">Idle</button>
+          <button class="btn" onclick="setState('recording')">Recording</button>
+          <button class="btn" onclick="setState('transcribing')">Transcribing</button>
+          <button class="btn" onclick="setState('done')">Done / Copied</button>
+        </div>
+      </div>
+
+      <!-- Live Web Audio Mic Testing -->
+      <div class="control-group">
+        <label>Input Source:</label>
+        <div class="btn-group">
+          <button class="btn btn-mic" id="toggle-mic-btn" onclick="toggleMicrophone()">🎙️ Enable Microphone</button>
+        </div>
+
+        <div class="slider-container">
+          <label>Audio Intensity:</label>
+          <input type="range" id="intensity-slider" min="0" max="100" value="20">
+          <span id="intensity-val" style="min-width: 35px; text-align: right; font-size: 0.85rem;">20%</span>
+        </div>
+      </div>
+
+      <!-- Real-time Level Meter -->
+      <div class="level-meter">
+        <div class="level-bar" id="level-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Canvas & Graphic State ---
+    const canvas = document.getElementById('cosmic-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const widgetBox = document.getElementById('widget-box');
+    const micContainer = document.getElementById('mic-container');
+    const micIcon = document.getElementById('mic-icon');
+    const statusBadge = document.getElementById('status-badge');
+    const badgeText = document.getElementById('badge-text');
+    const intensitySlider = document.getElementById('intensity-slider');
+    const intensityVal = document.getElementById('intensity-val');
+    const levelBar = document.getElementById('level-bar');
+    const toggleMicBtn = document.getElementById('toggle-mic-btn');
+
+    let width, height, centerX, centerY;
+    let currentState = 'idle'; // idle, recording, transcribing, done
+    let audioIntensity = 0.2; // 0.0 to 1.0
+    let manualIntensity = 0.2;
+    let isMicActive = false;
+    let audioCtx, analyser, dataArray, micStream;
+
+    function resize() {
+      width = canvas.width = widgetBox.clientWidth;
+      height = canvas.height = widgetBox.clientHeight;
+      centerX = width / 2;
+      centerY = height / 2;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- Particle System (Starfield & Cosmic Dust) ---
+    const NUM_PARTICLES = 160;
+    const particles = [];
+
+    class Particle {
+      constructor() {
+        this.reset(true);
+      }
+
+      reset(initial = false) {
+        this.angle = Math.random() * Math.PI * 2;
+        this.dist = initial ? Math.random() * (width / 2) : 25 + Math.random() * 20;
+        this.speed = 0.5 + Math.random() * 1.5;
+        this.size = 1 + Math.random() * 2.5;
+        this.opacity = 0.2 + Math.random() * 0.8;
+        
+        // Colors: Violet, Indigo, Cyan, Fiery Orange/Gold
+        const palette = [
+          { r: 138, g: 43, b: 226 },  // Violet
+          { r: 75, g: 0, b: 130 },    // Indigo
+          { r: 0, g: 240, b: 255 },   // Cyan
+          { r: 255, g: 85, b: 0 },    // Orange
+          { r: 255, g: 170, b: 0 }    // Gold
+        ];
+        this.color = palette[Math.floor(Math.random() * palette.length)];
+        this.swirlSpeed = (Math.random() - 0.5) * 0.03;
+      }
+
+      update(intensity, state) {
+        // Accelerate outwards based on intensity and state
+        let speedMult = 1.0 + intensity * 6.0;
+        if (state === 'recording') speedMult *= 1.8;
+        if (state === 'transcribing') speedMult *= 2.5;
+
+        this.dist += this.speed * speedMult;
+        this.angle += (this.swirlSpeed + (state === 'transcribing' ? 0.04 : 0.01)) * (1 + intensity * 2);
+
+        // Fade out as it reaches border
+        const maxDist = width * 0.55;
+        this.currentOpacity = this.opacity * (1 - this.dist / maxDist);
+
+        if (this.dist > maxDist) {
+          this.reset(false);
+        }
+      }
+
+      draw() {
+        const x = centerX + Math.cos(this.angle) * this.dist;
+        const y = centerY + Math.sin(this.angle) * this.dist;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${Math.max(0, this.currentOpacity)})`;
+        ctx.shadowBlur = this.size * 3;
+        ctx.shadowColor = `rgb(${this.color.r}, ${this.color.g}, ${this.color.b})`;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+      particles.push(new Particle());
+    }
+
+    // --- Solar Flare Arcs & Coronal Ring ---
+    let vortexRotation = 0;
+    let flareSeed = 0;
+
+    function drawCosmicVortex(intensity, state) {
+      vortexRotation += 0.008 + intensity * 0.03 + (state === 'transcribing' ? 0.03 : 0);
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(vortexRotation);
+
+      // Swirling Spiral Arms
+      const numArms = 3;
+      for (let arm = 0; arm < numArms; arm++) {
+        ctx.beginPath();
+        const armAngle = (arm * Math.PI * 2) / numArms;
+        
+        for (let r = 45; r < 140; r += 4) {
+          const theta = armAngle + (r * 0.025);
+          const x = Math.cos(theta) * (r + intensity * 20);
+          const y = Math.sin(theta) * (r + intensity * 20);
+
+          if (r === 45) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+
+        const gradient = ctx.createRadialGradient(0, 0, 45, 0, 0, 140);
+        if (state === 'recording') {
+          gradient.addColorStop(0, 'rgba(255, 85, 0, 0.4)');
+          gradient.addColorStop(0.5, 'rgba(138, 43, 226, 0.3)');
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        } else if (state === 'transcribing') {
+          gradient.addColorStop(0, 'rgba(0, 240, 255, 0.5)');
+          gradient.addColorStop(0.5, 'rgba(138, 43, 226, 0.4)');
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        } else if (state === 'done') {
+          gradient.addColorStop(0, 'rgba(16, 185, 129, 0.5)');
+          gradient.addColorStop(0.5, 'rgba(0, 240, 255, 0.3)');
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        } else {
+          gradient.addColorStop(0, 'rgba(138, 43, 226, 0.3)');
+          gradient.addColorStop(0.6, 'rgba(75, 0, 130, 0.15)');
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        }
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 6 + intensity * 10;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawSolarFlares(intensity, state) {
+      if (state !== 'recording' && intensity < 0.3) return;
+
+      flareSeed += 0.05;
+      const flareCount = state === 'recording' ? 6 : 3;
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+
+      for (let i = 0; i < flareCount; i++) {
+        const baseAngle = (i * Math.PI * 2) / flareCount + Math.sin(flareSeed + i) * 0.2;
+        const flareLength = 20 + intensity * 50 + Math.sin(flareSeed * 2 + i) * 15;
+        const innerR = 48;
+        const outerR = innerR + flareLength;
+
+        const cp1Angle = baseAngle - 0.2;
+        const startX = Math.cos(baseAngle) * innerR;
+        const startY = Math.sin(baseAngle) * innerR;
+        
+        const endX = Math.cos(baseAngle) * outerR;
+        const endY = Math.sin(baseAngle) * outerR;
+
+        const cp1X = Math.cos(cp1Angle) * (innerR + flareLength * 0.6);
+        const cp1Y = Math.sin(cp1Angle) * (innerR + flareLength * 0.6);
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo(cp1X, cp1Y, endX, endY);
+        ctx.quadraticCurveTo(cp1X + 10, cp1Y + 10, startX, startY);
+
+        const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+        grad.addColorStop(0, 'rgba(255, 170, 0, 0.9)');
+        grad.addColorStop(0.6, 'rgba(255, 85, 0, 0.6)');
+        grad.addColorStop(1, 'rgba(255, 0, 100, 0)');
+
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ff5500';
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function drawCoronalRing(intensity, state) {
+      ctx.save();
+      ctx.translate(centerX, centerY);
+
+      const baseR = 50;
+      const pulseR = baseR + intensity * 12 + (state === 'transcribing' ? Math.sin(Date.now() * 0.008) * 4 : 0);
+
+      // Outer Glowing Ring
+      ctx.beginPath();
+      ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
+      ctx.lineWidth = 3 + intensity * 4;
+
+      let color = 'rgba(138, 43, 226, 0.6)';
+      let glowColor = '#8a2be2';
+
+      if (state === 'recording') {
+        color = `rgba(255, 85, 0, ${0.7 + intensity * 0.3})`;
+        glowColor = '#ff5500';
+      } else if (state === 'transcribing') {
+        color = 'rgba(0, 240, 255, 0.8)';
+        glowColor = '#00f0ff';
+      } else if (state === 'done') {
+        color = 'rgba(16, 185, 129, 0.9)';
+        glowColor = '#10b981';
+      }
+
+      ctx.strokeStyle = color;
+      ctx.shadowBlur = 20 + intensity * 15;
+      ctx.shadowColor = glowColor;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // --- Render Loop ---
+    function render() {
+      ctx.clearRect(0, 0, width, height);
+
+      // 1. Sample mic audio if enabled
+      if (isMicActive && analyser) {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        audioIntensity = Math.min(1.0, (avg / 128) * 1.5);
+      } else {
+        audioIntensity = manualIntensity;
+      }
+
+      // Update UI meters
+      const pct = Math.round(audioIntensity * 100);
+      levelBar.style.width = pct + '%';
+
+      // 2. Render Cosmic Background Elements
+      drawCosmicVortex(audioIntensity, currentState);
+
+      // 3. Render Particles
+      particles.forEach(p => {
+        p.update(audioIntensity, currentState);
+        p.draw();
+      });
+
+      // 4. Solar Flares & Coronal Aura Ring
+      drawSolarFlares(audioIntensity, currentState);
+      drawCoronalRing(audioIntensity, currentState);
+
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+
+    // --- State & Interaction Handlers ---
+    function setState(newState) {
+      currentState = newState;
+      
+      // Update UI button states
+      document.querySelectorAll('.control-deck .btn-group .btn').forEach(btn => {
+        if (btn.id !== 'toggle-mic-btn') btn.classList.remove('active');
+      });
+      event?.target?.classList.add('active');
+
+      // Update widget classes
+      micContainer.className = 'mic-container ' + newState;
+      statusBadge.className = 'status-badge ' + newState;
+
+      if (newState === 'idle') {
+        badgeText.textContent = 'READY';
+        setSVGIcon('mic');
+      } else if (newState === 'recording') {
+        badgeText.textContent = 'LISTENING...';
+        setSVGIcon('mic');
+      } else if (newState === 'transcribing') {
+        badgeText.textContent = 'TRANSCRIBING...';
+        setSVGIcon('spinner');
+      } else if (newState === 'done') {
+        badgeText.textContent = '✓ COPIED';
+        setSVGIcon('check');
+      }
+    }
+
+    function setSVGIcon(type) {
+      if (type === 'mic') {
+        micIcon.innerHTML = `
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+          <line x1="8" y1="22" x2="16" y2="22"></line>
+        `;
+      } else if (type === 'spinner') {
+        micIcon.innerHTML = `
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+        `;
+      } else if (type === 'check') {
+        micIcon.innerHTML = `
+          <polyline points="20 6 9 17 4 12"></polyline>
+        `;
+      }
+    }
+
+    // Interactive Mic Toggle
+    micContainer.addEventListener('click', () => {
+      if (currentState === 'idle') setState('recording');
+      else if (currentState === 'recording') setState('transcribing');
+      else if (currentState === 'transcribing') setState('done');
+      else setState('idle');
+    });
+
+    // Slider Input
+    intensitySlider.addEventListener('input', (e) => {
+      manualIntensity = e.target.value / 100;
+      intensityVal.textContent = e.target.value + '%';
+    });
+
+    // Real Web Audio Mic Access
+    async function toggleMicrophone() {
+      if (isMicActive) {
+        if (micStream) micStream.getTracks().forEach(t => t.stop());
+        isMicActive = false;
+        toggleMicBtn.classList.remove('active');
+        toggleMicBtn.textContent = '🎙️ Enable Microphone';
+        return;
+      }
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64;
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const source = audioCtx.createMediaStreamSource(micStream);
+        source.connect(analyser);
+
+        isMicActive = true;
+        toggleMicBtn.classList.add('active');
+        toggleMicBtn.textContent = '🔴 Mic Active (Live)';
+        if (currentState === 'idle') setState('recording');
+      } catch (err) {
+        alert('Could not access microphone: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

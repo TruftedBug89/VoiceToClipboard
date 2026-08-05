@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quantum Neon Pulse & Particle Orbit - VoiceToClipboard Demo</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --bg-dark: #090b10;
+      --cyan: #00f3ff;
+      --magenta: #ff007f;
+      --purple-glow: rgba(180, 0, 255, 0.4);
+      --glass-bg: rgba(14, 18, 28, 0.75);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      --text-main: #f0f4f8;
+      --text-dim: #8a99ad;
+      --success: #00ffaa;
+      --danger: #ff3366;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 20% 20%, rgba(0, 243, 255, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(255, 0, 127, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(10, 14, 26, 1) 0%, rgba(5, 7, 12, 1) 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Container for the interactive showcase */
+    .app-viewport {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      width: 100%;
+      max-width: 900px;
+      padding: 20px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .header-title {
+      text-align: center;
+    }
+
+    .header-title h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--cyan) 0%, #ffffff 50%, var(--magenta) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
+    }
+
+    .header-title p {
+      font-size: 0.95rem;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    /* Main Widget Container */
+    .widget-stage {
+      position: relative;
+      width: 420px;
+      height: 340px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 28px;
+      box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .widget-stage::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at center, rgba(0, 243, 255, 0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* Canvas Layer for Particles & Rings */
+    #orbitCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Central Microphone Element */
+    .mic-wrap {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .mic-button {
+      position: relative;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #141926, #0b0e17);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 
+        0 10px 25px rgba(0, 0, 0, 0.5),
+        inset 0 2px 4px rgba(255, 255, 255, 0.1),
+        0 0 20px rgba(0, 243, 255, 0.2);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      outline: none;
+    }
+
+    .mic-button:hover {
+      transform: scale(1.06);
+      box-shadow: 
+        0 14px 30px rgba(0, 0, 0, 0.6),
+        0 0 30px rgba(0, 243, 255, 0.4),
+        0 0 15px rgba(255, 0, 127, 0.4);
+    }
+
+    .mic-button:active {
+      transform: scale(0.96);
+    }
+
+    .mic-icon {
+      width: 36px;
+      height: 36px;
+      fill: none;
+      stroke: var(--cyan);
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 8px var(--cyan));
+      transition: stroke 0.3s ease, filter 0.3s ease, transform 0.3s ease;
+    }
+
+    /* Status Pill */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 30px;
+      background: rgba(10, 14, 24, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+      z-index: 10;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* State Modifications */
+    .widget-stage[data-state="recording"] {
+      border-color: rgba(0, 243, 255, 0.4);
+      box-shadow: var(--glass-shadow), 0 0 40px rgba(0, 243, 255, 0.15);
+    }
+
+    .widget-stage[data-state="recording"] .mic-button {
+      background: linear-gradient(145deg, #182838, #0e1b29);
+      border-color: var(--cyan);
+      box-shadow: 0 0 35px rgba(0, 243, 255, 0.5), inset 0 0 15px rgba(0, 243, 255, 0.3);
+      animation: pulse-border 1.5s infinite alternate;
+    }
+
+    .widget-stage[data-state="recording"] .mic-icon {
+      stroke: #ffffff;
+      filter: drop-shadow(0 0 10px var(--cyan)) drop-shadow(0 0 20px var(--cyan));
+    }
+
+    .widget-stage[data-state="recording"] .status-badge {
+      border-color: rgba(0, 243, 255, 0.4);
+      color: #ffffff;
+    }
+
+    .widget-stage[data-state="recording"] .status-dot {
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+      animation: blink 1s infinite alternate;
+    }
+
+    .widget-stage[data-state="transcribing"] .mic-button {
+      background: linear-gradient(145deg, #2a1028, #18081a);
+      border-color: var(--magenta);
+      box-shadow: 0 0 35px rgba(255, 0, 127, 0.5), inset 0 0 15px rgba(255, 0, 127, 0.3);
+    }
+
+    .widget-stage[data-state="transcribing"] .mic-icon {
+      stroke: var(--magenta);
+      filter: drop-shadow(0 0 12px var(--magenta));
+      animation: rotate-mic 3s linear infinite;
+    }
+
+    .widget-stage[data-state="transcribing"] .status-badge {
+      border-color: rgba(255, 0, 127, 0.4);
+      color: #ffffff;
+    }
+
+    .widget-stage[data-state="transcribing"] .status-dot {
+      background: var(--magenta);
+      box-shadow: 0 0 10px var(--magenta);
+      animation: blink 0.5s infinite alternate;
+    }
+
+    .widget-stage[data-state="done"] .mic-button {
+      background: linear-gradient(145deg, #0e2920, #081812);
+      border-color: var(--success);
+      box-shadow: 0 0 35px rgba(0, 255, 170, 0.5), inset 0 0 15px rgba(0, 255, 170, 0.3);
+    }
+
+    .widget-stage[data-state="done"] .mic-icon {
+      stroke: var(--success);
+      filter: drop-shadow(0 0 12px var(--success));
+    }
+
+    .widget-stage[data-state="done"] .status-badge {
+      border-color: rgba(0, 255, 170, 0.4);
+      color: var(--success);
+      background: rgba(0, 255, 170, 0.1);
+    }
+
+    .widget-stage[data-state="done"] .status-dot {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    @keyframes pulse-border {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.04); }
+    }
+
+    @keyframes blink {
+      0% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+
+    @keyframes rotate-mic {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Control Panel */
+    .controls-panel {
+      width: 100%;
+      background: rgba(15, 20, 32, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .control-group-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn.active {
+      background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(255, 0, 127, 0.2));
+      border-color: var(--cyan);
+      box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+    }
+
+    .btn-mic-toggle {
+      background: rgba(0, 243, 255, 0.1);
+      border-color: rgba(0, 243, 255, 0.3);
+      color: var(--cyan);
+    }
+
+    .btn-mic-toggle.active {
+      background: var(--cyan);
+      color: #000;
+      box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+    }
+
+    .btn-speak-sim {
+      background: rgba(255, 0, 127, 0.1);
+      border-color: rgba(255, 0, 127, 0.3);
+      color: var(--magenta);
+    }
+
+    .btn-speak-sim:active {
+      background: var(--magenta);
+      color: #fff;
+    }
+
+    /* Live Audio Level Meter */
+    .audio-meter-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .audio-meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--cyan), var(--magenta));
+      border-radius: 4px;
+      transition: width 0.05s ease-out;
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    .tech-specs {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-viewport">
+    
+    <div class="header-title">
+      <h1>Option 1: Quantum Neon Pulse & Orbit</h1>
+      <p>Interactive Widget Animation & Audio Shockwave Prototype</p>
+    </div>
+
+    <!-- Widget Stage -->
+    <div class="widget-stage" id="widgetStage" data-state="idle">
+      <canvas id="orbitCanvas"></canvas>
+
+      <div class="mic-wrap">
+        <button class="mic-button" id="micBtn" title="Click to Toggle Recording">
+          <svg class="mic-icon" id="micIcon" viewBox="0 0 24 24">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+
+        <div class="status-badge" id="statusBadge">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">READY</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+      <div class="control-group-title">State Simulation Controls</div>
+      <div class="button-grid">
+        <button class="btn active" onclick="setState('idle')">Idle</button>
+        <button class="btn" onclick="setState('recording')">Record Mode</button>
+        <button class="btn" onclick="setState('transcribing')">Transcribe</button>
+        <button class="btn" onclick="setState('done')">Done / Copied</button>
+      </div>
+
+      <div class="control-group-title" style="margin-top: 4px;">Audio & Shockwave Triggers</div>
+      <div class="button-grid">
+        <button class="btn btn-speak-sim" onmousedown="triggerShockwaveBurst(1.8)" onclick="triggerShockwaveBurst(1.5)">
+          ⚡ Pulse Shockwave
+        </button>
+        <button class="btn btn-mic-toggle" id="realMicBtn" onclick="toggleRealMicrophone()">
+          🎙️ Live Mic Test
+        </button>
+      </div>
+
+      <div class="audio-meter-bar">
+        <div class="audio-meter-fill" id="meterFill"></div>
+      </div>
+
+      <div class="tech-specs">
+        <span>RENDERER: HTML5 Canvas 2D</span>
+        <span>FPS: <span id="fpsCounter">60</span></span>
+        <span>SHOCKWAVES: <span id="waveCounter">0</span> ACTIVE</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // --- State Management ---
+    let currentState = 'idle'; // 'idle', 'recording', 'transcribing', 'done'
+    const widgetStage = document.getElementById('widgetStage');
+    const statusText = document.getElementById('statusText');
+    const micBtn = document.getElementById('micBtn');
+    const micIcon = document.getElementById('micIcon');
+    const meterFill = document.getElementById('meterFill');
+    const fpsCounter = document.getElementById('fpsCounter');
+    const waveCounter = document.getElementById('waveCounter');
+
+    function setState(newState) {
+      currentState = newState;
+      widgetStage.setAttribute('data-state', newState);
+
+      // Update button visual states in DOM
+      document.querySelectorAll('.button-grid .btn').forEach(btn => {
+        if (btn.innerText.toLowerCase().includes(newState.substring(0, 4))) {
+          btn.classList.add('active');
+        } else if (!btn.classList.contains('btn-mic-toggle') && !btn.classList.contains('btn-speak-sim')) {
+          btn.classList.remove('active');
+        }
+      });
+
+      // Update iconography and text
+      if (newState === 'idle') {
+        statusText.innerText = 'READY';
+        micIcon.innerHTML = `
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>`;
+      } else if (newState === 'recording') {
+        statusText.innerText = 'LISTENING...';
+        micIcon.innerHTML = `
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>`;
+      } else if (newState === 'transcribing') {
+        statusText.innerText = 'TRANSCRIBING...';
+        micIcon.innerHTML = `
+          <circle cx="12" cy="12" r="8" stroke-dasharray="12 6"></circle>`;
+      } else if (newState === 'done') {
+        statusText.innerText = '✓ COPIED';
+        micIcon.innerHTML = `
+          <polyline points="20 6 9 17 4 12"></polyline>`;
+        triggerCelebrationBurst();
+        setTimeout(() => {
+          if (currentState === 'done') setState('idle');
+        }, 2200);
+      }
+    }
+
+    micBtn.addEventListener('click', () => {
+      if (currentState === 'idle') setState('recording');
+      else if (currentState === 'recording') setState('transcribing');
+      else if (currentState === 'transcribing') setState('done');
+      else setState('idle');
+    });
+
+    // --- Canvas & Particle Orbit Animation ---
+    const canvas = document.getElementById('orbitCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const rect = widgetStage.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Orbit Particle System Definition
+    const PARTICLE_COUNT = 36;
+    const particles = [];
+    const shockwaves = [];
+
+    class Particle {
+      constructor(index) {
+        this.index = index;
+        this.reset();
+      }
+
+      reset() {
+        this.angle = (this.index / PARTICLE_COUNT) * Math.PI * 2 + Math.random() * 0.5;
+        this.orbitRadiusX = 85 + Math.random() * 25;
+        this.orbitRadiusY = 32 + Math.random() * 15;
+        this.tilt = -0.35; // 3D tilt angle
+        this.speed = (0.012 + Math.random() * 0.01) * (this.index % 2 === 0 ? 1 : -0.8);
+        this.size = 2 + Math.random() * 2.5;
+        this.color = this.index % 2 === 0 ? '#00f3ff' : '#ff007f';
+        this.glow = 8 + Math.random() * 10;
+        this.pulsePhase = Math.random() * Math.PI * 2;
+      }
+
+      update(audioEnergy) {
+        // Orbit speed increases during recording/transcribing
+        let speedMult = 1.0;
+        if (currentState === 'recording') speedMult = 2.2 + audioEnergy * 2.5;
+        if (currentState === 'transcribing') speedMult = 3.5;
+
+        this.angle += this.speed * speedMult;
+        this.pulsePhase += 0.05;
+
+        // Dynamic distance expansion on sound
+        const currentRadiusX = this.orbitRadiusX + audioEnergy * 35;
+        const currentRadiusY = this.orbitRadiusY + audioEnergy * 15;
+
+        // 3D Ellipse Projection
+        const rawX = Math.cos(this.angle) * currentRadiusX;
+        const rawY = Math.sin(this.angle) * currentRadiusY;
+
+        // Rotate for tilt
+        this.x = rawX * Math.cos(this.tilt) - rawY * Math.sin(this.tilt);
+        this.y = rawX * Math.sin(this.tilt) + rawY * Math.cos(this.tilt);
+
+        // Depth scale (z-axis simulation)
+        this.z = Math.sin(this.angle);
+        this.scale = 0.7 + (this.z + 1) * 0.35; // 0.7 to 1.4
+        this.alpha = 0.3 + (this.z + 1) * 0.35;
+      }
+
+      draw(centerX, centerY) {
+        const drawX = centerX + this.x;
+        const drawY = centerY + this.y;
+
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = this.glow * this.scale;
+        ctx.fillStyle = this.color;
+
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, this.size * this.scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw glowing motion trail
+        ctx.beginPath();
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1 * this.scale;
+        ctx.globalAlpha = this.alpha * 0.3;
+        ctx.arc(drawX, drawY, this.size * this.scale * 2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push(new Particle(i));
+    }
+
+    // --- Shockwave Emitter ---
+    class Shockwave {
+      constructor(maxRadius = 140, color = '#00f3ff', intensity = 1.0) {
+        this.radius = 45;
+        this.maxRadius = maxRadius;
+        this.color = color;
+        this.alpha = 0.9 * intensity;
+        this.lineWidth = 4 * intensity;
+        this.speed = 4.5 + intensity * 2;
+      }
+
+      update() {
+        this.radius += this.speed;
+        this.alpha *= 0.94; // Smooth fade out
+        this.lineWidth *= 0.97;
+      }
+
+      draw(centerX, centerY) {
+        if (this.alpha <= 0.01) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, this.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = Math.max(0.5, this.lineWidth);
+        ctx.globalAlpha = this.alpha;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 20;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function triggerShockwaveBurst(intensity = 1.0) {
+      shockwaves.push(new Shockwave(160, '#00f3ff', intensity));
+      setTimeout(() => {
+        shockwaves.push(new Shockwave(180, '#ff007f', intensity * 0.85));
+      }, 70);
+    }
+
+    function triggerCelebrationBurst() {
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          shockwaves.push(new Shockwave(130 + i * 30, '#00ffaa', 1.2));
+        }, i * 120);
+      }
+    }
+
+    // --- Dual Neon Ring Rendering ---
+    let ringAngle = 0;
+    function drawDualNeonRings(centerX, centerY, audioEnergy) {
+      ringAngle += 0.015 + audioEnergy * 0.05;
+
+      const innerRadius = 54 + Math.sin(Date.now() * 0.003) * 2 + audioEnergy * 10;
+      const outerRadius = 72 + Math.cos(Date.now() * 0.002) * 3 + audioEnergy * 18;
+
+      ctx.save();
+
+      // 1. Cyan Inner Ring (Rotating Dash)
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#00f3ff';
+      ctx.shadowBlur = 15 + audioEnergy * 20;
+      ctx.setLineDash([20, 15, 5, 15]);
+      ctx.lineDashOffset = -ringAngle * 40;
+      ctx.globalAlpha = 0.8 + audioEnergy * 0.2;
+      ctx.stroke();
+
+      // 2. Magenta Outer Ring (Counter-Rotating Dash)
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff007f';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#ff007f';
+      ctx.shadowBlur = 15 + audioEnergy * 20;
+      ctx.setLineDash([35, 20, 10, 20]);
+      ctx.lineDashOffset = ringAngle * 50;
+      ctx.globalAlpha = 0.7 + audioEnergy * 0.3;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // --- Audio Spectrum & Mic Simulation ---
+    let audioContext, analyser, dataArray;
+    let isRealMicActive = false;
+    let simulatedAudioEnergy = 0;
+
+    async function toggleRealMicrophone() {
+      const btn = document.getElementById('realMicBtn');
+      if (isRealMicActive) {
+        isRealMicActive = false;
+        btn.classList.remove('active');
+        btn.innerHTML = '🎙️ Live Mic Test';
+        meterFill.style.width = '0%';
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 64;
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        isRealMicActive = true;
+        btn.classList.add('active');
+        btn.innerHTML = '🎙️ Mic Active';
+        setState('recording');
+      } catch (err) {
+        alert('Microphone access denied or unverified: ' + err.message);
+      }
+    }
+
+    function getAudioEnergy() {
+      if (isRealMicActive && analyser) {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        const energy = Math.min(1.0, avg / 128);
+
+        // Trigger automatic shockwave on peak speech
+        if (energy > 0.45 && Math.random() < 0.25) {
+          triggerShockwaveBurst(energy * 1.4);
+        }
+        return energy;
+      }
+
+      // Simulated breathing audio energy when recording
+      if (currentState === 'recording') {
+        const time = Date.now() * 0.004;
+        simulatedAudioEnergy = 0.2 + (Math.sin(time) * 0.15) + (Math.sin(time * 2.3) * 0.1);
+        if (Math.random() < 0.03) {
+          triggerShockwaveBurst(0.9);
+        }
+        return Math.max(0, simulatedAudioEnergy);
+      }
+
+      return 0;
+    }
+
+    // --- Main Render Loop ---
+    let lastTime = performance.now();
+    let frameCount = 0;
+
+    function render() {
+      const now = performance.now();
+      frameCount++;
+      if (now - lastTime >= 1000) {
+        fpsCounter.innerText = frameCount;
+        frameCount = 0;
+        lastTime = now;
+      }
+
+      const stageRect = widgetStage.getBoundingClientRect();
+      const centerX = stageRect.width / 2;
+      const centerY = stageRect.height / 2 - 20;
+
+      ctx.clearRect(0, 0, stageRect.width, stageRect.height);
+
+      const audioEnergy = getAudioEnergy();
+
+      // Update Audio Meter UI
+      meterFill.style.width = Math.min(100, Math.round(audioEnergy * 100)) + '%';
+
+      // 1. Draw Shockwave Rings
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const wave = shockwaves[i];
+        wave.update();
+        wave.draw(centerX, centerY);
+        if (wave.alpha <= 0.01) {
+          shockwaves.splice(i, 1);
+        }
+      }
+      waveCounter.innerText = shockwaves.length;
+
+      // 2. Draw Dual Neon Orbit Rings
+      drawDualNeonRings(centerX, centerY, audioEnergy);
+
+      // 3. Draw & Sort 3D Orbit Particles by Z-depth
+      particles.forEach(p => p.update(audioEnergy));
+      particles.sort((a, b) => a.z - b.z);
+
+      // Draw background particles (behind button)
+      particles.filter(p => p.z <= 0).forEach(p => p.draw(centerX, centerY));
+      // Draw foreground particles (in front of button)
+      particles.filter(p => p.z > 0).forEach(p => p.draw(centerX, centerY));
+
+      requestAnimationFrame(render);
+    }
+
+    // Start animation loop
+    render();
+  </script>
+</body>
+</html>
