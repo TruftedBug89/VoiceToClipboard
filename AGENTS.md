@@ -20,8 +20,10 @@ A super simple, lightweight Windows widget that records voice from the microphon
 - No live subtitles / Web Speech API — removed intentionally.
 
 ## Commands
-- Run: `npm start` (or `node_modules\.bin\electron.cmd .`, logs go to `app.log` when redirected)
-- Build installer: `npm run build` (output in `dist/`)
+- Run (dev, terminal): `npm start` (or `node_modules\.bin\electron.cmd .`, logs go to `app.log` when redirected)
+- Pack unpacked exe (no install, pin-able): `npm run pack` (output `dist\win-unpacked\VoiceToClipboard.exe`)
+- Build NSIS installer: `npm run build` (output `dist\VoiceToClipboard-<version>-Setup.exe`)
+- Regenerate app icon: `npm run icon` (writes `build/icon.ico` + `build/icon.png`, zero deps)
 
 ## Security Rule
 DO NOT leak, print, or expose the `GEMINI_API_KEY` in any logs, chat messages, or console outputs.
