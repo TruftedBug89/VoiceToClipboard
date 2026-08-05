@@ -4,6 +4,9 @@ const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 
 app.disableHardwareAcceleration();
+// Windows App User Model ID — required before windows are created so the
+// taskbar groups the app correctly and pinning the icon works properly.
+app.setAppUserModelId('com.voicetoclipboard.app');
 
 let mainWindow;
 let tray = null;

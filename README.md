@@ -1,4 +1,8 @@
-# 🎙️ VoiceToClipboard
+<p align="center">
+  <img src="build/icon.png" width="128" alt="VoiceToClipboard icon">
+</p>
+
+<h1 align="center">🎙️ VoiceToClipboard</h1>
 
 > [!NOTE]
 > **Project Status:** 🟢 **Working / Functional**  
@@ -55,7 +59,7 @@
 ### 2. Install
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/VoiceToClipboard.git
+git clone https://github.com/TruftedBug89/VoiceToClipboard.git
 cd VoiceToClipboard
 npm install
 ```
@@ -83,11 +87,25 @@ npm start
 
 ## 📦 Building a Standalone Executable
 
+### Unpacked app (no installation)
+
+```bash
+npm run pack
+```
+
+Produces `dist\win-unpacked\VoiceToClipboard.exe` — run it directly with a double-click (no terminal needed).
+Right-click the exe (or its running taskbar button) and choose **Pin to taskbar** for one-click access.
+
+### Windows installer
+
 ```bash
 npm run build
 ```
 
-The Windows installer is generated inside `dist/`.
+Produces `dist\VoiceToClipboard-1.0.0-Setup.exe` — a one-click NSIS installer with a Start Menu
+shortcut and uninstaller. Installed shortcuts pin cleanly to the taskbar.
+
+> Regenerate the app icon anytime with `npm run icon` (writes `build/icon.ico` + `build/icon.png`, no dependencies).
 
 ---
 

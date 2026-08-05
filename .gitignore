@@ -1,21 +1,47 @@
 # Dependencies
 node_modules/
-package-lock.json
 
-# Build outputs
+# Build output (electron-builder)
 dist/
 out/
-build/
+release/
 *.exe
 
-# Logs and environment
+# Logs
+logs/
 *.log
 npm-debug.log*
-.env
-.env.local
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
-# OS / IDE trash
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Coverage / caches / tooling junk
+coverage/
+*.lcov
+.nyc_output/
+.eslintcache
+.stylelintcache
+.npm/
+.node_repl_history
+*.tsbuildinfo
+*.tgz
+
+# OS junk
 .DS_Store
 Thumbs.db
-.vscode/
+desktop.ini
+
+# Editors / IDEs
+.vscode/*
+!.vscode/extensions.json
 .idea/
+*.swp
+*.swo

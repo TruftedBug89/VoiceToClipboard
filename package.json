@@ -3,8 +3,16 @@
   "version": "1.0.0",
   "description": "Lightweight, always-on-top Windows widget that transcribes your voice with Gemini AI and copies the text to your clipboard.",
   "main": "main.js",
-  "author": "Open Source Community",
+  "author": "TruftedBug89",
   "license": "MIT",
+  "homepage": "https://github.com/TruftedBug89/VoiceToClipboard",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TruftedBug89/VoiceToClipboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TruftedBug89/VoiceToClipboard/issues"
+  },
   "keywords": [
     "speech-to-text",
     "stt",
@@ -18,18 +26,27 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "icon": "node scripts/generate-icon.js"
   },
   "build": {
     "appId": "com.voicetoclipboard.app",
     "productName": "VoiceToClipboard",
+    "directories": {
+      "buildResources": "build"
+    },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VoiceToClipboard",
+      "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "files": [
       "main.js",
