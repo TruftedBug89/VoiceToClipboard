@@ -1,8 +1,6 @@
 const { ipcRenderer } = require('electron');
 
 const micBtn = document.getElementById('mic-button');
-const subtitlesContainer = document.getElementById('subtitles-container');
-const subtitles = document.getElementById('subtitles');
 const closeBtn = document.getElementById('close-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
@@ -11,12 +9,14 @@ const apiKeyInput = document.getElementById('api-key-input');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const canvas = document.getElementById('visualizer-canvas');
 const canvasCtx = canvas.getContext('2d');
+const micContainer = document.getElementById('mic-container');
+const statusBadge = document.getElementById('status-badge');
+const statusText = document.getElementById('status-text');
 
 let isRecording = false;
 let mediaRecorder;
 let audioChunks = [];
-let recognition;
-let finalSubtitleText = "";
+let cancelPending = false;
 
 // Web Audio API Visualizer & Sound Feedback Context
 let audioCtx;
@@ -41,7 +41,158 @@ function playBeep(freq = 880, duration = 0.08) {
     } catch (e) {}
 }
 
+// Minimal status indicator (dot + text)
+function setStatus(mode, text) {
+    statusText.textContent = text;
+    statusBadge.classList.remove('busy', 'done', 'dim', 'err');
+    if (mode) statusBadge.classList.add(mode);
+    statusBadge.classList.add('visible');
+}
+
+function hideStatus() {
+    statusBadge.classList.remove('visible');
+}
+
+// ---- Custom drag & click logic (hold+drag moves the window, quick press toggles record/cancel) ----
+const DRAG_THRESHOLD = 3;
+let pointerDrag = null;
+
+document.addEventListener('pointerdown', (e) => {
+    if (settingsModal.classList.contains('active')) return;
+    if (micContainer.contains(e.target)) {
+        pointerDrag = { pid: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false };
+        try { micContainer.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+});
+
+document.addEventListener('pointermove', (e) => {
+    if (!pointerDrag || e.pointerId !== pointerDrag.pid) return;
+    if (!pointerDrag.moved &&
+        Math.abs(e.clientX - pointerDrag.startX) + Math.abs(e.clientY - pointerDrag.startY) > DRAG_THRESHOLD) {
+        pointerDrag.moved = true;
+        micContainer.classList.add('dragging');
+    }
+    if (pointerDrag.moved) {
+        ipcRenderer.send('drag-window', e.clientX - pointerDrag.lastX, e.clientY - pointerDrag.lastY);
+        pointerDrag.lastX = e.clientX;
+        pointerDrag.lastY = e.clientY;
+    }
+});
+
+function endPointerDrag() {
+    if (pointerDrag) {
+        pointerDrag = null;
+        micContainer.classList.remove('dragging');
+    }
+}
+
+document.addEventListener('pointerup', (e) => {
+    if (!pointerDrag || e.pointerId !== pointerDrag.pid) return;
+    const wasDrag = pointerDrag.moved;
+    endPointerDrag();
+    if (!wasDrag && micContainer.contains(e.target) && !settingsModal.classList.contains('active')) {
+        if (!isRecording) {
+            startRecording();
+        } else {
+            cancelRecording();
+        }
+    }
+});
+
+document.addEventListener('pointercancel', (e) => {
+    if (pointerDrag && e.pointerId === pointerDrag.pid) {
+        endPointerDrag();
+    }
+});
+
+// Esc cancels an active recording
+document.addEventListener('keydown', (e) => {
+    if (isRecording && e.key === 'Escape') {
+        cancelRecording();
+    }
+});
+
+// ---- Click-through transparent areas (only interactive spots capture the mouse) ----
+let mouseIgnored = true;
+let mouseX = 0, mouseY = 0;
+
+function refreshMouseIgnore() {
+    if (pointerDrag) return; // never re-ignore mid-drag
+    const el = document.elementFromPoint(mouseX, mouseY);
+    const interactive = !!(el && (
+        el.closest('#mic-container') ||
+        el.closest('#top-bar') ||
+        el.closest('#settings-modal')
+    ));
+    const shouldIgnore = !interactive;
+    if (shouldIgnore !== mouseIgnored) {
+        mouseIgnored = shouldIgnore;
+        ipcRenderer.send('set-ignore-mouse', mouseIgnored);
+    }
+}
+
+document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    refreshMouseIgnore();
+});
+
+// Global Hotkey / IPC handlers
+ipcRenderer.on('toggle-recording', () => {
+    if (!isRecording) {
+        startRecording();
+    } else {
+        stopRecording();
+    }
+});
+
+ipcRenderer.on('open-settings', () => {
+    openSettings();
+});
+
+// ---- App Settings ----
+async function checkApiKeyStatus() {
+    const status = await ipcRenderer.invoke('get-api-key-status');
+    if (!status.hasKey) {
+        setStatus('err', 'API KEY REQUIRED');
+    }
+}
+
+function openSettings() {
+    hideStatus();
+    mouseIgnored = false;
+    ipcRenderer.send('set-ignore-mouse', false);
+    ipcRenderer.invoke('get-api-key-status').then(status => {
+        apiKeyInput.value = status.key || '';
+        settingsModal.classList.add('active');
+    });
+}
+
+function closeSettings() {
+    settingsModal.classList.remove('active');
+    refreshMouseIgnore();
+}
+
+saveSettingsBtn.addEventListener('click', async () => {
+    const val = apiKeyInput.value.trim();
+    if (val) {
+        const res = await ipcRenderer.invoke('save-api-key', val);
+        if (res.success) {
+            setStatus('done', 'KEY SAVED');
+            setTimeout(hideStatus, 1600);
+            closeSettings();
+            setTimeout(() => checkApiKeyStatus(), 2000);
+        }
+    }
+});
+
+settingsBtn.addEventListener('click', openSettings);
+closeModalBtn.addEventListener('click', closeSettings);
+closeBtn.addEventListener('click', () => window.close());
+
 // Draw circular audio waveform visualizer
+const smoothValues = new Array(32).fill(0);
+
 function drawVisualizer() {
     if (!analyser || !isRecording) {
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -56,121 +207,47 @@ function drawVisualizer() {
 
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const baseRadius = 32;
-
-    canvasCtx.lineWidth = 2;
-    canvasCtx.strokeStyle = 'rgba(230, 57, 70, 0.8)';
-    canvasCtx.beginPath();
+    const baseRadius = 31;
 
     const bars = 32;
     const step = (Math.PI * 2) / bars;
 
+    canvasCtx.lineWidth = 2.4;
+    canvasCtx.lineCap = 'round';
+    canvasCtx.shadowColor = 'rgba(230, 57, 70, 0.9)';
+    canvasCtx.shadowBlur = 7;
+
     for (let i = 0; i < bars; i++) {
-        const value = dataArray[i * 2] || 0;
-        const barHeight = (value / 255) * 12;
+        const target = dataArray[i * 2] || 0;
+        smoothValues[i] += (target - smoothValues[i]) * 0.3;
+        const barHeight = (smoothValues[i] / 255) * 14;
+
         const angle = i * step;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
 
-        const x1 = centerX + Math.cos(angle) * baseRadius;
-        const y1 = centerY + Math.sin(angle) * baseRadius;
-        const x2 = centerX + Math.cos(angle) * (baseRadius + barHeight);
-        const y2 = centerY + Math.sin(angle) * (baseRadius + barHeight);
+        const x1 = centerX + cos * baseRadius;
+        const y1 = centerY + sin * baseRadius;
+        const x2 = centerX + cos * (baseRadius + barHeight);
+        const y2 = centerY + sin * (baseRadius + barHeight);
 
+        canvasCtx.strokeStyle = `rgba(255, ${Math.round(90 + barHeight * 4)}, ${Math.round(90 + barHeight * 3)}, 0.9)`;
+        canvasCtx.beginPath();
         canvasCtx.moveTo(x1, y1);
         canvasCtx.lineTo(x2, y2);
+        canvasCtx.stroke();
     }
 
+    canvasCtx.shadowBlur = 0;
+
+    canvasCtx.strokeStyle = 'rgba(230, 57, 70, 0.25)';
+    canvasCtx.lineWidth = 1;
+    canvasCtx.beginPath();
+    canvasCtx.arc(centerX, centerY, baseRadius + 1, 0, Math.PI * 2);
     canvasCtx.stroke();
+
     animationFrameId = requestAnimationFrame(drawVisualizer);
 }
-
-// Setup Speech Recognition
-if ('webkitSpeechRecognition' in window) {
-    recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-        finalSubtitleText = "";
-    };
-
-    recognition.onresult = (event) => {
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                finalSubtitleText += event.results[i][0].transcript + " ";
-            } else {
-                interimTranscript += event.results[i][0].transcript;
-            }
-        }
-        const display = finalSubtitleText + interimTranscript;
-        if (display.trim()) {
-            subtitlesContainer.classList.add('visible');
-            subtitles.innerText = display;
-        }
-    };
-
-    recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-    };
-}
-
-// Global Hotkey / IPC toggle handler
-ipcRenderer.on('toggle-recording', () => {
-    if (!isRecording) {
-        startRecording();
-    } else {
-        stopRecording();
-    }
-});
-
-ipcRenderer.on('open-settings', () => {
-    openSettings();
-});
-
-// App Settings & Keys
-async function checkApiKeyStatus() {
-    const status = await ipcRenderer.invoke('get-api-key-status');
-    if (!status.hasKey) {
-        subtitlesContainer.classList.add('visible');
-        subtitles.innerHTML = `⚠️ <span style="color:#ffb703">GEMINI_API_KEY missing!</span> Click ⚙️ to set it.`;
-    }
-}
-
-function openSettings() {
-    ipcRenderer.invoke('get-api-key-status').then(status => {
-        apiKeyInput.value = status.key || '';
-        settingsModal.classList.add('active');
-    });
-}
-
-function closeSettings() {
-    settingsModal.classList.remove('active');
-}
-
-saveSettingsBtn.addEventListener('click', async () => {
-    const val = apiKeyInput.value.trim();
-    if (val) {
-        const res = await ipcRenderer.invoke('save-api-key', val);
-        if (res.success) {
-            subtitlesContainer.classList.add('visible');
-            subtitles.innerText = "✅ API Key saved successfully!";
-            closeSettings();
-            setTimeout(() => checkApiKeyStatus(), 2000);
-        }
-    }
-});
-
-settingsBtn.addEventListener('click', openSettings);
-closeModalBtn.addEventListener('click', closeSettings);
-closeBtn.addEventListener('click', () => window.close());
-
-micBtn.addEventListener('click', () => {
-    if (!isRecording) {
-        startRecording();
-    } else {
-        stopRecording();
-    }
-});
 
 async function startRecording() {
     try {
@@ -183,7 +260,7 @@ async function startRecording() {
         playBeep(880, 0.08); // High beep
 
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+
         // Setup Visualizer Node
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioCtx.createAnalyser();
@@ -193,6 +270,7 @@ async function startRecording() {
 
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         audioChunks = [];
+        cancelPending = false;
 
         mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0) audioChunks.push(e.data);
@@ -201,62 +279,98 @@ async function startRecording() {
         mediaRecorder.onstop = async () => {
             playBeep(523, 0.1); // Lower finish beep
 
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            subtitlesContainer.classList.add('visible');
-            subtitles.innerText = "✨ Transcribing with Gemini AI...";
-            micBtn.classList.remove('recording');
-
-            try {
-                const arrayBuffer = await audioBlob.arrayBuffer();
-                const result = await ipcRenderer.invoke('transcribe-audio', arrayBuffer);
-
-                if (result.success) {
-                    subtitles.innerText = `📋 Copied: "${result.text}"`;
-                    setTimeout(() => {
-                        if (!isRecording) subtitlesContainer.classList.remove('visible');
-                    }, 5000);
-                } else {
-                    subtitles.innerText = `❌ Error: ${result.error}`;
-                }
-            } catch (err) {
-                subtitles.innerText = "❌ IPC Error: " + err.message;
-            }
-
-            // Cleanup stream & Audio Context
             stream.getTracks().forEach(track => track.stop());
             if (audioCtx) {
                 audioCtx.close();
                 audioCtx = null;
             }
+
+            if (cancelPending) {
+                cancelPending = false;
+                return;
+            }
+
+            try {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const result = await ipcRenderer.invoke('transcribe-audio', arrayBuffer);
+
+                micBtn.classList.remove('transcribing');
+                micContainer.classList.remove('transcribing');
+
+                if (result.success) {
+                    micBtn.classList.add('show-check');
+                    setTimeout(() => micBtn.classList.remove('show-check'), 1200);
+                    setStatus('done', '✓ COPIED');
+                    setTimeout(hideStatus, 1600);
+                } else {
+                    setStatus('err', result.error === 'No speech detected.' ? 'NO SPEECH' : 'ERROR');
+                    setTimeout(hideStatus, 3000);
+                }
+            } catch (err) {
+                micBtn.classList.remove('transcribing');
+                micContainer.classList.remove('transcribing');
+                setStatus('err', 'ERROR');
+                setTimeout(hideStatus, 3000);
+            }
         };
 
         mediaRecorder.start();
         isRecording = true;
+
+        // ---- START FX ----
+        micBtn.classList.add('pop');
+        setTimeout(() => micBtn.classList.remove('pop'), 520);
         micBtn.classList.add('recording');
+        micContainer.classList.add('recording');
+        setStatus('', 'REC');
 
-        subtitlesContainer.classList.add('visible');
-        subtitles.innerText = "Listening...";
-        finalSubtitleText = "";
-
-        if (recognition) recognition.start();
         drawVisualizer();
-
     } catch (err) {
         console.error("Microphone error:", err);
-        subtitlesContainer.classList.add('visible');
-        subtitles.innerText = "❌ Microphone access denied or unavailable.";
-        setTimeout(() => subtitlesContainer.classList.remove('visible'), 3000);
+        setStatus('err', 'MIC UNAVAILABLE');
+        setTimeout(hideStatus, 3000);
     }
 }
 
-function stopRecording() {
+function stopRecordingCore(cancel) {
+    if (!isRecording) return;
+    cancelPending = cancel;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
     }
-    if (recognition) recognition.stop();
     isRecording = false;
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // ---- FINISH FX ----
+    micBtn.classList.remove('recording');
+    micContainer.classList.remove('recording');
+    micBtn.classList.add('burst');
+    setTimeout(() => micBtn.classList.remove('burst'), 560);
+    micContainer.classList.remove('finish');
+    void micContainer.offsetWidth;
+    micContainer.classList.add('finish');
+
+    if (cancel) {
+        setStatus('dim', 'CANCELLED');
+        setTimeout(() => { if (!isRecording) hideStatus(); }, 1400);
+    } else {
+        // ---- TRANSCRIBING STATE (minimal spinner feedback) ----
+        micBtn.classList.add('transcribing');
+        micContainer.classList.add('transcribing');
+        setStatus('busy', 'TRANSCRIBING');
+    }
+}
+
+// Finish & transcribe (shortcut / future use)
+function stopRecording() {
+    stopRecordingCore(false);
+}
+
+// Abort recording, discard audio
+function cancelRecording() {
+    stopRecordingCore(true);
 }
 
 // Initial check on load

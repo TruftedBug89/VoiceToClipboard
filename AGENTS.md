@@ -1,23 +1,27 @@
 # VoiceToClipboard STT Tool
 
 ## Project Goal
-Create a super simple, lightweight Windows software that records voice from the microphone, uses the Gemini Multimodal API to convert Speech-to-Text (STT), and automatically copies the transcribed text directly to the user's clipboard. It is designed to be extremely memory-efficient.
+A super simple, lightweight Windows widget that records voice from the microphone, uses the Gemini Multimodal API for Speech-to-Text (STT), and automatically copies the transcribed text to the clipboard. Designed to be memory-efficient and minimal.
 
-## Current State
-- **Language/Environment:** Node.js (v24.18.1).
+## Current State (v1.0.0 — stable)
+- **Language/Environment:** Node.js, Electron app (Windows 10/11).
 - **Directory:** `C:\Users\lavvo\Documents\VoiceToClipboard`
-- **Core Logic:** Implemented in `index.js`.
-- **Dependencies Installed:** 
-  - `@google/genai` (For Gemini STT interaction)
-  - `clipboardy` (To handle clipboard operations cross-platform)
-  - `node-record-lpcm16` (To handle microphone recording)
-  - `dotenv` (For local environment variables)
-- **Gitignore:** Created and ignoring `node_modules/` and `.env`.
+- **Core files:** `main.js` (main process: window, tray, hotkey, IPC, Gemini transcription, clipboard), `index.html` + `renderer.js` (UI, recording via Web Audio API `MediaRecorder`, custom drag logic, click-through).
+- **Dependencies:** `@google/genai` (Gemini), `electron`, `electron-builder` (dev).
+- **API Key:** read from `GEMINI_API_KEY` env var or saved via in-app settings (config stored in `userData/config.json`).
 
-## What Needs to be Done (For the Next Agent)
-1. **API Key Setup:** A `.env` file needs to be created containing `GEMINI_API_KEY=your_key_here`.
-2. **Audio Tooling on Windows:** `node-record-lpcm16` relies on command-line audio tools like `sox` or `ffmpeg`. Windows doesn't always have a default fallback that works perfectly. If the recording fails when running `npm start`, you may need to ensure `sox` or `ffmpeg` is available on the system PATH and configure the recorder options in `index.js` to target it correctly.
-3. **Run & Test:** Execute `node index.js` (or `npm start`) and verify that pressing ENTER successfully stops recording, sends the payload to Gemini, and copies the resulting transcript to the clipboard.
+## Architecture Notes (keep in mind when editing)
+- **Click-through widget:** window starts with `setIgnoreMouseEvents(true, { forward: true })`; renderer toggles it over interactive elements (`#mic-container`, `#top-bar`, `#settings-modal`) via the `set-ignore-mouse` IPC channel.
+- **Custom drag:** no `-webkit-app-region` anywhere (it suppresses pointer events). Dragging uses pointer events + `setPointerCapture`, sending throttled deltas over the `drag-window` IPC channel. Quick press (< 5px movement) = toggle record.
+- **Recording states:** idle → recording (`#mic-button.recording`, sonar rings, spin ring, visualizer canvas) → transcribing (`#mic-container.transcribing`, fast spin ring, breathing button, busy badge) → done (`show-check` + `✓ COPIED` badge). Cancel discards audio via `cancelPending` flag; Esc key cancels.
+- **Transcription:** `transcribe-audio` IPC handler sends base64 `audio/webm` to `gemini-2.5-flash`; response text must be read as property (`response.text`), NOT a function call.
+- **Badge feedback:** `setStatus(mode, text)` in renderer.js — modes: `''` (rec), `busy` (spinner), `done` (green), `err` (red), `dim` (no dot).
+- **Renderer errors** are forwarded to stdout/app.log via the `console-message` event (new Electron API style — event object only).
+- No live subtitles / Web Speech API — removed intentionally.
+
+## Commands
+- Run: `npm start` (or `node_modules\.bin\electron.cmd .`, logs go to `app.log` when redirected)
+- Build installer: `npm run build` (output in `dist/`)
 
 ## Security Rule
 DO NOT leak, print, or expose the `GEMINI_API_KEY` in any logs, chat messages, or console outputs.

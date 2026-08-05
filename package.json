@@ -1,7 +1,7 @@
 {
   "name": "voicetoclipboard",
   "version": "1.0.0",
-  "description": "Ultra-lightweight, floating voice-to-text widget powered by Gemini Multimodal AI with live subtitles & auto-clipboard.",
+  "description": "Lightweight, always-on-top Windows widget that transcribes your voice with Gemini AI and copies the text to your clipboard.",
   "main": "main.js",
   "author": "Open Source Community",
   "license": "MIT",
@@ -12,7 +12,6 @@
     "clipboard",
     "floating-widget",
     "electron",
-    "subtitles",
     "windows",
     "productivity"
   ],

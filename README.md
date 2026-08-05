@@ -1,86 +1,109 @@
 # 🎙️ VoiceToClipboard
 
-> **The ultimate, ultra-lightweight, floating voice-to-clipboard assistant powered by Google Gemini Multimodal AI.**
+> **A featherweight, always-on-top Windows widget that turns your microphone into an instant clipboard.**
+> Speak — it transcribes with Google Gemini and copies the text to your clipboard automatically.
 
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
+![Electron](https://img.shields.io/badge/Electron-v43.2.0-brightgreen)
+![AI Model](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Electron](https://img.shields.io/badge/electron-v43.2.0-brightgreen)
-![Gemini AI](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-orange)
-
-VoiceToClipboard is a clean, minimal Windows overlay app designed for maximum efficiency. It floats unobtrusively on your screen, shows live real-time "lyrics-style" subtitles as you speak, transcribes your voice with state-of-the-art Gemini AI accuracy, and automatically copies the result directly to your clipboard.
 
 ---
 
-## ✨ Features
+## ✨ Highlights
 
-- ⚡ **Zero-Bloat & Lightweight:** Built using native Web Audio & Electron APIs. No heavy command-line audio tools (`sox`, `ffmpeg`) required!
-- ⌨️ **Global Shortcut (`Ctrl+Alt+V`):** Trigger voice recording from anywhere on Windows without switching windows.
-- 💬 **Live Floating Subtitles:** Instant real-time visual feedback under the widget as you speak.
-- 🤖 **Gemini Multimodal STT:** High-precision transcription powered by `gemini-2.5-flash` with automatic multi-language detection.
-- 🎨 **Modern Windows 11 Glassmorphism:** Transparent, frameless, draggable overlay with smooth circular audio visualizers and glowing red pulse animation.
-- 🔔 **Synthesized Audio Feedback:** Subtle audio cues (beeps) when recording starts and finishes so you know it's working even in full-screen apps.
-- 📌 **System Tray & Window Persistence:** Minimizes to system tray and remembers your preferred widget position on screen.
-- 🔑 **Plug & Play Config:** Set your `GEMINI_API_KEY` via Windows system environment variables or directly inside the app's settings UI.
+- ✅ **Stable & production-ready** — v1.0.0, no external audio tools required (`ffmpeg`/`sox` free)
+- ⚡ **Zero-bloat** — a tiny frameless widget powered by native Web Audio API & Electron
+- ⌨️ **Global shortcut** — record anywhere with `Ctrl + Alt + V`
+- 🤖 **Gemini Multimodal STT** — high-accuracy transcription with automatic language detection
+- 🖱️ **Drag anywhere** — hold the mic button and drag to reposition; quick click to record
+- ⏹️ **Cancel anytime** — click the ✕ button (or press `Esc`) to discard a recording
+- 🪟 **Click-through design** — transparent areas never block your mouse; clicks pass straight through to apps underneath
+- 🎨 **Minimal glass UI** — breathing glow, sonar rings, spinner feedback, and a hand-drawn checkmark on success
+- 📌 **System tray** — always-on-top toggle, tray controls, and window position memory
 
 ---
 
-## ⌨️ Shortcuts & Controls
+## ⌨️ Controls
 
 | Action | Shortcut / Control |
 | :--- | :--- |
-| **Start / Stop Recording** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> or click the Mic Button |
-| **Move Widget** | Drag anywhere on the widget window |
-| **Open Settings** | Hover over widget and click ⚙️ or Right-Click Tray Icon |
-| **Quit App** | Hover over widget and click ✕ or Right-Click Tray Icon -> Quit |
+| **Start recording** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> or click the mic button |
+| **Finish & transcribe** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> (while recording) |
+| **Cancel recording** | Click the ✕ button or press <kbd>Esc</kbd> |
+| **Move the widget** | Hold-click the mic button and drag |
+| **Open settings** | Hover the widget and click ⚙️, or right-click the tray icon |
+| **Quit app** | Hover the widget and click ✕, or tray icon → Quit |
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Installation
-Clone the repository and install dependencies:
+### 1. Requirements
+
+- **Windows 10/11**
+- **Node.js 18+** (only needed for development/building)
+- **A free Google AI Studio API key** — grab one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+### 2. Install
+
 ```bash
 git clone https://github.com/YOUR-USERNAME/VoiceToClipboard.git
 cd VoiceToClipboard
 npm install
 ```
 
-### 2. Configure API Key
-You can set your Gemini API key in one of two easy ways:
+### 3. Configure your API key
 
-- **Option A (In-App UI - Recommended):** Run `npm start`. Click the ⚙️ settings icon on the app overlay, paste your key, and click **Save Key**.
-- **Option B (Windows Environment Variable):** Open PowerShell or CMD and run:
+> **Prerequisite:** The app needs a **Google AI Studio API key** to transcribe. It's free — create one at [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+
+Set it in one of two ways:
+
+- **Option A — In-app (recommended):** Run `npm start`, click ⚙️ on the widget, paste your key, and click **Save Key**.
+- **Option B — Environment variable:**
   ```cmd
   setx GEMINI_API_KEY "your_actual_gemini_api_key"
   ```
-  *(Restart your terminal/app after running `setx`)*
+  *(Restart your terminal/app after running `setx`.)*
 
-### 3. Launch App
+### 4. Run
+
 ```bash
 npm start
 ```
 
 ---
 
-## 📦 Building Standalone Executable
+## 📦 Building a Standalone Executable
 
-To generate a portable Windows installer (`.exe`):
 ```bash
 npm run build
 ```
-The installer will be generated inside the `dist/` folder.
+
+The Windows installer is generated inside `dist/`.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ How It Works
 
-- **Framework:** Electron (Node.js & Chromium)
-- **AI Model:** Google Gen AI (`@google/genai` - `gemini-2.5-flash`)
-- **Audio & Subtitles:** Web Audio API & Web Speech API (`webkitSpeechRecognition`)
-- **Packaging:** `electron-builder`
+1. You start recording (shortcut or mic click) — audio is captured with the native **Web Audio API**.
+2. Press the shortcut again to finish: the clip is sent to **Gemini 2.5 Flash** for transcription.
+3. The transcript is written straight to your **clipboard** — ready to paste.
+4. Prefer to start over? **Cancel** discards the audio instantly.
+
+## 🧱 Tech Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| Framework | Electron (Node.js & Chromium) |
+| AI Model | Google Gen AI (`@google/genai` — `gemini-2.5-flash`) |
+| Audio capture | Web Audio API (`MediaRecorder`) |
+| Packaging | `electron-builder` |
 
 ---
 
 ## 📜 License
 
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.

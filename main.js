@@ -45,8 +45,8 @@ function createWindow() {
     const config = loadConfig();
 
     mainWindow = new BrowserWindow({
-        width: 600,
-        height: 220,
+        width: 220,
+        height: 130,
         x: config.windowX,
         y: config.windowY,
         transparent: true,
@@ -56,19 +56,36 @@ function createWindow() {
         skipTaskbar: false,
         webPreferences: {
             nodeIntegration: true,
-            contextIsolation: false
+            contextIsolation: false,
+            backgroundThrottling: false
         }
     });
 
     mainWindow.loadFile('index.html');
 
-    // Save window position on move
+    // Click-through transparent areas; renderer re-enables over interactive spots
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+
+    // Forward renderer console (incl. errors) to app.log
+    mainWindow.webContents.on('console-message', (event) => {
+        console.log(`[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`);
+    });
+
+    // Save window position once the drag settles
+    let savePosTimer = null;
     mainWindow.on('moved', () => {
         if (!mainWindow) return;
-        const [x, y] = mainWindow.getPosition();
-        saveConfig({ windowX: x, windowY: y });
+        clearTimeout(savePosTimer);
+        savePosTimer = setTimeout(() => {
+            const [x, y] = mainWindow.getPosition();
+            saveConfig({ windowX: x, windowY: y });
+        }, 400);
     });
 }
+
+process.on('uncaughtException', (err) => {
+    console.error('MAIN UNCAUGHT:', err);
+});
 
 function createTray() {
     // Generate a simple 16x16 red/gray circle icon for tray
@@ -168,6 +185,19 @@ ipcMain.handle('save-api-key', (event, newKey) => {
     return { success };
 });
 
+// Custom window drag (hold + move on the mic/subtitles; never triggers recording)
+ipcMain.on('drag-window', (event, dx, dy) => {
+    if (!mainWindow) return;
+    const [x, y] = mainWindow.getPosition();
+    mainWindow.setPosition(x + dx, y + dy);
+});
+
+// Toggle click-through for transparent areas
+ipcMain.on('set-ignore-mouse', (event, ignore) => {
+    if (!mainWindow) return;
+    mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
+});
+
 ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
     try {
         const apiKey = getApiKey();
@@ -191,7 +221,7 @@ ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
             ]
         });
 
-        const transcript = response.text().trim();
+        const transcript = (response.text ?? '').trim();
 
         if (transcript) {
             clipboard.writeText(transcript);
