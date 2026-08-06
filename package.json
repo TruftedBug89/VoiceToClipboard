@@ -32,8 +32,10 @@
   "build": {
     "appId": "com.voicetoclipboard.app",
     "productName": "VoiceToClipboard",
+    "npmRebuild": false,
     "directories": {
-      "buildResources": "build"
+      "buildResources": "build",
+      "output": "dist_build"
     },
     "win": {
       "target": "nsis",

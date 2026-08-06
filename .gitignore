@@ -1,31 +1,53 @@
-# Dependencies
+# ─── Dependencies ─────────────────────────────────────────────
 node_modules/
+.pnp
+.pnp.js
 
-# Build output (electron-builder)
+# ─── Build output (electron-builder) ───────────────────────────
 dist/
+dist_build/
 out/
 release/
 *.exe
+*.blockmap
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+*.snap
 
-# Logs
+# ─── Logs ──────────────────────────────────────────────────────
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 lerna-debug.log*
 
-# Diagnostic reports
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-
-# Environment & secrets
+# ─── Environment & secrets ─────────────────────────────────────
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
-# Coverage / caches / tooling junk
+# ─── Editors / IDEs ────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# ─── OS junk ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Caches / coverage / tooling ───────────────────────────────
 coverage/
-*.lcov
 .nyc_output/
 .eslintcache
 .stylelintcache
@@ -33,16 +55,4 @@ coverage/
 .node_repl_history
 *.tsbuildinfo
 *.tgz
-
-# OS junk
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Editors / IDEs
-.vscode/*
-!.vscode/extensions.json
-.idea/
-*.swp
-*.swo
 /.commandcode

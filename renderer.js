@@ -259,6 +259,8 @@ function refreshMouseIgnore() {
         el.closest('#download-modal')
     ));
 
+    document.body.classList.toggle('is-hovering', interactive || isMouseHoverTop);
+
     const shouldIgnore = !interactive;
     if (shouldIgnore !== mouseIgnored) {
         mouseIgnored = shouldIgnore;
@@ -273,6 +275,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('mouseleave', () => {
+    document.body.classList.remove('is-hovering');
     if (pointerDrag) return;
     if (!settingsModal.classList.contains('active') && !downloadModal.classList.contains('active')) {
         topBar.classList.remove('visible');
@@ -400,7 +403,7 @@ function calculateSpeechVolume(dataArray) {
 
 function updateMeterUI(vol, threshold) {
     if (!noiseMeterBar || !noiseThresholdMarker || !noiseMeterStatus) return;
-    const maxVal = 60;
+    const maxVal = 150;
     const pct = Math.min(100, Math.round((vol / maxVal) * 100));
     const threshPct = Math.min(100, Math.round((threshold / maxVal) * 100));
 
@@ -471,10 +474,8 @@ async function autoCalibrateNoiseFloor() {
     if (isCalibrating) return;
     isCalibrating = true;
     const origText = autoCalibrateBtn.textContent;
-    autoCalibrateBtn.textContent = 'Listening...';
     autoCalibrateBtn.disabled = true;
 
-    const samples = [];
     const tempStream = settingsPreviewStream || await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
     if (!tempStream) {
         autoCalibrateBtn.textContent = origText;
@@ -489,38 +490,64 @@ async function autoCalibrateNoiseFloor() {
     const tempSrc = tempCtx.createMediaStreamSource(tempStream);
     tempSrc.connect(tempAnalyser);
 
-    const checkInterval = setInterval(() => {
+    const silenceSamples = [];
+    const speechSamples = [];
+
+    let sec1 = 3;
+    autoCalibrateBtn.textContent = `🤫 Silent... (${sec1}s)`;
+    const t1 = setInterval(() => {
+        sec1--;
+        if (sec1 > 0) autoCalibrateBtn.textContent = `🤫 Silent... (${sec1}s)`;
+    }, 1000);
+
+    const sampleLoop = setInterval(() => {
         const dataArr = new Uint8Array(tempAnalyser.frequencyBinCount);
         tempAnalyser.getByteFrequencyData(dataArr);
-        samples.push(calculateSpeechVolume(dataArr));
+        const vol = calculateSpeechVolume(dataArr);
+        if (silenceSamples.length < 55) {
+            silenceSamples.push(vol);
+        } else {
+            speechSamples.push(vol);
+        }
     }, 50);
 
     setTimeout(() => {
-        clearInterval(checkInterval);
-        try { tempCtx.close(); } catch (e) {}
-        if (!settingsPreviewStream && tempStream) {
-            tempStream.getTracks().forEach(t => t.stop());
-        }
-
-        if (samples.length > 0) {
-            const avgNoise = samples.reduce((a, b) => a + b, 0) / samples.length;
-            const newThresh = Math.min(45, Math.max(5, Math.round(avgNoise + 5)));
-            silenceThresholdSlider.value = newThresh;
-            thresholdValueDisplay.textContent = newThresh;
-            if (currentSttConfig) currentSttConfig.silenceThreshold = newThresh;
-            autoSaveSettings();
-            updateMeterUI(avgNoise, newThresh);
-            autoCalibrateBtn.textContent = `✓ Set ${newThresh}`;
-        } else {
-            autoCalibrateBtn.textContent = origText;
-        }
+        clearInterval(t1);
+        let sec2 = 3;
+        autoCalibrateBtn.textContent = `🗣️ Speak... (${sec2}s)`;
+        const t2 = setInterval(() => {
+            sec2--;
+            if (sec2 > 0) autoCalibrateBtn.textContent = `🗣️ Speak... (${sec2}s)`;
+        }, 1000);
 
         setTimeout(() => {
-            autoCalibrateBtn.textContent = origText;
-            autoCalibrateBtn.disabled = false;
-            isCalibrating = false;
-        }, 1500);
-    }, 1200);
+            clearInterval(t2);
+            clearInterval(sampleLoop);
+            try { tempCtx.close(); } catch (e) {}
+            if (!settingsPreviewStream && tempStream) {
+                tempStream.getTracks().forEach(t => t.stop());
+            }
+
+            const avgSilence = silenceSamples.length > 0 ? (silenceSamples.reduce((a, b) => a + b, 0) / silenceSamples.length) : 10;
+            const avgSpeech = speechSamples.length > 0 ? (speechSamples.reduce((a, b) => a + b, 0) / speechSamples.length) : (avgSilence + 25);
+
+            const diff = Math.max(10, avgSpeech - avgSilence);
+            const newThresh = Math.min(95, Math.max(5, Math.round(avgSilence + (diff * 0.35))));
+
+            if (silenceThresholdSlider) silenceThresholdSlider.value = newThresh;
+            if (thresholdValueDisplay) thresholdValueDisplay.textContent = newThresh;
+            if (currentSttConfig) currentSttConfig.silenceThreshold = newThresh;
+            autoSaveSettings();
+            updateMeterUI(avgSilence, newThresh);
+
+            autoCalibrateBtn.textContent = `✓ Set ${newThresh}`;
+            setTimeout(() => {
+                autoCalibrateBtn.textContent = origText;
+                autoCalibrateBtn.disabled = false;
+                isCalibrating = false;
+            }, 2000);
+        }, 3000);
+    }, 3000);
 }
 
 if (autoCalibrateBtn) {
@@ -603,7 +630,7 @@ async function refreshSettingsUi() {
     if (alwaysOnTopCheckbox) alwaysOnTopCheckbox.checked = sttConfig.alwaysOnTop !== false;
 
     const idleFadeEnabled = !!sttConfig.idleFadeEnabled;
-    const idleOpacity = typeof sttConfig.idleOpacity === 'number' ? Math.round(sttConfig.idleOpacity * 100) : 30;
+    const idleOpacity = typeof sttConfig.idleOpacity === 'number' ? Math.round(sttConfig.idleOpacity * 100) : 60;
     if (idleFadeCheckbox) idleFadeCheckbox.checked = idleFadeEnabled;
     if (idleFadeOptions) idleFadeOptions.style.display = idleFadeEnabled ? 'flex' : 'none';
     if (idleOpacitySlider) idleOpacitySlider.value = idleOpacity;
@@ -638,6 +665,9 @@ function updateWhisperLanguageInfo() {
     if (text) whisperInfoBanner.textContent = text;
 }
 
+const triggerDownloadBtn = document.getElementById('trigger-download-btn');
+
+
 async function checkModelStatus() {
     const modelId = localModelSelect.value;
     updateWhisperLanguageInfo();
@@ -645,10 +675,18 @@ async function checkModelStatus() {
     if (res.downloaded) {
         modelStatusInfo.textContent = '✓ Model weights ready & cached';
         modelStatusInfo.className = 'status-pill ready';
+        if (triggerDownloadBtn) triggerDownloadBtn.style.display = 'none';
     } else {
-        modelStatusInfo.textContent = '⚠️ Download required on activate';
+        modelStatusInfo.textContent = '⚠️ Download required';
         modelStatusInfo.className = 'status-pill download-needed';
+        if (triggerDownloadBtn) triggerDownloadBtn.style.display = 'inline-block';
     }
+}
+
+if (triggerDownloadBtn) {
+    triggerDownloadBtn.addEventListener('click', () => {
+        promptDownloadModal(localModelSelect.value);
+    });
 }
 
 localModelSelect.addEventListener('change', () => {
@@ -681,6 +719,10 @@ function closeSettings() {
     document.body.classList.remove('settings-active');
     refreshMouseIgnore();
 }
+
+if (closeModalBtn) closeModalBtn.addEventListener('click', closeSettings);
+if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+if (closeBtn) closeBtn.addEventListener('click', () => window.close());
 
 function promptDownloadModal(modelId) {
     pendingDownloadModel = modelId;
@@ -776,16 +818,8 @@ async function autoSaveSettings() {
         const alwaysOnTopCheckbox = document.getElementById('always-on-top-checkbox');
         const alwaysOnTop = alwaysOnTopCheckbox ? alwaysOnTopCheckbox.checked : true;
         const idleFadeEnabled = idleFadeCheckbox ? idleFadeCheckbox.checked : false;
-        const idleOpacityPct = parseInt(idleOpacitySlider ? idleOpacitySlider.value : 30) || 30;
+        const idleOpacityPct = parseInt(idleOpacitySlider ? idleOpacitySlider.value : 60) || 60;
         const idleOpacity = idleOpacityPct / 100;
-
-        if (engine === 'local') {
-            const check = await ipcRenderer.invoke('check-model-downloaded', localModel);
-            if (!check.downloaded) {
-                promptDownloadModal(localModel);
-                return;
-            }
-        }
 
         const apiKeyVal = apiKeyInput.value.trim();
         if (apiKeyVal) {

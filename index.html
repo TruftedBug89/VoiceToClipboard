@@ -132,8 +132,8 @@
             transition: opacity 0.35s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        body.idle-fade-active:not(.hover-active):not(.settings-active):not(.is-recording) #mic-container {
-            opacity: var(--idle-opacity, 0.3);
+        body.idle-fade-active:not(.is-hovering):not(.settings-active):not(.is-recording) #mic-container {
+            opacity: var(--idle-opacity, 0.6);
         }
 
         #mic-container.dragging {
@@ -523,14 +523,13 @@
             z-index: 50;
             display: flex;
             flex-direction: column;
-            padding: 16px;
+            padding: 14px 16px;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
             transform: scale(0.92) translateY(6px);
             box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.85), 0 0 24px rgba(230, 57, 70, 0.12);
-            overflow-y: auto;
-            overflow-x: hidden;
+            overflow: hidden;
         }
 
         #settings-modal.active {
@@ -572,29 +571,41 @@
             backdrop-filter: blur(18px);
         }
 
-        /* Custom Sleek Scrollbar */
-        #settings-modal::-webkit-scrollbar {
-            width: 4px;
-        }
-        #settings-modal::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        #settings-modal::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-        #settings-modal::-webkit-scrollbar-thumb:hover {
-            background: rgba(230, 57, 70, 0.6);
-        }
+
 
         .modal-header {
+            flex-shrink: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 14px;
             padding-bottom: 10px;
+            margin-bottom: 10px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             cursor: grab;
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom Sleek Scrollbar */
+        .modal-body::-webkit-scrollbar {
+            width: 4px;
+        }
+        .modal-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .modal-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .modal-body::-webkit-scrollbar-thumb:hover {
+            background: rgba(230, 57, 70, 0.6);
         }
 
         #settings-modal.dragging,
@@ -1037,141 +1048,144 @@
             <div class="icon-btn" id="close-modal-btn" title="Close Settings">✕</div>
         </div>
 
-        <!-- Global Recording Hotkey -->
-        <div class="input-group">
-            <label for="hotkey-input">Global Recording Hotkey</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly style="flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15);" />
-                <button class="btn-secondary" id="record-hotkey-btn" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Change Key</button>
+        <div class="modal-body">
+            <!-- Global Recording Hotkey -->
+            <div class="input-group">
+                <label for="hotkey-input">Global Recording Hotkey</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly style="flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15);" />
+                    <button class="btn-secondary" id="record-hotkey-btn" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Change Key</button>
+                </div>
+                <div id="hotkey-note" style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Click input or Change Key, then press key combination.</div>
             </div>
-            <div id="hotkey-note" style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Click input or Change Key, then press key combination.</div>
-        </div>
-        
-        <!-- Always on Top Toggle -->
-        <div class="input-group">
-            <div class="switch-row">
-                <label class="switch-label" for="always-on-top-checkbox">📌 Always on Top</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="always-on-top-checkbox" checked />
-                    <span class="slider"></span>
-                </label>
-            </div>
-        </div>
-
-        <!-- STT Engine Selector -->
-        <div class="input-group">
-            <label>STT Engine</label>
-            <div class="segmented-control">
-                <div class="segment-btn active" id="engine-btn-gemini">☁️ Gemini API</div>
-                <div class="segment-btn" id="engine-btn-local">💻 Local Whisper</div>
-            </div>
-        </div>
-
-        <!-- Local Model Selector -->
-        <div class="input-group" id="local-model-group" style="display: none;">
-            <label for="local-model-select">Local Model</label>
-            <select id="local-model-select">
-                <option value="Xenova/whisper-tiny">Whisper Tiny (~39 MB download · ~250 MB RAM)</option>
-                <option value="Xenova/whisper-base">Whisper Base (~74 MB download · ~500 MB RAM · Rec.)</option>
-                <option value="Xenova/whisper-small">Whisper Small (~240 MB download · ~1 GB RAM)</option>
-                <option value="Xenova/whisper-medium">Whisper Medium (~760 MB download · ~2.5 GB RAM)</option>
-                <option value="Xenova/whisper-large-v3-turbo">Whisper Large v3 Turbo (~800 MB download · ~3 GB RAM)</option>
-            </select>
-            <div id="model-status-info" class="status-pill ready">✓ Weights ready</div>
-            <div id="whisper-info-banner">
-                Language support depends on the selected multilingual Whisper model. Accuracy varies significantly by language.
-            </div>
-        </div>
-
-        <!-- Local AI Memory Mode Toggle -->
-        <div class="input-group" id="eco-mode-group" style="display: none;">
-            <div class="switch-row">
-                <label class="switch-label" for="eco-mode-checkbox">Power-Saving Mode</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="eco-mode-checkbox" checked />
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On: unloads the model after each use to save RAM. Off: keeps the model loaded for the lowest transcription latency.</div>
-        </div>
-
-        <!-- Gemini API Key Input -->
-        <div class="input-group" id="gemini-key-group">
-            <label for="api-key-input">Gemini API Key</label>
-            <input type="password" id="api-key-input" placeholder="Paste Gemini API key..." autocomplete="off" />
-            <div id="api-key-note"></div>
-        </div>
-
-        <!-- Auto-Stop Silence Toggle Switch & Options -->
-        <div class="input-group">
-            <div class="switch-row">
-                <label class="switch-label" for="auto-stop-checkbox">Auto-Stop on Silence</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="auto-stop-checkbox" />
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div id="auto-stop-options" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="font-size: 11px; color: var(--text-dim);">Stop after</span>
-                    <select id="auto-stop-seconds" style="flex: 1; padding: 5px 8px;">
-                        <option value="1.5">1.5 sec</option>
-                        <option value="2.0">2.0 sec</option>
-                        <option value="3.0">3.0 sec</option>
-                        <option value="3.5">3.5 sec (Rec.)</option>
-                        <option value="4.0">4.0 sec</option>
-                        <option value="5.0">5.0 sec</option>
-                    </select>
-                    <span style="font-size: 11px; color: var(--text-dim);">silence</span>
+            
+            <!-- Always on Top Toggle -->
+            <div class="input-group">
+                <div class="switch-row">
+                    <label class="switch-label" for="always-on-top-checkbox">📌 Always on Top</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="always-on-top-checkbox" checked />
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
-        </div>
 
-        <!-- Live Silence Threshold Limiter -->
-        <div class="input-group">
-            <label>Live Mic Threshold</label>
-            <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
-                    <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
+            <!-- STT Engine Selector -->
+            <div class="input-group">
+                <label>STT Engine</label>
+                <div class="segmented-control">
+                    <div class="segment-btn active" id="engine-btn-gemini">☁️ Gemini API</div>
+                    <div class="segment-btn" id="engine-btn-local">💻 Local Whisper</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <input type="range" id="silence-threshold-slider" min="3" max="50" value="12" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                    <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Measure room noise and set threshold automatically">⚡ Auto-Calibrate</button>
-                </div>
+            </div>
 
-                <!-- Live Mic Volume Level Meter -->
-                <div style="margin-top: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
-                        <span>Live Mic Level</span>
-                        <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
+            <!-- Local Model Selector -->
+            <div class="input-group" id="local-model-group" style="display: none;">
+                <label for="local-model-select">Local Model</label>
+                <select id="local-model-select">
+                    <option value="Xenova/whisper-tiny">Whisper Tiny (~39 MB download · ~250 MB RAM)</option>
+                    <option value="Xenova/whisper-base">Whisper Base (~74 MB download · ~500 MB RAM · Rec.)</option>
+                    <option value="Xenova/whisper-small">Whisper Small (~240 MB download · ~1 GB RAM)</option>
+                    <option value="Xenova/whisper-medium">Whisper Medium (~760 MB download · ~2.5 GB RAM)</option>
+                    <option value="Xenova/whisper-large-v3-turbo">Whisper Large v3 Turbo (~800 MB download · ~3 GB RAM)</option>
+                </select>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+                    <div id="model-status-info" class="status-pill ready">✓ Weights ready</div>
+                    <button type="button" class="btn-secondary" id="trigger-download-btn" style="padding: 4px 8px; font-size: 10px; display: none;">📥 Download Model</button>
+                </div>
+                <div id="whisper-info-banner">
+                    Language support depends on the selected multilingual Whisper model. Accuracy varies significantly by language.
+                </div>
+            </div>
+
+            <!-- Local AI Memory Mode Toggle -->
+            <div class="input-group" id="eco-mode-group" style="display: none;">
+                <div class="switch-row">
+                    <label class="switch-label" for="eco-mode-checkbox">Power-Saving Mode</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="eco-mode-checkbox" checked />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On: unloads the model after each use to save RAM. Off: keeps the model loaded for the lowest transcription latency.</div>
+            </div>
+
+            <!-- Gemini API Key Input -->
+            <div class="input-group" id="gemini-key-group">
+                <label for="api-key-input">Gemini API Key</label>
+                <input type="password" id="api-key-input" placeholder="Paste Gemini API key..." autocomplete="off" />
+                <div id="api-key-note"></div>
+            </div>
+
+            <!-- Auto-Stop Silence Toggle Switch & Options -->
+            <div class="input-group">
+                <div class="switch-row">
+                    <label class="switch-label" for="auto-stop-checkbox">Auto-Stop on Silence</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="auto-stop-checkbox" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div id="auto-stop-options" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 11px; color: var(--text-dim);">Stop after</span>
+                        <select id="auto-stop-seconds" style="flex: 1; padding: 5px 8px;">
+                            <option value="1.5">1.5 sec</option>
+                            <option value="2.0">2.0 sec</option>
+                            <option value="3.0">3.0 sec</option>
+                            <option value="3.5">3.5 sec (Rec.)</option>
+                            <option value="4.0">4.0 sec</option>
+                            <option value="5.0">5.0 sec</option>
+                        </select>
+                        <span style="font-size: 11px; color: var(--text-dim);">silence</span>
                     </div>
-                    <div style="position: relative; width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
-                        <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
-                        <div id="noise-threshold-marker" style="position: absolute; top: 0; bottom: 0; left: 24%; width: 2px; background: #ffffff; box-shadow: 0 0 4px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+
+                    <!-- Live Silence Threshold Limiter -->
+                    <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px; margin-top: 2px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
+                            <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="range" id="silence-threshold-slider" min="2" max="100" value="15" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
+                            <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Measure room noise and set threshold automatically">⚡ Auto-Calibrate</button>
+                        </div>
+
+                        <!-- Live Mic Volume Level Meter -->
+                        <div style="margin-top: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
+                                <span>Live Mic Level</span>
+                                <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
+                            </div>
+                            <div style="position: relative; width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
+                                <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
+                                <div id="noise-threshold-marker" style="position: absolute; top: 0; bottom: 0; left: 24%; width: 2px; background: #ffffff; box-shadow: 0 0 4px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Idle Transparency Toggle & Slider -->
-        <div class="input-group">
-            <div class="switch-row">
-                <label class="switch-label" for="idle-fade-checkbox">Idle Transparency</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="idle-fade-checkbox" />
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div id="idle-fade-options" style="display: none; align-items: center; gap: 8px; margin-top: 6px;">
-                <span style="font-size: 11px; color: var(--text-dim);">Idle Opacity:</span>
-                <input type="range" id="idle-opacity-slider" min="10" max="80" value="30" step="5" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                <span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">30%</span>
+            <!-- Idle Transparency Toggle & Slider -->
+            <div class="input-group">
+                <div class="switch-row">
+                    <label class="switch-label" for="idle-fade-checkbox">Idle Transparency</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="idle-fade-checkbox" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div id="idle-fade-options" style="display: none; align-items: center; gap: 8px; margin-top: 6px;">
+                    <span style="font-size: 11px; color: var(--text-dim);">Idle Opacity:</span>
+                    <input type="range" id="idle-opacity-slider" min="10" max="90" value="60" step="5" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
+                    <span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">60%</span>
+                </div>
             </div>
         </div>
 
         <!-- Modal Actions Footer -->
-        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 8px;">
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
             <div style="font-size: 10.5px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;">
                 <span style="color: #10b981; font-weight: bold;">✓</span> Auto-saved
             </div>

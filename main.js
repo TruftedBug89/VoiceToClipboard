@@ -378,7 +378,7 @@ ipcMain.handle('get-stt-config', () => {
         ecoMode: config.ecoMode !== false,
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
         idleFadeEnabled: !!config.idleFadeEnabled,
-        idleOpacity: typeof config.idleOpacity === 'number' ? config.idleOpacity : 0.3
+        idleOpacity: typeof config.idleOpacity === 'number' ? config.idleOpacity : 0.6
     };
 });
 
@@ -520,41 +520,54 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
 });
 
 ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
-    try {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            return { success: false, error: "GEMINI_API_KEY is not configured." };
-        }
-
-        const ai = new GoogleGenAI({ apiKey });
-        const buffer = Buffer.from(arrayBuffer);
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [
-                {
-                    inlineData: {
-                        data: buffer.toString("base64"),
-                        mimeType: "audio/webm"
-                    }
-                },
-                "Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language."
-            ]
-        });
-
-        const transcript = (response.text ?? '').trim();
-
-        if (transcript) {
-            clipboard.writeText(transcript);
-            return { success: true, text: transcript };
-        } else {
-            return { success: false, error: "No speech detected." };
-        }
-    } catch (error) {
-        const cleanMsg = sanitizeErrorMessage(error);
-        console.error("Transcription error:", cleanMsg);
-        return { success: false, error: cleanMsg };
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        return { success: false, error: "GEMINI_API_KEY is not configured." };
     }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const buffer = Buffer.from(arrayBuffer);
+
+    let attempts = 0;
+    const maxAttempts = 2;
+    let lastError = null;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+        try {
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    {
+                        inlineData: {
+                            data: buffer.toString("base64"),
+                            mimeType: "audio/webm"
+                        }
+                    },
+                    "Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language."
+                ]
+            });
+
+            const transcript = (response.text ?? '').trim();
+
+            if (transcript) {
+                clipboard.writeText(transcript);
+                return { success: true, text: transcript };
+            } else {
+                return { success: false, error: "No speech detected." };
+            }
+        } catch (error) {
+            lastError = error;
+            console.warn(`Gemini API attempt ${attempts} failed:`, sanitizeErrorMessage(error));
+            if (attempts < maxAttempts) {
+                await new Promise(r => setTimeout(r, 400));
+            }
+        }
+    }
+
+    const cleanMsg = sanitizeErrorMessage(lastError);
+    console.error("Transcription error (after retry):", cleanMsg);
+    return { success: false, error: cleanMsg };
 });
 
 function cleanWhisperHallucinations(text) {
