@@ -27,3 +27,10 @@ A super simple, lightweight Windows widget that records voice from the microphon
 
 ## Security Rule
 DO NOT leak, print, or expose the `GEMINI_API_KEY` in any logs, chat messages, or console outputs.
+
+
+## Releases (GitHub Releases — NOT git)
+- Built installers go to **GitHub Releases**, never into git. `dist_build/` and `dist/` are git-ignored build output — do not `git add` them.
+- Only source code lives in the repo (plus `build/icon.*` assets).
+- To publish a release: `npm run build`, then upload `dist_build\VoiceToClipboard-<version>-Setup.exe` (+ `.blockmap` / `latest.yml` for auto-update) to a new GitHub Release.
+- Do NOT create a release unless the user explicitly asks.
