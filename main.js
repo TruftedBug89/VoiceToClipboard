@@ -26,6 +26,7 @@ if (!gotTheLock) {
 }
 
 let mainWindow;
+let settingsWindow = null;
 let tray = null;
 const configPath = path.join(app.getPath('userData'), 'config.json');
 
@@ -103,6 +104,48 @@ function createWindow() {
     });
 }
 
+function createSettingsWindow() {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.show();
+        settingsWindow.focus();
+        return;
+    }
+
+    settingsWindow = new BrowserWindow({
+        width: 360,
+        height: 680,
+        minWidth: 320,
+        minHeight: 480,
+        parent: mainWindow,
+        modal: false,
+        title: 'VoiceToClipboard Settings',
+        backgroundColor: '#0e0f14',
+        autoHideMenuBar: true,
+        resizable: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            backgroundThrottling: false
+        }
+    });
+
+    settingsWindow.loadFile('index.html', { query: { settings: '1' } });
+    settingsWindow.on('closed', () => {
+        settingsWindow = null;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('settings-window-closed');
+        }
+    });
+}
+
+function showSettingsWindow() {
+    createSettingsWindow();
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.show();
+        settingsWindow.focus();
+    }
+}
+
 process.on('uncaughtException', (err) => {
     console.error('MAIN UNCAUGHT:', err);
 });
@@ -135,7 +178,7 @@ function createTray() {
         { 
             label: '⚙️ Settings / API Key', 
             click: () => {
-                if (mainWindow) mainWindow.webContents.send('open-settings');
+                showSettingsWindow();
             } 
         },
         { type: 'separator' },
@@ -284,19 +327,20 @@ let transcriberCache = null;
 let loadedModelId = null;
 
 function unloadLocalModel() {
-    if (transcriberCache) {
-        if (typeof transcriberCache.dispose === 'function') {
-            transcriberCache.dispose();
-        }
-        transcriberCache = null;
-        loadedModelId = null;
+    if (transcriberCache && typeof transcriberCache.dispose === 'function') {
+        transcriberCache.dispose();
     }
+    transcriberCache = null;
+    loadedModelId = null;
 }
 
 async function getTranscriber(modelId, progressCallback) {
     const pipeline = await getPipelineModule();
     if (transcriberCache && loadedModelId === modelId) {
         return transcriberCache;
+    }
+    if (transcriberCache) {
+        unloadLocalModel();
     }
     transcriberCache = await pipeline('automatic-speech-recognition', modelId, {
         progress_callback: progressCallback
@@ -327,11 +371,11 @@ ipcMain.handle('get-stt-config', () => {
     return {
         sttEngine: config.sttEngine || 'gemini',
         localModel: config.localModel || 'Xenova/whisper-base',
-        isDownloaded: config.localModel ? fs.existsSync(path.join(modelsDir, config.localModel)) : false,
+        isDownloaded: isModelDownloaded(config.localModel || 'Xenova/whisper-base'),
         autoStopEnabled: !!config.autoStopEnabled,
         autoStopSeconds: typeof config.autoStopSeconds === 'number' ? config.autoStopSeconds : 3.5,
         silenceThreshold: typeof config.silenceThreshold === 'number' ? config.silenceThreshold : 12,
-        ecoMode: !!config.ecoMode,
+        ecoMode: config.ecoMode !== false,
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
         idleFadeEnabled: !!config.idleFadeEnabled,
         idleOpacity: typeof config.idleOpacity === 'number' ? config.idleOpacity : 0.3
@@ -339,11 +383,12 @@ ipcMain.handle('get-stt-config', () => {
 });
 
 ipcMain.handle('save-stt-config', (event, { sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode, alwaysOnTop, idleFadeEnabled, idleOpacity }) => {
-    const success = saveConfig({ sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode, alwaysOnTop, idleFadeEnabled, idleOpacity });
+    const effectiveEcoMode = ecoMode !== false;
+    const success = saveConfig({ sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode: effectiveEcoMode, alwaysOnTop, idleFadeEnabled, idleOpacity });
     
     if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop);
 
-    if (sttEngine !== 'local' || ecoMode) {
+    if (sttEngine !== 'local' || effectiveEcoMode || loadedModelId !== localModel) {
         unloadLocalModel();
     }
     
@@ -400,8 +445,8 @@ ipcMain.handle('check-model-downloaded', (event, modelId) => {
 ipcMain.handle('download-local-model', async (event, modelId) => {
     try {
         await getTranscriber(modelId, (data) => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('download-progress', data);
+            if (event.sender && !event.sender.isDestroyed()) {
+                event.sender.send('download-progress', data);
             }
         });
         return { success: true };
@@ -423,18 +468,14 @@ ipcMain.handle('remove-api-key', () => {
     return { success };
 });
 
-// Resize window to fit the settings modal while it is open
-const WIDGET_WIDTH = 220;
-const WIDGET_HEIGHT = 130;
-const SETTINGS_WIDTH = 320;
-const SETTINGS_HEIGHT = 580;
+ipcMain.on('show-settings-window', () => {
+    showSettingsWindow();
+});
 
-ipcMain.on('set-settings-open', (event, open) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    const [x, y] = mainWindow.getPosition();
-    const width = open ? SETTINGS_WIDTH : WIDGET_WIDTH;
-    const height = open ? SETTINGS_HEIGHT : WIDGET_HEIGHT;
-    mainWindow.setBounds({ x, y, width, height }, false);
+ipcMain.on('close-settings-window', () => {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.close();
+    }
 });
 
 // Custom window drag — absolute positioning. The window target is derived from
@@ -557,7 +598,7 @@ ipcMain.handle('transcribe-audio-local', async (event, float32Buffer) => {
         const rawText = (output && output.text ? output.text : '').trim();
         const transcript = cleanWhisperHallucinations(rawText);
 
-        if (config.ecoMode) {
+        if (config.ecoMode !== false) {
             unloadLocalModel();
         }
 

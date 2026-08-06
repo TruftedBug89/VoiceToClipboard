@@ -1,5 +1,8 @@
 const { ipcRenderer } = require('electron');
 
+const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
+if (isSettingsWindow) document.body.classList.add('settings-window');
+
 const micBtn = document.getElementById('mic-button');
 const closeBtn = document.getElementById('close-btn');
 const cancelBtn = document.getElementById('cancel-btn');
@@ -65,6 +68,7 @@ const localModelGroup = document.getElementById('local-model-group');
 const localModelSelect = document.getElementById('local-model-select');
 const geminiKeyGroup = document.getElementById('gemini-key-group');
 const modelStatusInfo = document.getElementById('model-status-info');
+const whisperInfoBanner = document.getElementById('whisper-info-banner');
 const downloadModal = document.getElementById('download-modal');
 const downloadPromptText = document.getElementById('download-prompt-text');
 const confirmDownloadBtn = document.getElementById('confirm-download-btn');
@@ -128,6 +132,8 @@ const DRAG_THRESHOLD = 3;
 let pointerDrag = null;
 
 document.addEventListener('pointerdown', (e) => {
+    if (isSettingsWindow) return;
+
     // Exclude interactive form controls from triggering window drag
     if (e.target.closest('input, select, button, .segment-btn, .toggle-switch, .slider, #close-modal-btn, #close-btn, #settings-btn, #cancel-btn, a')) {
         return;
@@ -216,6 +222,8 @@ function refreshMouseIgnore() {
 
     const isSettingsOpen = settingsModal.classList.contains('active');
     const isDownloadOpen = downloadModal.classList.contains('active');
+
+    if (isSettingsWindow) return;
 
     if (isSettingsOpen || isDownloadOpen) {
         topBar.classList.add('visible');
@@ -340,7 +348,7 @@ if (idleOpacitySlider) {
 
 autoStopCheckbox.addEventListener('change', () => {
     autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
-    if (autoStopCheckbox.checked && settingsModal.classList.contains('active')) {
+    if (settingsModal.classList.contains('active') || isSettingsWindow) {
         startSettingsMicPreview();
     } else {
         stopSettingsMicPreview();
@@ -535,16 +543,8 @@ async function checkApiKeyStatus() {
 }
 
 function openSettings() {
-    hideStatus();
-    mouseIgnored = false;
-    document.body.classList.add('settings-active');
-    ipcRenderer.send('set-ignore-mouse', false);
-    ipcRenderer.send('set-settings-open', true);
-    settingsModal.classList.add('active');
-    refreshSettingsUi();
-    if (autoStopCheckbox.checked) {
-        startSettingsMicPreview();
-    }
+    if (isSettingsWindow) return;
+    ipcRenderer.send('show-settings-window');
 }
 
 const hotkeyInput = document.getElementById('hotkey-input');
@@ -623,8 +623,24 @@ async function refreshSettingsUi() {
     await checkModelStatus();
 }
 
+const whisperSupportedLanguages = 'English, Chinese, German, Spanish, Russian, Korean, French, Japanese, Portuguese, Turkish, Polish, Catalan, Dutch, Arabic, Swedish, Italian, Indonesian, Hindi, Finnish, Vietnamese, Hebrew, Ukrainian, Greek, Malay, Czech, Romanian, Danish, Hungarian, Tamil, Norwegian, Thai, Urdu, Croatian, Bulgarian, Lithuanian, Latin, Maori, Malayalam, Welsh, Slovak, Telugu, Persian, Latvian, Bengali, Serbian, Azerbaijani, Slovenian, Kannada, Estonian, Macedonian, Breton, Basque, Icelandic, Armenian, Nepali, Mongolian, Bosnian, Kazakh, Albanian, Swahili, Galician, Marathi, Punjabi, Sinhala, Khmer, Shona, Yoruba, Somali, Afrikaans, Occitan, Georgian, Belarusian, Tajik, Sindhi, Gujarati, Amharic, Yiddish, Lao, Uzbek, Faroese, Haitian Creole, Pashto, Turkmen, Nynorsk, Maltese, Sanskrit, Luxembourgish, Myanmar, Tibetan, Tagalog, Malagasy, Assamese, Tatar, Hawaiian, Lingala, Hausa, Bashkir, Javanese, Sundanese, Cantonese';
+
+const whisperLanguageText = {
+    'Xenova/whisper-tiny': `Whisper Tiny multilingual — 99 supported languages: ${whisperSupportedLanguages}. Accuracy varies by language; the separate tiny.en checkpoint is English-only and is not selected here.`,
+    'Xenova/whisper-base': `Whisper Base multilingual — 99 supported languages: ${whisperSupportedLanguages}. Accuracy varies by language; the separate base.en checkpoint is English-only and is not selected here.`,
+    'Xenova/whisper-small': `Whisper Small multilingual — 99 supported languages: ${whisperSupportedLanguages}. Accuracy varies by language; the separate small.en checkpoint is English-only and is not selected here.`,
+    'Xenova/whisper-medium': `Whisper Medium multilingual — 99 supported languages: ${whisperSupportedLanguages}. Accuracy varies by language; the separate medium.en checkpoint is English-only and is not selected here.`,
+    'Xenova/whisper-large-v3-turbo': `Whisper Large-v3 Turbo multilingual — 99 supported languages: ${whisperSupportedLanguages}. Accuracy varies by language; larger models generally handle lower-resource languages better.`
+};
+
+function updateWhisperLanguageInfo() {
+    const text = whisperLanguageText[localModelSelect.value];
+    if (text) whisperInfoBanner.textContent = text;
+}
+
 async function checkModelStatus() {
     const modelId = localModelSelect.value;
+    updateWhisperLanguageInfo();
     const res = await ipcRenderer.invoke('check-model-downloaded', modelId);
     if (res.downloaded) {
         modelStatusInfo.textContent = '✓ Model weights ready & cached';
@@ -657,9 +673,12 @@ apiKeyInput.addEventListener('change', () => {
 
 function closeSettings() {
     stopSettingsMicPreview();
+    if (isSettingsWindow) {
+        ipcRenderer.send('close-settings-window');
+        return;
+    }
     settingsModal.classList.remove('active');
     document.body.classList.remove('settings-active');
-    ipcRenderer.send('set-settings-open', false);
     refreshMouseIgnore();
 }
 
@@ -811,6 +830,12 @@ cancelBtn.addEventListener('click', cancelRecording);
 closeModalBtn.addEventListener('click', closeSettings);
 closeBtn.addEventListener('click', () => window.close());
 
+if (isSettingsWindow) {
+    settingsModal.classList.add('active');
+    refreshSettingsUi();
+    startSettingsMicPreview();
+}
+
 // Draw circular audio waveform visualizer & check for VAD silence auto-stop
 const smoothValues = new Array(32).fill(0);
 
@@ -891,7 +916,8 @@ function drawVisualizer() {
     canvasCtx.lineCap = 'round';
 
     for (let i = 0; i < bars; i++) {
-        const target = dataArray[i * 2] || 0;
+        const binIndex = Math.min(bufferLength - 1, Math.floor((i * bufferLength) / bars));
+        const target = dataArray[binIndex] || 0;
         smoothValues[i] += (target - smoothValues[i]) * 0.25;
         const val = smoothValues[i];
         const barHeight = (val / 255) * 16;

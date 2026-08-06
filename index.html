@@ -539,6 +539,39 @@
             transform: scale(1) translateY(0);
         }
 
+        body.settings-window {
+            background: #0e0f14;
+            align-items: stretch;
+            overflow: hidden;
+        }
+
+        body.settings-window #mic-container,
+        body.settings-window #status-badge,
+        body.settings-window #top-bar {
+            display: none;
+        }
+
+        body.settings-window #settings-modal {
+            position: fixed;
+            inset: 0;
+            border-radius: 0;
+            opacity: 1;
+            pointer-events: auto;
+            transform: none;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        body.settings-window #settings-modal .modal-header {
+            position: sticky;
+            top: -16px;
+            z-index: 10;
+            margin: -16px -16px 14px;
+            padding: 16px;
+            background: rgba(14, 15, 20, 0.98);
+            backdrop-filter: blur(18px);
+        }
+
         /* Custom Sleek Scrollbar */
         #settings-modal::-webkit-scrollbar {
             width: 4px;
@@ -1038,28 +1071,28 @@
         <div class="input-group" id="local-model-group" style="display: none;">
             <label for="local-model-select">Local Model</label>
             <select id="local-model-select">
-                <option value="Xenova/whisper-tiny">Whisper Tiny (~39 MB)</option>
-                <option value="Xenova/whisper-base">Whisper Base (~74 MB - Rec.)</option>
-                <option value="Xenova/whisper-small">Whisper Small (~240 MB)</option>
-                <option value="Xenova/whisper-medium">Whisper Medium (~760 MB)</option>
-                <option value="Xenova/whisper-large-v3-turbo">Whisper Large v3 Turbo (~800 MB)</option>
+                <option value="Xenova/whisper-tiny">Whisper Tiny (~39 MB download · ~250 MB RAM)</option>
+                <option value="Xenova/whisper-base">Whisper Base (~74 MB download · ~500 MB RAM · Rec.)</option>
+                <option value="Xenova/whisper-small">Whisper Small (~240 MB download · ~1 GB RAM)</option>
+                <option value="Xenova/whisper-medium">Whisper Medium (~760 MB download · ~2.5 GB RAM)</option>
+                <option value="Xenova/whisper-large-v3-turbo">Whisper Large v3 Turbo (~800 MB download · ~3 GB RAM)</option>
             </select>
             <div id="model-status-info" class="status-pill ready">✓ Weights ready</div>
             <div id="whisper-info-banner">
-                ⏱️ <strong>Seamless 30s Chunking</strong>: Local Whisper processes audio in overlapping 30s windows so long recordings are never cut off.
+                Language support depends on the selected multilingual Whisper model. Accuracy varies significantly by language.
             </div>
         </div>
 
-        <!-- Low Memory Mode Toggle Switch -->
+        <!-- Local AI Memory Mode Toggle -->
         <div class="input-group" id="eco-mode-group" style="display: none;">
             <div class="switch-row">
-                <label class="switch-label" for="eco-mode-checkbox">Low Memory Mode</label>
+                <label class="switch-label" for="eco-mode-checkbox">Power-Saving Mode</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="eco-mode-checkbox" />
+                    <input type="checkbox" id="eco-mode-checkbox" checked />
                     <span class="slider"></span>
                 </label>
             </div>
-            <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">Unloads the AI model from RAM after every use to save memory. Note: Recording will take a moment longer to start next time.</div>
+            <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On: unloads the model after each use to save RAM. Off: keeps the model loaded for the lowest transcription latency.</div>
         </div>
 
         <!-- Gemini API Key Input -->
@@ -1091,28 +1124,31 @@
                     </select>
                     <span style="font-size: 11px; color: var(--text-dim);">silence</span>
                 </div>
+            </div>
+        </div>
 
-                <!-- Live Silence Threshold Limiter -->
-                <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px; margin-top: 2px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
-                        <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="range" id="silence-threshold-slider" min="3" max="50" value="12" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                        <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Measure room noise and set threshold automatically">⚡ Auto-Calibrate</button>
-                    </div>
+        <!-- Live Silence Threshold Limiter -->
+        <div class="input-group">
+            <label>Live Mic Threshold</label>
+            <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
+                    <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="silence-threshold-slider" min="3" max="50" value="12" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
+                    <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Measure room noise and set threshold automatically">⚡ Auto-Calibrate</button>
+                </div>
 
-                    <!-- Live Mic Volume Level Meter -->
-                    <div style="margin-top: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
-                            <span>Live Mic Level</span>
-                            <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
-                        </div>
-                        <div style="position: relative; width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
-                            <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
-                            <div id="noise-threshold-marker" style="position: absolute; top: 0; bottom: 0; left: 24%; width: 2px; background: #ffffff; box-shadow: 0 0 4px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
-                        </div>
+                <!-- Live Mic Volume Level Meter -->
+                <div style="margin-top: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
+                        <span>Live Mic Level</span>
+                        <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
+                    </div>
+                    <div style="position: relative; width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
+                        <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
+                        <div id="noise-threshold-marker" style="position: absolute; top: 0; bottom: 0; left: 24%; width: 2px; background: #ffffff; box-shadow: 0 0 4px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
                     </div>
                 </div>
             </div>
