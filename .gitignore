@@ -6,6 +6,7 @@ node_modules/
 # ─── Build output (electron-builder) ───────────────────────────
 dist/
 dist_build/
+dist_build_*/
 out/
 release/
 *.exe

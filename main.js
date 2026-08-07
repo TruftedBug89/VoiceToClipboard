@@ -3,6 +3,9 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
+const { SttService } = require('./stt');
+const { migrateConfig, validateSttConfig } = require('./stt/config');
+const { getModelKey } = require('./stt/model-registry');
 
 const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
 
@@ -10,6 +13,9 @@ app.disableHardwareAcceleration();
 // Windows App User Model ID — required before windows are created so the
 // taskbar groups the app correctly and pinning the icon works properly.
 app.setAppUserModelId('com.voicetoclipboard.app');
+
+const canonicalUserDataPath = path.join(app.getPath('appData'), 'VoiceToClipboard');
+app.setPath('userData', canonicalUserDataPath);
 
 // Ensure single instance
 const gotTheLock = app.requestSingleInstanceLock();
@@ -28,29 +34,95 @@ if (!gotTheLock) {
 let mainWindow;
 let settingsWindow = null;
 let tray = null;
-const configPath = path.join(app.getPath('userData'), 'config.json');
+const configPath = path.join(canonicalUserDataPath, 'config.json');
+const modelsDir = path.join(canonicalUserDataPath, 'models');
+const legacyUserDataPaths = [
+    path.join(app.getPath('appData'), 'voicetoclipboard')
+];
+
+async function migrateLegacyUserData() {
+    await fs.promises.mkdir(canonicalUserDataPath, { recursive: true });
+    for (const legacyPath of legacyUserDataPaths) {
+        if (path.resolve(legacyPath) === path.resolve(canonicalUserDataPath) || !fs.existsSync(legacyPath)) continue;
+
+        const legacyConfigPath = path.join(legacyPath, 'config.json');
+        if (!fs.existsSync(configPath) && fs.existsSync(legacyConfigPath)) {
+            await fs.promises.copyFile(legacyConfigPath, configPath);
+        }
+
+        const legacyModelsPath = path.join(legacyPath, 'models');
+        if (!fs.existsSync(legacyModelsPath)) continue;
+        await fs.promises.mkdir(modelsDir, { recursive: true });
+        const entries = await fs.promises.readdir(legacyModelsPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isDirectory() || !/^[a-z0-9-]+$/.test(entry.name)) continue;
+            const source = path.join(legacyModelsPath, entry.name);
+            const target = path.join(modelsDir, entry.name);
+            if (!fs.existsSync(target)) await fs.promises.cp(source, target, { recursive: true, errorOnExist: true });
+        }
+    }
+}
 
 // Helper to load config
 function loadConfig() {
     try {
         if (fs.existsSync(configPath)) {
-            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            return migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
         }
     } catch (e) {
-        console.error("Failed to load config:", e);
+        console.error("Failed to load config:", e.message || e);
     }
-    return {};
+    return migrateConfig({});
 }
 
-// Helper to save config
 function saveConfig(data) {
     try {
-        const config = { ...loadConfig(), ...data };
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        const config = migrateConfig({ ...loadConfig(), ...data });
+        const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+        fs.writeFileSync(tempPath, JSON.stringify(config, null, 2), 'utf8');
+        fs.renameSync(tempPath, configPath);
         return true;
     } catch (e) {
-        console.error("Failed to save config:", e);
+        console.error("Failed to save config:", e.message || e);
         return false;
+    }
+}
+
+async function getSettingsSnapshot() {
+    const config = loadConfig();
+    const localModelKey = getModelKey(config.localTier, config.localLanguage);
+    const modelStatus = await sttService.getStatus(localModelKey);
+    return {
+        sttEngine: config.sttEngine,
+        localTier: config.localTier,
+        localLanguage: config.localLanguage,
+        localModelKey,
+        localModel: localModelKey,
+        isDownloaded: modelStatus.installed,
+        modelAvailable: modelStatus.available,
+        modelUnavailableReason: modelStatus.reason,
+        modelCachePath: modelsDir,
+        autoStopEnabled: !!config.autoStopEnabled,
+        autoStopSeconds: typeof config.autoStopSeconds === 'number' ? Math.max(1.5, Math.min(5, config.autoStopSeconds)) : 3.5,
+        silenceThreshold: typeof config.silenceThreshold === 'number' ? Math.max(2, Math.min(100, config.silenceThreshold)) : 12,
+        ecoMode: config.ecoMode !== false,
+        alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
+        idleFadeEnabled: config.idleFadeEnabled !== false,
+        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
+        geminiModel: config.geminiModel || 'gemini-2.5-flash'
+    };
+}
+
+async function broadcastSettingsChanged() {
+    const snapshot = await getSettingsSnapshot();
+    for (const window of [mainWindow, settingsWindow]) {
+        if (window && !window.isDestroyed()) window.webContents.send('settings-changed', snapshot);
+    }
+}
+
+function broadcastModelsChanged() {
+    for (const window of [mainWindow, settingsWindow]) {
+        if (window && !window.isDestroyed()) window.webContents.send('models-changed');
     }
 }
 
@@ -66,8 +138,8 @@ function createWindow() {
     const config = loadConfig();
 
     mainWindow = new BrowserWindow({
-        width: 220,
-        height: 130,
+        width: 232,
+        height: 200,
         x: config.windowX,
         y: config.windowY,
         transparent: true,
@@ -112,13 +184,14 @@ function createSettingsWindow() {
     }
 
     settingsWindow = new BrowserWindow({
-        width: 360,
-        height: 680,
-        minWidth: 320,
-        minHeight: 480,
+        width: 400,
+        height: 700,
+        minWidth: 360,
+        minHeight: 520,
         parent: mainWindow,
         modal: false,
         title: 'VoiceToClipboard Settings',
+        frame: false,
         backgroundColor: '#0e0f14',
         autoHideMenuBar: true,
         resizable: true,
@@ -156,6 +229,38 @@ function sanitizeErrorMessage(err) {
     return msg.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
 }
 
+function trayMenuForState(alwaysOnTop) {
+    return Menu.buildFromTemplate([
+        {
+            label: '🎙️ Toggle Recording (Ctrl+Alt+V)',
+            click: () => {
+                if (mainWindow) mainWindow.webContents.send('toggle-recording');
+            }
+        },
+        {
+            label: '⚙️ Settings / API Key',
+            click: () => showSettingsWindow()
+        },
+        { type: 'separator' },
+        {
+            label: '📌 Always on Top',
+            type: 'checkbox',
+            checked: alwaysOnTop,
+            click: item => {
+                saveConfig({ alwaysOnTop: item.checked });
+                if (mainWindow) mainWindow.setAlwaysOnTop(item.checked);
+                if (tray) tray.setContextMenu(trayMenuForState(item.checked));
+                broadcastSettingsChanged();
+            }
+        },
+        { type: 'separator' },
+        {
+            label: '❌ Quit',
+            click: () => app.quit()
+        }
+    ]);
+}
+
 function createTray() {
     const iconPath = path.join(__dirname, 'build', 'icon.ico');
     let icon;
@@ -168,42 +273,7 @@ function createTray() {
     tray = new Tray(icon);
     tray.setToolTip('VoiceToClipboard (Ctrl+Alt+V)');
 
-    const contextMenu = Menu.buildFromTemplate([
-        { 
-            label: '🎙️ Toggle Recording (Ctrl+Alt+V)', 
-            click: () => {
-                if (mainWindow) mainWindow.webContents.send('toggle-recording');
-            } 
-        },
-        { 
-            label: '⚙️ Settings / API Key', 
-            click: () => {
-                showSettingsWindow();
-            } 
-        },
-        { type: 'separator' },
-        { 
-            label: '📌 Always on Top', 
-            type: 'checkbox', 
-            checked: typeof loadConfig().alwaysOnTop === 'boolean' ? loadConfig().alwaysOnTop : true, 
-            click: (item) => {
-                const cfg = loadConfig();
-                cfg.alwaysOnTop = item.checked;
-                saveConfig({ alwaysOnTop: item.checked });
-                if (mainWindow) mainWindow.setAlwaysOnTop(item.checked);
-                if (mainWindow) mainWindow.webContents.send('sync-settings');
-            } 
-        },
-        { type: 'separator' },
-        { 
-            label: '❌ Quit', 
-            click: () => {
-                app.quit();
-            } 
-        }
-    ]);
-
-    tray.setContextMenu(contextMenu);
+    tray.setContextMenu(trayMenuForState(loadConfig().alwaysOnTop !== false));
 
     const toggleWindow = () => {
         if (mainWindow) {
@@ -280,7 +350,92 @@ uIOhook.on('mousedown', (e) => {
 
 uIOhook.start();
 
-app.whenReady().then(() => {
+// ---- Temp-file & trash hygiene ----
+// Runs at every startup so nothing in userData can grow without bound:
+// stale model caches, leftover download archives, crashpad dumps, oversized
+// Electron caches, and old log files are removed.
+const MAX_CACHE_BYTES = 200 * 1024 * 1024;
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
+const JUNK_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function directorySize(dirPath) {
+    let total = 0;
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+        const full = path.join(dirPath, entry.name);
+        try {
+            if (entry.isDirectory()) total += await directorySize(full);
+            else total += (await fs.promises.stat(full)).size;
+        } catch (error) {}
+    }
+    return total;
+}
+
+async function removeOldFiles(dirPath, { olderThanMs = 0, deleteEmptyDirs = false } = {}) {
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+    const now = Date.now();
+    for (const entry of entries) {
+        const full = path.join(dirPath, entry.name);
+        try {
+            if (entry.isDirectory()) {
+                await removeOldFiles(full, { olderThanMs, deleteEmptyDirs });
+                if (deleteEmptyDirs && (await fs.promises.readdir(full).catch(() => [null])).length === 0) {
+                    await fs.promises.rmdir(full).catch(() => {});
+                }
+            } else if (olderThanMs <= 0 || now - (await fs.promises.stat(full)).mtimeMs > olderThanMs) {
+                await fs.promises.rm(full, { force: true }).catch(() => {});
+            }
+        } catch (error) {}
+    }
+}
+
+async function cleanupJunk() {
+    // 1. Model cache: entries no longer in the registry (old per-language models).
+    await sttService.cleanupStale();
+
+    // 2. Stray download archives / partial files in the model cache folder.
+    const modelEntries = await fs.promises.readdir(modelsDir).catch(() => []);
+    for (const name of modelEntries) {
+        if (/\.(tar\.bz2|zip|part|tmp|download|aria2)$/i.test(name)) {
+            await fs.promises.rm(path.join(modelsDir, name), { recursive: true, force: true }).catch(() => {});
+        }
+    }
+
+    // 3. Crashpad crash dumps older than a week.
+    await removeOldFiles(path.join(canonicalUserDataPath, 'Crashpad'), { olderThanMs: JUNK_AGE_MS, deleteEmptyDirs: true });
+
+    // 4. Electron throwaway caches (recreate on demand) — cap at 200 MB each.
+    for (const cacheName of ['Cache', 'Code Cache', 'GPUCache', 'D3DSCache', 'ShaderCache', 'blob_storage']) {
+        const cacheDir = path.join(canonicalUserDataPath, cacheName);
+        if (!fs.existsSync(cacheDir)) continue;
+        try {
+            const size = await directorySize(cacheDir);
+            if (size > MAX_CACHE_BYTES) {
+                await fs.promises.rm(cacheDir, { recursive: true, force: true });
+            }
+        } catch (error) {}
+    }
+
+    // 5. Log files: drop anything older than a week or larger than 5 MB.
+    const logEntries = await fs.promises.readdir(canonicalUserDataPath).catch(() => []);
+    for (const name of logEntries) {
+        if (!/\.(log|txt)$/i.test(name)) continue;
+        const full = path.join(canonicalUserDataPath, name);
+        try {
+            const stat = await fs.promises.stat(full);
+            if (stat.isFile() && (Date.now() - stat.mtimeMs > JUNK_AGE_MS || stat.size > MAX_LOG_BYTES)) {
+                await fs.promises.rm(full, { force: true });
+            }
+        } catch (error) {}
+    }
+}
+
+app.whenReady().then(async () => {
+    await migrateLegacyUserData();
+    await sttService.prepare();
+    await cleanupJunk();
+    // Persist any config migration (e.g. per-language -> multilingual) now.
+    saveConfig({});
     createWindow();
     createTray();
 
@@ -296,6 +451,9 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
     uIOhook.stop();
+    // Do NOT unload native STT models here: vosk-koffi/sherpa-onnx native calls
+    // racing with Electron teardown caused koffi.node fail-fast crashes (0xc0000409)
+    // on exit. The OS reclaims model memory when the process ends.
 });
 
 app.on('window-all-closed', () => {
@@ -304,57 +462,45 @@ app.on('window-all-closed', () => {
     }
 });
 
-// Local Transformers.js / Whisper setup
-let pipelineFn = null;
-const modelsDir = path.join(app.getPath('userData'), 'models');
-if (!fs.existsSync(modelsDir)) {
-    try { fs.mkdirSync(modelsDir, { recursive: true }); } catch (e) {}
-}
+const sttService = new SttService({
+    modelsDir,
+    copyText: text => clipboard.writeText(text),
+    geminiTranscriber: async ({ arrayBuffer, mimeType = 'audio/webm' }) => {
+        const apiKey = getApiKey();
+        if (!apiKey) return { success: false, code: 'NO_API_KEY', error: 'GEMINI_API_KEY is not configured.' };
 
-async function getPipelineModule() {
-    if (!pipelineFn) {
-        const { pipeline, env } = require('@xenova/transformers');
-        env.cacheDir = modelsDir;
-        if (env.backends && env.backends.onnx && env.backends.onnx.wasm) {
-            env.backends.onnx.wasm.numThreads = 1;
+        const ai = new GoogleGenAI({ apiKey });
+        const buffer = Buffer.from(arrayBuffer);
+        let attempts = 0;
+        const maxAttempts = 2;
+        let lastError = null;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+            try {
+                const response = await ai.models.generateContent({
+                    model: loadConfig().geminiModel || 'gemini-2.5-flash',
+                    contents: [
+                        { inlineData: { data: buffer.toString('base64'), mimeType } },
+                        'Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language.'
+                    ]
+                });
+                const transcript = (response.text ?? '').trim();
+                if (transcript) {
+                    clipboard.writeText(transcript);
+                    return { success: true, text: transcript };
+                }
+                return { success: false, code: 'NO_SPEECH', error: 'No speech detected.' };
+            } catch (error) {
+                lastError = error;
+                console.warn(`Gemini API attempt ${attempts} failed:`, sanitizeErrorMessage(error));
+                if (attempts < maxAttempts) await new Promise(resolve => setTimeout(resolve, 400));
+            }
         }
-        pipelineFn = pipeline;
-    }
-    return pipelineFn;
-}
 
-let transcriberCache = null;
-let loadedModelId = null;
-
-function unloadLocalModel() {
-    if (transcriberCache && typeof transcriberCache.dispose === 'function') {
-        transcriberCache.dispose();
+        return { success: false, code: 'NETWORK_ERROR', error: sanitizeErrorMessage(lastError) };
     }
-    transcriberCache = null;
-    loadedModelId = null;
-}
-
-async function getTranscriber(modelId, progressCallback) {
-    const pipeline = await getPipelineModule();
-    if (transcriberCache && loadedModelId === modelId) {
-        return transcriberCache;
-    }
-    if (transcriberCache) {
-        unloadLocalModel();
-    }
-    transcriberCache = await pipeline('automatic-speech-recognition', modelId, {
-        progress_callback: progressCallback
-    });
-    loadedModelId = modelId;
-    return transcriberCache;
-}
-
-function isModelDownloaded(modelId) {
-    const sanitizeName = modelId.replace('/', '--');
-    const folder1 = path.join(modelsDir, `models--${sanitizeName}`);
-    const folder2 = path.join(modelsDir, modelId);
-    return fs.existsSync(folder1) || fs.existsSync(folder2);
-}
+});
 
 // IPC Handlers
 ipcMain.handle('get-api-key-status', () => {
@@ -366,42 +512,36 @@ ipcMain.handle('get-api-key-status', () => {
     };
 });
 
-ipcMain.handle('get-stt-config', () => {
-    const config = loadConfig();
-    return {
-        sttEngine: config.sttEngine || 'gemini',
-        localModel: config.localModel || 'Xenova/whisper-base',
-        isDownloaded: isModelDownloaded(config.localModel || 'Xenova/whisper-base'),
-        autoStopEnabled: !!config.autoStopEnabled,
-        autoStopSeconds: typeof config.autoStopSeconds === 'number' ? config.autoStopSeconds : 3.5,
-        silenceThreshold: typeof config.silenceThreshold === 'number' ? config.silenceThreshold : 12,
-        ecoMode: config.ecoMode !== false,
-        alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
-        idleFadeEnabled: !!config.idleFadeEnabled,
-        idleOpacity: typeof config.idleOpacity === 'number' ? config.idleOpacity : 0.6
-    };
-});
+ipcMain.handle('get-stt-config', () => getSettingsSnapshot());
 
-ipcMain.handle('save-stt-config', (event, { sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode, alwaysOnTop, idleFadeEnabled, idleOpacity }) => {
-    const effectiveEcoMode = ecoMode !== false;
-    const success = saveConfig({ sttEngine, localModel, autoStopEnabled, autoStopSeconds, silenceThreshold, ecoMode: effectiveEcoMode, alwaysOnTop, idleFadeEnabled, idleOpacity });
-    
+ipcMain.handle('get-model-catalog', () => sttService.getCatalog());
+
+ipcMain.handle('save-stt-config', async (event, settings = {}) => {
+    const existing = loadConfig();
+    const stt = validateSttConfig(settings);
+    const effectiveEcoMode = settings.ecoMode !== undefined ? settings.ecoMode !== false : existing.ecoMode !== false;
+    const autoStopSeconds = Math.max(1.5, Math.min(5, Number(settings.autoStopSeconds ?? existing.autoStopSeconds) || 3.5));
+    const silenceThreshold = Math.max(2, Math.min(100, Number(settings.silenceThreshold ?? existing.silenceThreshold) || 12));
+    const idleOpacity = Math.max(0.1, Math.min(0.9, Number(settings.idleOpacity ?? existing.idleOpacity) || 0.6));
+    const alwaysOnTop = settings.alwaysOnTop !== undefined ? settings.alwaysOnTop !== false : existing.alwaysOnTop !== false;
+    const success = saveConfig({
+        ...stt,
+        autoStopEnabled: settings.autoStopEnabled !== undefined ? !!settings.autoStopEnabled : !!existing.autoStopEnabled,
+        autoStopSeconds,
+        silenceThreshold,
+        ecoMode: effectiveEcoMode,
+        alwaysOnTop,
+        idleFadeEnabled: settings.idleFadeEnabled !== undefined ? settings.idleFadeEnabled !== false : existing.idleFadeEnabled !== false,
+        idleOpacity,
+        geminiModel: settings.geminiModel || existing.geminiModel || 'gemini-2.5-flash'
+    });
+
+    if (!success) return { success: false };
     if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop);
-
-    if (sttEngine !== 'local' || effectiveEcoMode || loadedModelId !== localModel) {
-        unloadLocalModel();
-    }
-    
-    // Update tray checkbox
-    if (tray) {
-        const menu = tray.ContextMenu || Menu.buildFromTemplate([ ...tray.getContextMenu().items.map(i => {
-            if (i.label === '📌 Always on Top') i.checked = alwaysOnTop;
-            return i;
-        }) ]);
-        tray.setContextMenu(menu);
-    }
-
-    return { success };
+    if (stt.sttEngine !== 'local' || effectiveEcoMode) await sttService.unloadAll();
+    if (tray) tray.setContextMenu(trayMenuForState(alwaysOnTop));
+    await broadcastSettingsChanged();
+    return { success: true };
 });
 
 function formatHotkey(hk) {
@@ -438,33 +578,34 @@ ipcMain.handle('start-recording-hotkey', async () => {
     });
 });
 
-ipcMain.handle('check-model-downloaded', (event, modelId) => {
-    return { downloaded: isModelDownloaded(modelId) };
+ipcMain.handle('check-model-downloaded', async (event, modelKey) => {
+    const status = await sttService.getStatus(modelKey);
+    return { downloaded: status.installed, available: status.available, reason: status.reason, cachePath: status.cachePath };
 });
 
-ipcMain.handle('download-local-model', async (event, modelId) => {
-    try {
-        await getTranscriber(modelId, (data) => {
-            if (event.sender && !event.sender.isDestroyed()) {
-                event.sender.send('download-progress', data);
-            }
-        });
-        return { success: true };
-    } catch (err) {
-        console.error("Model download error:", err);
-        return { success: false, error: err.message };
-    }
+ipcMain.handle('download-local-model', async (event, modelKey) => {
+    const result = await sttService.download(modelKey, data => {
+        if (event.sender && !event.sender.isDestroyed()) event.sender.send('download-progress', data);
+    });
+    if (result.success) broadcastModelsChanged();
+    return result;
 });
 
+ipcMain.handle('remove-local-model', async (event, modelKey) => {
+    const result = await sttService.remove(modelKey);
+    broadcastModelsChanged();
+    return result;
+});
 
-
-ipcMain.handle('save-api-key', (event, newKey) => {
+ipcMain.handle('save-api-key', async (event, newKey) => {
     const success = saveConfig({ apiKey: newKey.trim() });
+    if (success) await broadcastSettingsChanged();
     return { success };
 });
 
-ipcMain.handle('remove-api-key', () => {
+ipcMain.handle('remove-api-key', async () => {
     const success = saveConfig({ apiKey: '' });
+    if (success) await broadcastSettingsChanged();
     return { success };
 });
 
@@ -519,114 +660,42 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
     mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
 
-ipcMain.handle('transcribe-audio', async (event, arrayBuffer) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-        return { success: false, error: "GEMINI_API_KEY is not configured." };
+// Reliable hover detection. With click-through + forward:true the renderer's
+// mouseleave is unreliable, which leaves the top pill visible and blocks the
+// idle transparency. Poll the OS cursor against the widget bounds instead.
+let lastWidgetHoverState = null;
+setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const [wx, wy] = mainWindow.getPosition();
+    const [ww, wh] = mainWindow.getSize();
+    const inside = cursor.x >= wx && cursor.x <= wx + ww && cursor.y >= wy && cursor.y <= wy + wh;
+    // Send every tick while inside so the renderer always knows the real cursor
+    // position (forwarded mouse events are unreliable under click-through) and
+    // can wake the pill immediately on hover.
+    if (inside !== lastWidgetHoverState || inside) {
+        lastWidgetHoverState = inside;
+        mainWindow.webContents.send('widget-hover', inside
+            ? { inside: true, x: cursor.x - wx, y: cursor.y - wy }
+            : { inside: false });
     }
+}, 200);
 
-    const ai = new GoogleGenAI({ apiKey });
-    const buffer = Buffer.from(arrayBuffer);
-
-    let attempts = 0;
-    const maxAttempts = 2;
-    let lastError = null;
-
-    while (attempts < maxAttempts) {
-        attempts++;
-        try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: [
-                    {
-                        inlineData: {
-                            data: buffer.toString("base64"),
-                            mimeType: "audio/webm"
-                        }
-                    },
-                    "Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language."
-                ]
-            });
-
-            const transcript = (response.text ?? '').trim();
-
-            if (transcript) {
-                clipboard.writeText(transcript);
-                return { success: true, text: transcript };
-            } else {
-                return { success: false, error: "No speech detected." };
-            }
-        } catch (error) {
-            lastError = error;
-            console.warn(`Gemini API attempt ${attempts} failed:`, sanitizeErrorMessage(error));
-            if (attempts < maxAttempts) {
-                await new Promise(r => setTimeout(r, 400));
-            }
-        }
-    }
-
-    const cleanMsg = sanitizeErrorMessage(lastError);
-    console.error("Transcription error (after retry):", cleanMsg);
-    return { success: false, error: cleanMsg };
-});
-
-function cleanWhisperHallucinations(text) {
-    if (!text) return '';
-    let cleaned = text;
-    // Remove repeated single words (3 or more consecutive repetitions, e.g. "The The The The")
-    cleaned = cleaned.replace(/(\b\w+\b)(?:\s+\1){2,}/gi, '$1');
-    // Remove repeated 2-word phrases (2 or more consecutive repetitions)
-    cleaned = cleaned.replace(/(\b\w+\s+\w+\b)(?:\s+\1){2,}/gi, '$1');
-    // Remove repeated 3-word phrases
-    cleaned = cleaned.replace(/(\b\w+\s+\w+\s+\w+\b)(?:\s+\1){2,}/gi, '$1');
-    return cleaned.trim();
-}
-
-ipcMain.handle('transcribe-audio-local', async (event, float32Buffer) => {
-    try {
-        const config = loadConfig();
-        const modelId = config.localModel || 'Xenova/whisper-base';
-
-        if (!isModelDownloaded(modelId)) {
-            return { success: false, error: "Model weights not downloaded yet." };
-        }
-
-        const transcriber = await getTranscriber(modelId);
-        const float32Array = new Float32Array(
-            float32Buffer.buffer,
-            float32Buffer.byteOffset,
-            float32Buffer.byteLength / 4
-        );
-
-        const output = await transcriber(float32Array, {
-            task: 'transcribe',
-            return_timestamps: false,
-            chunk_length_s: 30,
-            stride_length_s: 5,
-            repetition_penalty: 1.2,
-            no_repeat_ngram_size: 3,
-            condition_on_previous_text: false
+ipcMain.handle('transcribe-audio', async (event, request) => {
+    const config = loadConfig();
+    if (request?.engine === 'local') {
+        return sttService.transcribe({
+            engine: 'local',
+            modelKey: request.modelKey || config.localModelKey,
+            pcm: request.pcm,
+            sampleRate: request.sampleRate || 16000,
+            ecoMode: config.ecoMode !== false
         });
-
-        const rawText = (output && output.text ? output.text : '').trim();
-        const transcript = cleanWhisperHallucinations(rawText);
-
-        if (config.ecoMode !== false) {
-            unloadLocalModel();
-        }
-
-        if (transcript) {
-            clipboard.writeText(transcript);
-            return { success: true, text: transcript };
-        } else {
-            return { success: false, error: "No speech detected." };
-        }
-    } catch (error) {
-        console.error("Local Whisper transcription error:", error);
-        if (loadConfig().ecoMode) {
-            unloadLocalModel();
-        }
-        return { success: false, error: error.message };
     }
+    return sttService.transcribe({
+        engine: 'gemini',
+        arrayBuffer: request?.arrayBuffer || request,
+        mimeType: request?.mimeType || 'audio/webm'
+    });
 });
 

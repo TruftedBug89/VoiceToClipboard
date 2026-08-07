@@ -34,15 +34,23 @@
             user-select: none;
         }
 
-        /* Top control bar (Settings, Cancel, Close buttons) */
+        /* Top control bar (Settings, Cancel, Close buttons) — glass pill */
         #top-bar {
             position: absolute;
-            top: 8px;
+            top: 10px;
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 6px;
+            background: rgba(14, 14, 18, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
             opacity: 0;
-            transform: translateY(-6px) scale(0.9);
-            transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(-8px) scale(0.88);
+            transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 100;
             pointer-events: none;
         }
@@ -63,7 +71,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: 13px;
             cursor: pointer;
             border: 1px solid var(--border-glass);
             color: var(--text-main);
@@ -78,58 +86,54 @@
             border-color: rgba(255, 255, 255, 0.35);
         }
 
-        /* Settings and Close buttons are hidden unless hovering top-bar or settings active */
-        .icon-btn.hover-only {
-            opacity: 0;
-            pointer-events: none;
-            transform: scale(0.85);
-            transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        #top-bar.hover-active .icon-btn.hover-only,
-        body.settings-active .icon-btn.hover-only {
-            opacity: 1;
-            pointer-events: auto;
-            transform: scale(1);
-        }
-
-        /* Stop / Cancel button appears between Settings and Close ONLY during recording */
+        /* Stop / Cancel button — smooth fade during recording */
         #cancel-btn {
             display: none;
-            background: rgba(230, 57, 70, 0.25);
-            border-color: rgba(230, 57, 70, 0.55);
+            background: rgba(230, 57, 70, 0.22);
+            border-color: rgba(230, 57, 70, 0.45);
             font-size: 13px;
+            color: rgba(255, 120, 130, 0.95);
+            transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.2s ease, box-shadow 0.2s ease;
         }
 
         #cancel-btn:hover {
-            background: #e63946;
+            background: rgba(230, 57, 70, 0.5);
             color: #ffffff;
-            border-color: #ff4d4d;
-            box-shadow: 0 0 14px rgba(230, 57, 70, 0.7);
-            transform: scale(1.15);
+            border-color: rgba(230, 57, 70, 0.7);
+            box-shadow: 0 0 10px rgba(230, 57, 70, 0.4);
+            transform: scale(1.08);
         }
 
         body.is-recording #cancel-btn {
             display: flex;
-            animation: cancel-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            opacity: 0;
+            transform: scale(0.85);
+            animation: cancel-fade-in 0.4s ease forwards;
+            animation-delay: 0.1s;
         }
 
-        @keyframes cancel-pop {
-            0% { transform: scale(0.4); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
+        @keyframes cancel-fade-in {
+            0% { opacity: 0; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1); }
         }
 
         /* Mic Button Wrapper with Visualizer Canvas */
         #mic-container {
             position: relative;
-            margin-top: 20px;
+            margin-top: 54px;
             display: flex;
             align-items: center;
             justify-content: center;
             width: 90px;
             height: 90px;
             cursor: grab;
+            animation: widget-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
             transition: opacity 0.35s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes widget-in {
+            0%   { transform: scale(0.82); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         body.idle-fade-active:not(.is-hovering):not(.settings-active):not(.is-recording) #mic-container {
@@ -447,7 +451,7 @@
         /* Minimal status indicator */
         #status-badge {
             position: absolute;
-            top: 100px;
+            top: 150px;
             left: 50%;
             transform: translateX(-50%) translateY(-4px) scale(0.9);
             display: flex;
@@ -509,6 +513,41 @@
         }
 
         /* ===== Redesigned Glassmorphic Settings Modal ===== */
+        #retry-btn {
+            position: absolute;
+            top: 168px;
+            left: 50%;
+            transform: translateX(-50%) translateY(6px) scale(0.9);
+            display: none;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 13px;
+            font-family: inherit;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: rgba(255, 160, 170, 0.95);
+            background: rgba(230, 57, 70, 0.22);
+            border: 1px solid rgba(230, 57, 70, 0.45);
+            border-radius: 999px;
+            cursor: pointer;
+            z-index: 90;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        }
+        body.has-retry #retry-btn {
+            display: flex;
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0) scale(1);
+        }
+        #retry-btn:hover {
+            background: rgba(230, 57, 70, 0.38);
+            border-color: rgba(230, 57, 70, 0.7);
+        }
+
         #settings-modal {
             position: absolute;
             inset: 8px;
@@ -566,9 +605,33 @@
             top: -16px;
             z-index: 10;
             margin: -16px -16px 14px;
-            padding: 16px;
+            padding: 14px 16px;
             background: rgba(14, 15, 20, 0.98);
             backdrop-filter: blur(18px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: default;
+            -webkit-app-region: drag;
+        }
+
+        /* Interactive elements inside the drag region must opt out */
+        body.settings-window #settings-modal .modal-header .icon-btn,
+        body.settings-window #settings-modal .modal-header button,
+        body.settings-window #settings-modal .modal-header input,
+        body.settings-window #settings-modal .modal-header select {
+            -webkit-app-region: no-drag;
+        }
+
+        /* Window control (close) in the frameless settings window */
+        .window-ctl {
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
+            font-size: 12px;
+        }
+        .window-ctl:hover {
+            background: rgba(230, 57, 70, 0.25);
+            transform: none;
+            border-color: rgba(230, 57, 70, 0.5);
         }
 
 
@@ -766,15 +829,12 @@
             box-shadow: 0 0 8px rgba(245, 158, 11, 0.15);
         }
 
-        #whisper-info-banner {
-            font-size: 10px;
+        #model-cache-path {
+            display: block;
+            margin-top: 5px;
             color: var(--text-dim);
-            margin-top: 6px;
-            padding: 7px 9px;
-            background: rgba(255, 255, 255, 0.04);
-            border-radius: 8px;
-            border: 1px solid var(--border-glass);
-            line-height: 1.4;
+            font-size: 9px;
+            word-break: break-all;
         }
 
         #api-key-note {
@@ -937,6 +997,55 @@
             color: #ff8f9d;
         }
 
+        /* Settings section grouping */
+        .settings-section {
+            margin: 4px 0 14px;
+        }
+        .settings-section-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .settings-section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .settings-section-title span {
+            font-size: 11px;
+            filter: none;
+            letter-spacing: 0;
+        }
+
+        /* Selected-model download card */
+        #model-card {
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            padding: 10px 11px;
+            margin-top: 8px;
+        }
+        #model-card-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        #model-card .status-pill {
+            margin-top: 0;
+            white-space: nowrap;
+            font-size: 9.5px;
+            padding: 3px 7px;
+        }
+
         /* Stagger Entrance Animations for Modal Items */
         #settings-modal.active .input-group,
         #settings-modal.active .modal-actions {
@@ -960,30 +1069,6 @@
         }
 
         /* ===== Download Modal ===== */
-        #download-modal {
-            position: absolute;
-            inset: 8px;
-            background: rgba(14, 14, 18, 0.98);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-glass);
-            border-radius: 16px;
-            z-index: 60;
-            display: flex;
-            flex-direction: column;
-            padding: 16px;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease, transform 0.2s ease;
-            transform: scale(0.94);
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.85);
-        }
-
-        #download-modal.active {
-            opacity: 1;
-            pointer-events: auto;
-            transform: scale(1);
-        }
-
         .progress-bar-bg {
             width: 100%;
             height: 8px;
@@ -999,14 +1084,287 @@
             background: var(--primary);
             transition: width 0.2s ease;
         }
-    </style>
+
+        /* ===== Professional settings window look ===== */
+        body.settings-window {
+            background: #15161b;
+        }
+        body.settings-window #settings-modal {
+            background: #15161b;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            border: none;
+            box-shadow: none;
+        }
+        body.settings-window #settings-modal .modal-header {
+            position: sticky;
+            top: -16px;
+            z-index: 10;
+            margin: -16px -16px 14px;
+            padding: 14px 16px;
+            background: #1a1c22;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            cursor: default;
+            -webkit-app-region: drag;
+        }
+        body.settings-window .modal-header span {
+            color: #ececee;
+        }
+        /* Section titles: clean text with a small accent bar, no emoji, no glow */
+        body.settings-window .settings-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #a9adb8;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        body.settings-window .settings-section-title::after {
+            display: none;
+        }
+        body.settings-window .settings-section-title::before {
+            content: '';
+            flex-shrink: 0;
+            width: 3px;
+            height: 12px;
+            background: #d64956;
+            border-radius: 2px;
+        }
+        body.settings-window .settings-section-title span {
+            font-size: 11px;
+            letter-spacing: 0;
+            font-weight: 700;
+        }
+        /* Flat controls */
+        body.settings-window .input-group select,
+        body.settings-window .input-group input[type="text"],
+        body.settings-window .input-group input[type="password"],
+        body.settings-window .segmented-control {
+            background: #1c1e25;
+            border-color: rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+        }
+        body.settings-window .input-group select:focus,
+        body.settings-window .input-group input[type="text"]:focus,
+        body.settings-window .input-group input[type="password"]:focus {
+            border-color: #d64956;
+            box-shadow: none;
+        }
+        body.settings-window .segment-btn.active {
+            background: #d64956;
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: none;
+        }
+        body.settings-window .segment-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        body.settings-window .btn-save {
+            background: #d64956;
+            border-color: rgba(255, 255, 255, 0.18);
+            box-shadow: none;
+        }
+        body.settings-window .btn-save:hover {
+            background: #c23e4b;
+        }
+        body.settings-window .btn-secondary,
+        body.settings-window .btn-remove {
+            background: #1c1e25;
+            border-color: rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+        }
+        body.settings-window .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+        body.settings-window #model-card {
+            background: #1c1e25;
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+        body.settings-window .window-ctl {
+            background: #1c1e25;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        body.settings-window .window-ctl:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: none;
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+        body.settings-window #close-modal-btn:hover {
+            background: rgba(214, 73, 86, 0.28);
+            border-color: rgba(214, 73, 86, 0.55);
+        }
+        body.settings-window .modal-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.14);
+        }
+        body.settings-window .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--primary-hover);
+            outline-offset: 3px;
+        }
+
+    
+        /* ── Futuristic model dropdown ─────────────────────────────── */
+        .model-dropdown {
+            position: relative;
+        }
+        .model-dropdown-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(180deg, #23252e 0%, #1a1c23 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 9px 12px;
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .model-dropdown-btn:hover {
+            border-color: rgba(214, 73, 86, 0.55);
+        }
+        .model-dropdown-btn:focus-visible {
+            outline: none;
+            border-color: #d64956;
+            box-shadow: 0 0 0 3px rgba(214, 73, 86, 0.22), 0 0 18px rgba(214, 73, 86, 0.25);
+        }
+        .model-dropdown-current {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .model-dropdown-chip {
+            display: inline-flex;
+            align-items: center;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: #ffd76a;
+            background: rgba(255, 215, 106, 0.12);
+            border: 1px solid rgba(255, 215, 106, 0.35);
+            padding: 2px 7px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .model-dropdown-chev {
+            color: var(--text-dim);
+            font-size: 10px;
+            transition: transform 0.18s;
+        }
+        .model-dropdown.open .model-dropdown-chev {
+            transform: rotate(180deg);
+        }
+        .model-dropdown-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 40;
+            background: rgba(17, 18, 24, 0.97);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 5px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(214, 73, 86, 0.08), 0 0 26px rgba(214, 73, 86, 0.10);
+            animation: dropdown-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+        }
+        @keyframes dropdown-in {
+            from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+            to { opacity: 1; transform: none; }
+        }
+        .model-option {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            padding: 7px 9px;
+            color: var(--text-main);
+            font-family: inherit;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .model-option:hover {
+            background: rgba(214, 73, 86, 0.10);
+            border-color: rgba(214, 73, 86, 0.28);
+        }
+        .model-option.selected {
+            background: rgba(214, 73, 86, 0.14);
+            border-color: rgba(214, 73, 86, 0.45);
+        }
+        .mo-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .mo-name {
+            font-size: 11.5px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mo-sub {
+            font-size: 9.5px;
+            font-weight: 400;
+            color: var(--text-dim);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mo-chip {
+            display: inline-flex;
+            align-items: center;
+            font-size: 8.5px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: #ffd76a;
+            background: rgba(255, 215, 106, 0.10);
+            border: 1px solid rgba(255, 215, 106, 0.3);
+            padding: 1px 6px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .mo-check {
+            color: #d64956;
+            font-size: 13px;
+            font-weight: 800;
+            opacity: 0;
+            transform: scale(0.6);
+            transition: opacity 0.15s, transform 0.15s;
+        }
+        .model-option.selected .mo-check {
+            opacity: 1;
+            transform: scale(1);
+        }
+</style>
 </head>
 <body>
     <!-- Top Action Buttons (Settings, Stop/Cancel, Close) -->
     <div id="top-bar">
-        <div class="icon-btn hover-only" id="settings-btn" title="Settings (STT Engine / Keys)">⚙️</div>
-        <div class="icon-btn" id="cancel-btn" title="Cancel Recording (Esc)">🛑</div>
-        <div class="icon-btn hover-only" id="close-btn" title="Quit App">✕</div>
+        <div class="icon-btn" id="settings-btn" title="Settings (STT Engine / Keys)">⚙️</div>
+        <div class="icon-btn" id="cancel-btn" title="Cancel Recording (Esc)">■</div>
+        <div class="icon-btn" id="close-btn" title="Quit App">✕</div>
     </div>
 
     <!-- Mic Button & Audio Visualizer Canvas -->
@@ -1033,22 +1391,31 @@
     </div>
 
     <!-- Minimal Status Indicator -->
-    <div id="status-badge">
+    <div id="status-badge" role="status" aria-live="polite" aria-atomic="true">
         <div class="rec-dot" id="status-dot"></div>
         <span id="status-text">REC</span>
     </div>
 
+    <!-- Transcribe Again: appears only when the last transcription failed -->
+    <button id="retry-btn" type="button" title="Transcribe the last recording again with the current engine">↻ Transcribe Again</button>
+
     <!-- In-App Settings Modal -->
-    <div id="settings-modal">
+    <div id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-header">
             <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 14px; filter: drop-shadow(0 0 6px rgba(230, 57, 70, 0.4));">⚙️</span>
-                <span>Settings</span>
+                <div style="display: flex; flex-direction: column; line-height: 1.25;">
+                    <span id="settings-title">Settings</span>
+                    <span style="font-size: 9.5px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.05em;">VoiceToClipboard</span>
+                </div>
             </div>
-            <div class="icon-btn" id="close-modal-btn" title="Close Settings">✕</div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="icon-btn window-ctl" id="close-modal-btn" title="Close Settings">✕</div>
+            </div>
         </div>
 
         <div class="modal-body">
+            <div class="settings-section">
+            <div class="settings-section-title"><span>Recording</span></div>
             <!-- Global Recording Hotkey -->
             <div class="input-group">
                 <label for="hotkey-input">Global Recording Hotkey</label>
@@ -1070,32 +1437,60 @@
                 </div>
             </div>
 
+            </div>
+            <div class="settings-section">
+            <div class="settings-section-title"><span>Speech Engine</span></div>
             <!-- STT Engine Selector -->
             <div class="input-group">
                 <label>STT Engine</label>
                 <div class="segmented-control">
-                    <div class="segment-btn active" id="engine-btn-gemini">☁️ Gemini API</div>
-                    <div class="segment-btn" id="engine-btn-local">💻 Local Whisper</div>
+                    <div class="segment-btn active" id="engine-btn-gemini" role="button" tabindex="0" aria-pressed="true">Gemini API</div>
+                    <div class="segment-btn" id="engine-btn-local" role="button" tabindex="0" aria-pressed="false">Offline Models</div>
                 </div>
             </div>
 
             <!-- Local Model Selector -->
             <div class="input-group" id="local-model-group" style="display: none;">
-                <label for="local-model-select">Local Model</label>
-                <select id="local-model-select">
-                    <option value="Xenova/whisper-tiny">Whisper Tiny (~39 MB download · ~250 MB RAM)</option>
-                    <option value="Xenova/whisper-base">Whisper Base (~74 MB download · ~500 MB RAM · Rec.)</option>
-                    <option value="Xenova/whisper-small">Whisper Small (~240 MB download · ~1 GB RAM)</option>
-                    <option value="Xenova/whisper-medium">Whisper Medium (~760 MB download · ~2.5 GB RAM)</option>
-                    <option value="Xenova/whisper-large-v3-turbo">Whisper Large v3 Turbo (~800 MB download · ~3 GB RAM)</option>
+                <label for="local-tier-select">Offline Local Models</label>
+                <div class="model-dropdown" id="model-dropdown">
+                    <button type="button" class="model-dropdown-btn" id="model-dropdown-btn" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="model-dropdown-current" id="model-dropdown-current">Loading models…</span>
+                        <span class="model-dropdown-chip" id="model-dropdown-chip" style="display: none;">⭐ Recommended</span>
+                        <span class="model-dropdown-chev" id="model-dropdown-chev">▾</span>
+                    </button>
+                    <div class="model-dropdown-panel" id="model-dropdown-panel" role="listbox" style="display: none;"></div>
+                </div>
+                <select id="local-tier-select" style="display: none;" aria-hidden="true">
+                    <option value="tiny">Tiny</option>
+                    <option value="mini">Mini</option>
+                    <option value="zh-light">Chinese + English (Light)</option>
+                    <option value="light">Light</option>
+                    <option value="big">Big</option>
+                    <option value="zh-big">Chinese + English (Big)</option>
                 </select>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
-                    <div id="model-status-info" class="status-pill ready">✓ Weights ready</div>
-                    <button type="button" class="btn-secondary" id="trigger-download-btn" style="padding: 4px 8px; font-size: 10px; display: none;">📥 Download Model</button>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = the best all-round default.</div>
+                <div id="model-card" style="display: none;">
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                        <div style="min-width: 0;">
+                            <strong id="model-card-name"></strong>
+                            <div id="model-card-meta" style="font-size: 10px; color: var(--text-dim); margin-top: 2px;"></div>
+                        </div>
+                        <span id="model-card-status" class="status-pill"></span>
+                    </div>
+                    <div id="model-card-desc" style="font-size: 10.5px; color: var(--text-dim); line-height: 1.45; margin-top: 6px;"></div>
+                    <div id="model-card-license" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.75; margin-top: 4px;"></div>
+                    <div id="model-card-action" style="margin-top: 9px;"></div>
+                    <div id="model-download-progress" style="display: none; margin-top: 9px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 3px;">
+                            <span id="model-download-status">Downloading…</span>
+                            <span id="model-download-pct">0%</span>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-top: 0;">
+                            <div class="progress-bar-fill" id="model-download-bar"></div>
+                        </div>
+                    </div>
                 </div>
-                <div id="whisper-info-banner">
-                    Language support depends on the selected multilingual Whisper model. Accuracy varies significantly by language.
-                </div>
+                <div id="model-cache-path" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.8; margin-top: 6px;">Model cache location is shown after startup.</div>
             </div>
 
             <!-- Local AI Memory Mode Toggle -->
@@ -1107,7 +1502,7 @@
                         <span class="slider"></span>
                     </label>
                 </div>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On: unloads the model after each use to save RAM. Off: keeps the model loaded for the lowest transcription latency.</div>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
             </div>
 
             <!-- Gemini API Key Input -->
@@ -1115,8 +1510,17 @@
                 <label for="api-key-input">Gemini API Key</label>
                 <input type="password" id="api-key-input" placeholder="Paste Gemini API key..." autocomplete="off" />
                 <div id="api-key-note"></div>
+                <label for="gemini-model-select" style="margin-top: 6px;">Gemini Model</label>
+                <select id="gemini-model-select">
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast &amp; balanced (recommended)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro — higher accuracy</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash — fastest &amp; cheapest</option>
+                </select>
             </div>
 
+            </div>
+            <div class="settings-section">
+            <div class="settings-section-title"><span>Auto-Stop</span></div>
             <!-- Auto-Stop Silence Toggle Switch & Options -->
             <div class="input-group">
                 <div class="switch-row">
@@ -1147,19 +1551,35 @@
                             <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="range" id="silence-threshold-slider" min="2" max="100" value="15" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                            <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Measure room noise and set threshold automatically">⚡ Auto-Calibrate</button>
+                            <input type="range" id="silence-threshold-slider" min="2" max="100" value="12" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
+                            <button type="button" class="btn-secondary" id="reset-threshold-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Restore the default threshold (12)">↺ Reset</button>
                         </div>
 
-                        <!-- Live Mic Volume Level Meter -->
-                        <div style="margin-top: 8px;">
+                        <!-- Calibration controls -->
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 7px;">
+                            <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 5px 10px; font-size: 10px; white-space: nowrap; flex: 1;" title="Measure the background noise for a few seconds, then set the threshold automatically">⚡ Auto-Calibrate</button>
+                            <span style="font-size: 9.5px; color: var(--text-dim); white-space: nowrap;">sec</span>
+                            <select id="calibrate-duration-select" style="padding: 4px 6px; font-size: 10px;" title="How many seconds to measure the background noise during calibration">
+                                <option value="3">3</option>
+                                <option value="5" selected>5</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                        <div id="calibrate-feedback" style="font-size: 9.5px; color: var(--text-dim); margin-top: 4px; min-height: 12px;">Auto-calibration measures your background noise for a few seconds and sets the threshold so silence never triggers a stop.</div>
+
+                        <!-- Live Mic Volume Level Meter (visible only while calibrating) -->
+                        <div id="noise-meter-wrap" style="display: none; margin-top: 8px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
                                 <span>Live Mic Level</span>
                                 <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
                             </div>
-                            <div style="position: relative; width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
+                            <div style="position: relative; width: 100%; height: 14px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 30%, rgba(245, 158, 11, 0.3) 60%, rgba(239, 68, 68, 0.3) 100%); border-radius: 5px; overflow: hidden;">
                                 <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
-                                <div id="noise-threshold-marker" style="position: absolute; top: 0; bottom: 0; left: 24%; width: 2px; background: #ffffff; box-shadow: 0 0 4px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+                                <div id="noise-threshold-marker" style="position: absolute; top: -2px; bottom: -2px; left: 12%; width: 2px; background: #ffffff; box-shadow: 0 0 5px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 8.5px; color: var(--text-dim); margin-top: 2px;">
+                                <span>quiet</span>
+                                <span>speech →</span>
                             </div>
                         </div>
 
@@ -1167,6 +1587,9 @@
                 </div>
             </div>
 
+            </div>
+            <div class="settings-section">
+            <div class="settings-section-title"><span>Appearance</span></div>
             <!-- Idle Transparency Toggle & Slider -->
             <div class="input-group">
                 <div class="switch-row">
@@ -1182,6 +1605,7 @@
                     <span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">60%</span>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- Modal Actions Footer -->
@@ -1190,26 +1614,6 @@
                 <span style="color: #10b981; font-weight: bold;">✓</span> Auto-saved
             </div>
             <button class="btn-remove" id="remove-key-btn">Remove Key</button>
-        </div>
-    </div>
-
-    <!-- Download Model Confirmation Modal -->
-    <div id="download-modal">
-        <div class="modal-header">
-            <span>📥 Download Model</span>
-        </div>
-        <div style="font-size: 11px; line-height: 1.45; margin-bottom: 12px; color: var(--text-dim);" id="download-prompt-text">
-            Local Whisper requires model weights. Proceed to download into application directory?
-        </div>
-        <div id="download-progress-container" style="display: none; margin-bottom: 14px;">
-            <div style="font-size: 11px; color: var(--text-main); font-weight: 500;" id="download-status-text">Downloading... 0%</div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" id="download-progress-bar"></div>
-            </div>
-        </div>
-        <div class="modal-actions" id="download-modal-actions">
-            <button class="btn-save" id="confirm-download-btn">Download & Activate</button>
-            <button class="btn-secondary" id="cancel-download-btn">Cancel</button>
         </div>
     </div>
 

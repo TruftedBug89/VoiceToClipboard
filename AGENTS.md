@@ -1,36 +1,43 @@
 # VoiceToClipboard STT Tool
 
 ## Project Goal
-A super simple, lightweight Windows widget that records voice from the microphone, uses the Gemini Multimodal API for Speech-to-Text (STT), and automatically copies the transcribed text to the clipboard. Designed to be memory-efficient and minimal.
+A lightweight Windows widget that records microphone audio, transcribes it with Gemini or a local offline model, and copies the result to the clipboard.
 
-## Current State (v1.0.0 — stable)
-- **Language/Environment:** Node.js, Electron app (Windows 10/11).
-- **Directory:** `C:\Users\lavvo\Documents\VoiceToClipboard`
-- **Core files:** `main.js` (main process: window, tray, hotkey, IPC, Gemini transcription, clipboard), `index.html` + `renderer.js` (UI, recording via Web Audio API `MediaRecorder`, custom drag logic, click-through).
-- **Dependencies:** `@google/genai` (Gemini), `electron`, `electron-builder` (dev).
-- **API Key:** read from `GEMINI_API_KEY` env var or saved via in-app settings (config stored in `userData/config.json`).
+## Current State (v2.2.0)
+- **Language/Environment:** Node.js, Electron 43, Windows 10/11.
+- **Core files:** `main.js` (windows, tray, hotkeys, config, IPC, STT service, clipboard, startup cleanup), `index.html` + `renderer.js` (widget, settings, Web Audio capture, VAD, visualizer, click-through, Transcribe Again).
+- **Cloud STT:** `@google/genai` using `gemini-2.5-flash`.
+- **Local STT (multilingual-only, no language selection):** `stt/` main-process service with **six auto-language models** (tier → key → backend): `tiny-multilingual` (nemo-ctc, FastConformer CTC EN/DE/ES/FR, ~98 MB dl), `mini-multilingual` (nemo-transducer, FastConformer Transducer 10-lang, ~102 MB dl), `zh-en-light` (sense-voice, SenseVoice zh/en/yue/ja/ko, ~158 MB dl), `omni-multilingual` (omnilingual, 300M v2, 1600+ langs, ~279 MB dl — the default `light` tier), `big-multilingual` (parakeet, TDT 0.6B v3 INT8, ~465 MB dl), `zh-en-big` (fire-red-asr-ctc, FireRedASR2 zh/en, ~496 MB dl). Measured RAM on load: ~174 / ~187 / ~298 / ~389 / ~691 / ~784 MB. UI ramEstimates add ~1/3 headroom for peak transcription RAM (tiny 250 / mini 270 / zh-light 400 / light 550 / big 950 MB / zh-big 1.1 GB). Legacy per-language Vosk/Moonshine tiers removed; stale cached models are deleted at startup; after the full pipeline validation run only `omni-multilingual` remains in the user cache (the medium tier, ≤500 MB RAM).
+- **Transcribe Again:** the last recording is kept in memory only while a retry is possible; a retry button appears on failure and resends the audio with the CURRENT engine (switch engine/key/model, then retry). Audio is cleared on success/new recording/cancel.
+- **Hygiene:** startup removes stale model caches, leftover archives, crashpad dumps >7 days, oversized Electron caches, and old log files.
+- **Dependencies:** `@google/genai`, `sherpa-onnx-node` (supports `omnilingual` config), `vosk-koffi`, `uiohook-napi`, and archive extraction tooling.
+- **API key:** read from `GEMINI_API_KEY` or saved in `userData/config.json`; never log or expose the key.
 
-## Architecture Notes (keep in mind when editing)
-- **Click-through widget:** window starts with `setIgnoreMouseEvents(true, { forward: true })`; renderer toggles it over interactive elements (`#mic-container`, `#top-bar`, `#settings-modal`) via the `set-ignore-mouse` IPC channel.
-- **Custom drag:** no `-webkit-app-region` anywhere (it suppresses pointer events). Dragging uses pointer events + `setPointerCapture`, sending throttled deltas over the `drag-window` IPC channel. Quick press (< 5px movement) = toggle record.
-- **Recording states:** idle → recording (`#mic-button.recording`, sonar rings, spin ring, visualizer canvas) → transcribing (`#mic-container.transcribing`, fast spin ring, breathing button, busy badge) → done (`show-check` + `✓ COPIED` badge). Cancel discards audio via `cancelPending` flag; Esc key cancels.
-- **Transcription:** `transcribe-audio` IPC handler sends base64 `audio/webm` to `gemini-2.5-flash`; response text must be read as property (`response.text`), NOT a function call.
-- **Badge feedback:** `setStatus(mode, text)` in renderer.js — modes: `''` (rec), `busy` (spinner), `done` (green), `err` (red), `dim` (no dot).
-- **Renderer errors** are forwarded to stdout/app.log via the `console-message` event (new Electron API style — event object only).
-- No live subtitles / Web Speech API — removed intentionally.
+## Architecture Notes
+- **Click-through widget:** the window starts with `setIgnoreMouseEvents(true, { forward: true })`; the renderer re-enables interaction over the mic, top bar, and modal areas through `set-ignore-mouse` IPC.
+- **Custom drag (widget):** no `-webkit-app-region`; pointer events and `setPointerCapture` send drag deltas over IPC. A short press toggles recording. The settings window instead uses a native drag region on its header.
+- **Recording lifecycle:** idle → starting → recording → transcribing → copied/error. Escape discards the current session. Session IDs prevent stale callbacks from updating a later recording.
+- **Audio:** `MediaRecorder` selects a supported WebM codec. Local inference receives validated mono 16 kHz Float32 PCM. Gemini receives the recorded WebM bytes and actual MIME type.
+- **All six models are verified:** downloaded through the real install pipeline and transcribed live on Windows x64 (EN/ES samples; Mandarin for the zh-en pair). See `stt/model-registry.js` for exact archives and licenses.
+- **Model cache:** verified model archives are installed atomically under Electron `userData/models`; model archives are never committed or bundled into the installer.
+- **Archive extraction:** zip (Vosk) uses `yauzl`; `.tar.bz2` (Moonshine/Parakeet) is decompressed with `unbzip2-stream` piped into `tar.Unpack` — npm `tar` alone cannot decode bzip2 (older builds threw `invalid base256 encoding` on every sherpa-onnx model).
+- **Settings window:** frameless (`frame: false`), 400×700, resizable; the modal header is the drag region (`-webkit-app-region: drag`) with custom minimize (`minimize-settings-window` IPC) and close buttons.
+- **Downloads UI:** a single model card (name, size, RAM, license, status) with inline progress and one Download & Activate / Remove action; there is no separate download modal.
+- **Threshold calculator:** `calculateSpeechVolume` (frequency-weighted RMS, fftSize 64, bins 2–23) feeds the live meter (`METER_MAX = 120`) and VAD auto-stop. Auto-calibrate uses percentile stats (p90 noise / p10 speech), spike-tolerant sampling, a configurable 2–5 s phase duration, and a Reset-to-12 button.
+- **IPC result contract:** transcription returns `{ success, text }` or `{ success: false, code, error }`. Clipboard writes happen in the main process.
+- **Status badge:** `setStatus(mode, text)` uses `busy`, `done`, `err`, and `dim` modes.
+- **No live subtitles/Web Speech API:** transcription is batch-on-submit.
 
 ## Commands
-- Run (dev, terminal): `npm start` (or `node_modules\.bin\electron.cmd .`, logs go to `app.log` when redirected)
-- Pack unpacked exe (no install, pin-able): `npm run pack` (output `dist\win-unpacked\VoiceToClipboard.exe`)
-- Build NSIS installer: `npm run build` (output `dist\VoiceToClipboard-<version>-Setup.exe`)
-- Regenerate app icon: `npm run icon` (writes `build/icon.ico` + `build/icon.png`, zero deps)
+- Run: `npm start`
+- Tests: `npm test`
+- Pack unpacked app: `npm run pack` (output `dist/win-unpacked/VoiceToClipboard.exe`)
+- Build NSIS installer: `npm run build` (output under `dist/`)
+- Clean generated output: `npm run clean:dist`
+- Regenerate icon: `npm run icon`
 
-## Security Rule
-DO NOT leak, print, or expose the `GEMINI_API_KEY` in any logs, chat messages, or console outputs.
-
-
-## Releases (GitHub Releases — NOT git)
-- Built installers go to **GitHub Releases**, never into git. `dist_build/` and `dist/` are git-ignored build output — do not `git add` them.
-- Only source code lives in the repo (plus `build/icon.*` assets).
-- To publish a release: `npm run build`, then upload `dist_build\VoiceToClipboard-<version>-Setup.exe` (+ `.blockmap` / `latest.yml` for auto-update) to a new GitHub Release.
-- Do NOT create a release unless the user explicitly asks.
+## Security and release rules
+- Never leak, print, or expose `GEMINI_API_KEY`.
+- Do not commit `node_modules`, model archives, user config, logs, installers, blockmaps, `latest.yml`, `dist/`, or `dist_build*/`.
+- Built installers belong in GitHub Releases, not Git. Do not create a release, upload artifacts, push, or commit unless explicitly requested.
+- Test native addon loading in both Node and Electron on Windows x64 before shipping a runtime change.
