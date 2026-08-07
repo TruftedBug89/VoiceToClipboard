@@ -664,6 +664,18 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
     mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
 
+// No periodic timers for topmost: the widget stays a normal always-on-top
+// window (a single window style — zero ongoing cost). It only raises itself
+// above a fullscreen game the moment the user starts a recording (hotkey or
+// click), so there is no background process fighting for the top.
+ipcMain.on('widget-raise', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (loadConfig().alwaysOnTop !== false) {
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        mainWindow.moveTop();
+    }
+});
+
 // Reliable hover detection. With click-through + forward:true the renderer's
 // mouseleave is unreliable, which leaves the top pill visible and blocks the
 // idle transparency. Poll the OS cursor against the widget bounds instead.

@@ -532,17 +532,12 @@ function refreshMouseIgnore() {
         topBar.classList.remove('visible');
     }
 
-    const interactive = !!(el && (
-        el.closest('#mic-container') ||
-        el.closest('#top-bar') ||
-        el.closest('#settings-btn') ||
-        el.closest('#cancel-btn') ||
-        el.closest('#close-btn') ||
-        el.closest('#retry-btn') ||
-        el.closest('#settings-modal')
-    ));
+    // While the cursor is anywhere over the widget it responds fully (click,
+    // drag, focus). Click-through only kicks in when the cursor leaves the
+    // window, so the widget never feels "dead" under the pointer.
+    const interactive = cursorInsideWindow;
 
-    document.body.classList.toggle('is-hovering', interactive || isMouseHoverTop);
+    document.body.classList.toggle('is-hovering', interactive);
 
     const shouldIgnore = !interactive;
     if (shouldIgnore !== mouseIgnored) {
@@ -1406,6 +1401,7 @@ async function startRecording() {
     let stream = null;
     try {
         stopSettingsMicPreview();
+        ipcRenderer.send('widget-raise');
         setStatus('busy', 'STARTING');
         const sttConfig = await ipcRenderer.invoke('get-stt-config');
         currentSttConfig = sttConfig;
