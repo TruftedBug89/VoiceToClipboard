@@ -1437,6 +1437,18 @@
                 </div>
             </div>
 
+            <!-- Finish Sound Toggle -->
+            <div class="input-group">
+                <div class="switch-row">
+                    <label class="switch-label" for="finish-sound-checkbox">🔔 Sound when transcription finishes</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="finish-sound-checkbox" checked />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
+            </div>
+
             </div>
             <div class="settings-section">
             <div class="settings-section-title"><span>Speech Engine</span></div>
@@ -1444,8 +1456,8 @@
             <div class="input-group">
                 <label>STT Engine</label>
                 <div class="segmented-control">
-                    <div class="segment-btn active" id="engine-btn-gemini" role="button" tabindex="0" aria-pressed="true">Gemini API</div>
-                    <div class="segment-btn" id="engine-btn-local" role="button" tabindex="0" aria-pressed="false">Offline Models</div>
+                    <div class="segment-btn active" id="engine-btn-local" role="button" tabindex="0" aria-pressed="true">Offline Models</div>
+                    <div class="segment-btn" id="engine-btn-gemini" role="button" tabindex="0" aria-pressed="false">Gemini API</div>
                 </div>
             </div>
 
@@ -1468,7 +1480,7 @@
                     <option value="big">Big</option>
                     <option value="zh-big">Chinese + English (Big)</option>
                 </select>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = the best all-round default.</div>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>.</div>
                 <div id="model-card" style="display: none;">
                     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
                         <div style="min-width: 0;">

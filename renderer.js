@@ -53,6 +53,29 @@ function playBeep(freq = 880, duration = 0.08) {
     } catch (e) {}
 }
 
+// Soft two-tone "transcription finished" chime (E5 -> A5, gentle decay).
+// Controlled by the "Sound when transcription finishes" setting.
+function playFinishChime() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ctx.currentTime;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.09, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        gain.connect(ctx.destination);
+        const tones = [659.25, 880.0];
+        tones.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            osc.start(now + idx * 0.12);
+            osc.stop(now + 0.6 + idx * 0.12);
+        });
+        setTimeout(() => { try { ctx.close(); } catch (e) {} }, 900);
+    } catch (e) {}
+}
+
 // Minimal status indicator (dot + text)
 function setStatus(mode, text) {
     if (statusText.textContent !== text) {
@@ -92,7 +115,7 @@ const modelDownloadBar = document.getElementById('model-download-bar');
 const modelCachePathEl = document.getElementById('model-cache-path');
 const retryBtn = document.getElementById('retry-btn');
 
-let selectedEngine = 'gemini';
+let selectedEngine = 'local';
 let modelCatalog = [];
 let modelStatusRequestId = 0;
 
@@ -191,13 +214,28 @@ function friendlyDownloadError(msg) {
 
 // ---- Custom model dropdown (futuristic picker) ----
 const MODEL_TIER_LABELS = Object.freeze({
-    tiny: { name: 'Tiny', recommended: false },
-    mini: { name: 'Mini', recommended: false },
-    'zh-light': { name: 'Chinese + English (Light)', recommended: false },
-    light: { name: 'Light', recommended: true },
-    big: { name: 'Big', recommended: false },
-    'zh-big': { name: 'Chinese + English (Big)', recommended: false }
+    tiny: { name: 'Tiny' },
+    mini: { name: 'Mini' },
+    'zh-light': { name: 'Chinese + English (Light)' },
+    light: { name: 'Light' },
+    big: { name: 'Big' },
+    'zh-big': { name: 'Chinese + English (Big)' }
 });
+
+// RAM-based recommendation (set from the main-process snapshot):
+//   ≤4 GB Tiny · ≤8 GB Mini · ≤16 GB Light · >16 GB Big
+let recommendedTier = 'light';
+let systemRamGB = null;
+
+function applyModelRecommendation(snapshot) {
+    if (snapshot) {
+        if (snapshot.recommendedTier) recommendedTier = snapshot.recommendedTier;
+        if (typeof snapshot.systemRamGB === 'number') systemRamGB = snapshot.systemRamGB;
+    }
+    const ramNote = document.getElementById('model-reco-ram');
+    if (ramNote) ramNote.textContent = systemRamGB ? `(${systemRamGB} GB)` : '';
+    if (modelDropdownPanel) buildModelDropdown();
+}
 
 function dropdownSubLabel(model) {
     const size = formatDownloadSize(model.downloadBytes);
@@ -221,7 +259,7 @@ function buildModelDropdown() {
         const name = document.createElement('span');
         name.className = 'mo-name';
         name.textContent = lbl.name;
-        if (lbl.recommended) {
+        if (model.tier === recommendedTier) {
             const chip = document.createElement('span');
             chip.className = 'mo-chip';
             chip.textContent = '⭐ Recommended';
@@ -237,7 +275,7 @@ function buildModelDropdown() {
         check.textContent = '✓';
 
         row.append(main, check);
-        if (model.tier === (localTierSelect?.value || 'light')) row.classList.add('selected');
+        if (model.tier === (localTierSelect?.value || recommendedTier)) row.classList.add('selected');
         row.addEventListener('click', () => selectModelTier(model.tier));
         modelDropdownPanel.appendChild(row);
     }
@@ -246,11 +284,11 @@ function buildModelDropdown() {
 
 function updateDropdownCurrent() {
     if (!modelDropdownCurrent) return;
-    const tier = localTierSelect?.value || 'light';
+    const tier = localTierSelect?.value || recommendedTier;
     const model = modelCatalog.find(m => m.tier === tier);
-    const lbl = MODEL_TIER_LABELS[tier] || { name: model?.name || 'Light', recommended: false };
+    const lbl = MODEL_TIER_LABELS[tier] || { name: model?.name || 'Light' };
     modelDropdownCurrent.textContent = lbl.name;
-    modelDropdownChip.style.display = lbl.recommended ? 'inline-flex' : 'none';
+    modelDropdownChip.style.display = tier === recommendedTier ? 'inline-flex' : 'none';
     for (const row of modelDropdownPanel?.querySelectorAll('.model-option') || []) {
         row.classList.toggle('selected', row.dataset.tier === tier);
     }
@@ -951,10 +989,13 @@ async function refreshSettingsUi(snapshot = null) {
     const apiStatus = await ipcRenderer.invoke('get-api-key-status');
 
     await loadHotkey();
-    setEngine(sttConfig.sttEngine || 'gemini');
-    localTierSelect.value = sttConfig.localTier || 'light';
+    applyModelRecommendation(sttConfig);
+    setEngine(sttConfig.sttEngine || 'local');
+    localTierSelect.value = sttConfig.localTier || recommendedTier;
     updateDropdownCurrent();
     updateLocalModelUi();
+    const finishSoundCheckbox = document.getElementById('finish-sound-checkbox');
+    if (finishSoundCheckbox) finishSoundCheckbox.checked = sttConfig.playFinishSound !== false;
 
     autoStopCheckbox.checked = !!sttConfig.autoStopEnabled;
     autoStopSecondsSelect.value = (sttConfig.autoStopSeconds || 3.5).toFixed(1);
@@ -1147,6 +1188,8 @@ function autoSaveSettings() {
             const autoStopSeconds = parseFloat(autoStopSecondsSelect.value) || 3.5;
             const silenceThreshold = parseInt(silenceThresholdSlider ? silenceThresholdSlider.value : 12) || 12;
             const ecoMode = document.getElementById('eco-mode-checkbox').checked;
+            const finishSoundCheckbox = document.getElementById('finish-sound-checkbox');
+            const playFinishSound = finishSoundCheckbox ? finishSoundCheckbox.checked : true;
             const alwaysOnTopCheckbox = document.getElementById('always-on-top-checkbox');
             const alwaysOnTop = alwaysOnTopCheckbox ? alwaysOnTopCheckbox.checked : true;
             const idleFadeEnabled = idleFadeCheckbox ? idleFadeCheckbox.checked : false;
@@ -1172,7 +1215,8 @@ function autoSaveSettings() {
                 alwaysOnTop,
                 idleFadeEnabled,
                 idleOpacity,
-                geminiModel
+                geminiModel,
+                playFinishSound
             });
             if (!saved.success) return;
 
@@ -1209,6 +1253,7 @@ async function initializeRenderer() {
         await refreshSettingsUi(snapshot);
     } else {
         currentSttConfig = snapshot;
+        applyModelRecommendation(snapshot);
     }
     await checkApiKeyStatus();
 }
@@ -1494,6 +1539,7 @@ async function startRecording() {
                     setTimeout(() => micBtn.classList.remove('show-check'), 1200);
                     setStatus('done', '✓ COPIED');
                     setTimeout(hideStatus, 1600);
+                    if (!currentSttConfig || currentSttConfig.playFinishSound !== false) playFinishChime();
                 } else {
                     const status = result.code === 'NO_SPEECH' ? 'NO SPEECH' : (result.code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (result.code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
                     setStatus('err', status);

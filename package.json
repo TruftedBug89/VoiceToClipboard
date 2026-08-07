@@ -1,6 +1,6 @@
 {
   "name": "voicetoclipboard",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Lightweight, always-on-top Windows widget that transcribes your voice with Gemini AI and copies the text to your clipboard.",
   "main": "main.js",
   "author": "TruftedBug89",
@@ -40,7 +40,10 @@
       "output": "dist"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {
@@ -65,7 +68,10 @@
       "stt/**/*",
       "package.json",
       "build/**/*"
-    ]
+    ],
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.15.0",

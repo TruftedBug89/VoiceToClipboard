@@ -65,14 +65,34 @@ test('keeps zh-en tiers and re-derives model keys on v4 migration', () => {
     assert.equal(migrated.localLanguage, 'auto');
 });
 
+// Deterministic RAM stub so tests don't depend on the host machine's RAM.
+function withRamGB(gb, fn) {
+    const orig = os.totalmem;
+    os.totalmem = () => gb * 1073741824;
+    try { return fn(); } finally { os.totalmem = orig; }
+}
+
 test('normalizes invalid STT settings to a safe multilingual selection', () => {
-    assert.deepEqual(validateSttConfig({ sttEngine: 'other', localTier: 'huge', localLanguage: 'es' }), {
-        sttEngine: 'gemini',
-        localTier: 'light',
+    // Unknown engine defaults to LOCAL (offline models are the default engine),
+    // and an unknown tier falls back to the model recommended for the PC RAM.
+    assert.deepEqual(withRamGB(8, () => validateSttConfig({ sttEngine: 'other', localTier: 'huge', localLanguage: 'es' })), {
+        sttEngine: 'local',
+        localTier: 'mini',
         localLanguage: 'auto',
-        localModelKey: 'omni-multilingual',
+        localModelKey: 'mini-multilingual',
         geminiModel: 'gemini-2.5-flash',
-        ecoMode: true
+        ecoMode: true,
+        playFinishSound: true
+    });
+    // On a 32 GB machine the same invalid tier resolves to Big (tier above default).
+    assert.deepEqual(withRamGB(32, () => validateSttConfig({ sttEngine: 'other', localTier: 'huge' })), {
+        sttEngine: 'local',
+        localTier: 'big',
+        localLanguage: 'auto',
+        localModelKey: 'big-multilingual',
+        geminiModel: 'gemini-2.5-flash',
+        ecoMode: true,
+        playFinishSound: true
     });
 });
 
@@ -83,8 +103,29 @@ test('preserves any valid tier through validation', () => {
         localLanguage: 'auto',
         localModelKey: 'zh-en-light',
         geminiModel: 'gemini-2.5-flash',
-        ecoMode: true
+        ecoMode: true,
+        playFinishSound: true
     });
+});
+
+test('recommends the model tier matching the PC RAM', () => {
+    const { recommendedTierForRam } = require('../stt/config');
+    assert.equal(recommendedTierForRam(2), 'tiny');
+    assert.equal(recommendedTierForRam(4), 'tiny');
+    assert.equal(recommendedTierForRam(6), 'mini');
+    assert.equal(recommendedTierForRam(8), 'mini');
+    assert.equal(recommendedTierForRam(12), 'light');
+    assert.equal(recommendedTierForRam(16), 'light');
+    assert.equal(recommendedTierForRam(24), 'big');
+    assert.equal(recommendedTierForRam(32), 'big');
+    assert.equal(recommendedTierForRam(64), 'big');
+});
+
+test('defaults a fresh config to the LOCAL engine and finish-sound on', () => {
+    const migrated = migrateConfig({});
+    assert.equal(migrated.sttEngine, 'local');
+    assert.equal(migrated.playFinishSound, true);
+    assert.equal(migrated.localLanguage, 'auto');
 });
 
 test('registry contains the six verified multilingual models', () => {

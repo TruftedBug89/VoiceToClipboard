@@ -4,7 +4,7 @@ const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { SttService } = require('./stt');
-const { migrateConfig, validateSttConfig } = require('./stt/config');
+const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } = require('./stt/config');
 const { getModelKey } = require('./stt/model-registry');
 
 const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
@@ -109,7 +109,10 @@ async function getSettingsSnapshot() {
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
         idleFadeEnabled: config.idleFadeEnabled !== false,
         idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
-        geminiModel: config.geminiModel || 'gemini-2.5-flash'
+        geminiModel: config.geminiModel || 'gemini-2.5-flash',
+        systemRamGB: systemRamGB(),
+        recommendedTier: recommendedTierForRam(systemRamGB()),
+        playFinishSound: config.playFinishSound !== false
     };
 }
 
@@ -533,7 +536,8 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
         alwaysOnTop,
         idleFadeEnabled: settings.idleFadeEnabled !== undefined ? settings.idleFadeEnabled !== false : existing.idleFadeEnabled !== false,
         idleOpacity,
-        geminiModel: settings.geminiModel || existing.geminiModel || 'gemini-2.5-flash'
+        geminiModel: settings.geminiModel || existing.geminiModel || 'gemini-2.5-flash',
+        playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false
     });
 
     if (!success) return { success: false };
