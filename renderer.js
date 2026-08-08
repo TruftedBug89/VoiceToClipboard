@@ -40,6 +40,8 @@ function applyI18n(lang) {
         const val = t(key, null, el.textContent.trim());
         const hasElementChildren = Array.from(el.children).some(c => c.tagName !== 'BR');
         if (hasElementChildren) return; // icon buttons etc. — never wipe inner markup
+        const onlyIcon = el.textContent.trim().length <= 3 && /[\u2190-\u27BF\u2B00-\u2BFF\uFE0F\u2600-\u27EF]/.test(el.textContent);
+        if (onlyIcon) return; // glyph-only buttons (⚙️ ↻ ✕ …) keep their icon, only title translates
         el.textContent = val;
     });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
