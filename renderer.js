@@ -1,5 +1,73 @@
 const { ipcRenderer } = require('electron');
 
+// ─── i18n (offline, bundled locales) ───────────────────────────────────────
+const LOCALES = {
+    en: require('./locales/en.json'),
+    es: require('./locales/es.json'),
+    zh: require('./locales/zh.json')
+};
+let uiLang = 'en';
+let locale = LOCALES.en;
+
+function t(key, vars, fallback) {
+    let v = locale[key];
+    if (v === undefined || v === null) v = LOCALES.en[key];
+    if (v === undefined || v === null) v = (fallback !== undefined ? fallback : key);
+    v = String(v);
+    if (vars) {
+        for (const k of Object.keys(vars)) v = v.split('{' + k + '}').join(String(vars[k]));
+    }
+    return v;
+}
+// Translate a status-code-ish message if a translation exists, else pass through.
+function tr(msg) {
+    if (typeof msg !== 'string') return msg;
+    if (msg === '✓ COPIED') return t('status.COPIED');
+    const norm = msg.trim().replace(/\s+/g, '_');
+    const m = locale['status.' + norm];
+    if (m !== undefined) return m;
+    // dynamic messages like "PAUSE (1.3s)"
+    if (msg.startsWith('PAUSE (')) return t('status.PAUSE') + msg.slice(5);
+    if (msg.startsWith('REC')) return t('status.REC');
+    return msg;
+}
+function applyI18n(lang) {
+    uiLang = lang || 'en';
+    locale = LOCALES[uiLang] || LOCALES.en;
+    document.documentElement.lang = uiLang === 'zh' ? 'zh-CN' : (uiLang === 'es' ? 'es' : 'en');
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const val = t(key, null, el.textContent.trim());
+        const hasElementChildren = Array.from(el.children).some(c => c.tagName !== 'BR');
+        if (hasElementChildren) return; // icon buttons etc. — never wipe inner markup
+        el.textContent = val;
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+    });
+    // Models note has an embedded styled span — rebuild innerHTML.
+    const recoNote = document.getElementById('model-reco-note');
+    if (recoNote) {
+        const reco = '<span style="color: #ffd76a;">' + t('models.recommended') + '</span>';
+        recoNote.innerHTML = t('models.note', { reco, ram: systemRamGB ? `(${systemRamGB} GB)` : '' });
+    }
+    if (typeof applyModelRecommendation === 'function') applyModelRecommendation(null);
+    // live model dropdown + card re-render with new language
+    try {
+        if (typeof modelCatalog !== 'undefined' && modelCatalog && modelCatalog.length) {
+            buildModelDropdown();
+            renderModelCard();
+        }
+    } catch (e) { /* catalog may not be loaded yet */ }
+}
+function setUiLanguage(lang) {
+    applyI18n(lang);
+    applyModelRecommendation(null);
+}
+
 const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
 if (isSettingsWindow) document.body.classList.add('settings-window');
 
@@ -10,6 +78,7 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeModalBtn = document.getElementById('close-modal-btn');
 const apiKeyInput = document.getElementById('api-key-input');
+const uiLanguageSelect = document.getElementById('ui-language-select');
 const apiKeyNote = document.getElementById('api-key-note');
 const removeKeyBtn = document.getElementById('remove-key-btn');
 const canvas = document.getElementById('visualizer-canvas');
@@ -78,6 +147,7 @@ function playFinishChime() {
 
 // Minimal status indicator (dot + text)
 function setStatus(mode, text) {
+    text = tr(text);
     if (statusText.textContent !== text) {
         statusText.textContent = text;
     }
@@ -124,8 +194,8 @@ function modelForSelection() {
 }
 
 function formatDownloadSize(bytes) {
-    if (!bytes) return 'size pending';
-    return `${Math.round(bytes / (1024 * 1024))} MB download`;
+    if (!bytes) return t('model.sizePending');
+    return t('model.mbDownload', { mb: Math.round(bytes / (1024 * 1024)) });
 }
 
 function renderModelCard() {
@@ -146,7 +216,7 @@ function renderModelCard() {
         'fire-red-asr-ctc': 'FireRedASR2'
     };
     const backendLabel = backendLabels[model.backend] || model.name;
-    modelCardMeta.textContent = `${backendLabel} · auto language · ${formatDownloadSize(model.downloadBytes)} · ${model.ramEstimate || ''}`;
+    modelCardMeta.textContent = t('model.cardMeta', { backend: backendLabel, lang: t('model.language.auto'), size: formatDownloadSize(model.downloadBytes), ram: model.ramEstimate || '' });
     modelCardDesc.textContent = model.description;
     modelCardLicense.textContent = `License: ${model.license}`;
     if (model.verified === false) {
@@ -195,7 +265,7 @@ function renderModelCardAction(model) {
     const dlBtn = document.createElement('button');
     dlBtn.type = 'button';
     dlBtn.className = 'btn-save';
-    dlBtn.textContent = '📥 Download & Activate';
+    dlBtn.textContent = t('model.downloadActivate');
     dlBtn.style.cssText = 'padding: 7px 12px; font-size: 11px;';
     dlBtn.addEventListener('click', () => startModelDownload(model.key, dlBtn));
     modelCardAction.append(dlBtn);
@@ -226,20 +296,55 @@ const MODEL_TIER_LABELS = Object.freeze({
 let recommendedTier = 'light';
 let systemRamGB = null;
 
+function tierForLanguage(lang) {
+    // The user picks the UI language; the same language is their speech hint.
+    // Spanish/English -> nemo multilingual family (tiny/mini/big cover ES+EN).
+    // Chinese -> SenseVoice / FireRedASR2 family. Unknown -> RAM-based default.
+    if (lang === 'es') {
+        return (systemRamGB !== null && systemRamGB <= 4) ? 'tiny' : 'mini';
+    }
+    if (lang === 'zh') return 'zh-light';
+    return null; // en / auto: keep the RAM-based recommendation
+}
+
+function langRecoModelKey() {
+    const tr = tierForLanguage(uiLang);
+    if (!tr) return null;
+    const byTier = (modelCatalog || []).filter(m => m.tier === tr);
+    return byTier.length ? byTier[0].key : null;
+}
+
 function applyModelRecommendation(snapshot) {
     if (snapshot) {
         if (snapshot.recommendedTier) recommendedTier = snapshot.recommendedTier;
         if (typeof snapshot.systemRamGB === 'number') systemRamGB = snapshot.systemRamGB;
     }
+    const langTier = tierForLanguage(uiLang);
+    if (langTier) recommendedTier = langTier;
     const ramNote = document.getElementById('model-reco-ram');
     if (ramNote) ramNote.textContent = systemRamGB ? `(${systemRamGB} GB)` : '';
+    // Language-aware note: "For Spanish speech, we recommend: Mini (10 languages)."
+    const langNote = document.getElementById('model-lang-note');
+    if (langNote) {
+        const key = langRecoModelKey();
+        if (key) {
+            const model = (modelCatalog || []).find(m => m.key === key);
+            const name = model ? t('model.' + key + '.name', null, model.name) : key;
+            const langName = { es: 'Español', zh: '中文', en: 'English' }[uiLang] || 'English';
+            langNote.textContent = t('models.langNote', { lang: langName, model: name });
+            langNote.style.display = 'block';
+        } else {
+            langNote.style.display = 'none';
+        }
+    }
     if (modelDropdownPanel) buildModelDropdown();
 }
 
 function dropdownSubLabel(model) {
     const size = formatDownloadSize(model.downloadBytes);
-    const ram = String(model.ramEstimate || 'RAM estimate pending').trim();
-    return `${model.name} · ${size} · ${ram}`;
+    const ram = String(model.ramEstimate || t('model.sizePending')).trim();
+    const localizedName = t('model.' + model.key + '.name', null, model.name);
+    return `${localizedName} · ${size} · ${ram}`;
 }
 
 function buildModelDropdown() {
@@ -257,7 +362,7 @@ function buildModelDropdown() {
         main.className = 'mo-main';
         const name = document.createElement('span');
         name.className = 'mo-name';
-        name.textContent = lbl.name;
+        name.textContent = t('models.tier.' + model.tier, null, lbl.name);
         if (model.tier === recommendedTier) {
             const chip = document.createElement('span');
             chip.className = 'mo-chip';
@@ -390,6 +495,7 @@ document.addEventListener('pointerdown', (e) => {
     }
 
     const isMicContainer = micContainer.contains(e.target);
+    const isMicButton = micBtn.contains(e.target);
     const isSettingsModal = settingsModal.contains(e.target);
 
     if (isMicContainer || isSettingsModal) {
@@ -399,7 +505,9 @@ document.addEventListener('pointerdown', (e) => {
             startX: e.clientX,
             startY: e.clientY,
             moved: false,
-            isMicClick: isMicContainer,
+            // Quick press toggles recording ONLY on the actual mic circle —
+            // clicks on the transparent ring/margin area must pass through.
+            isMicClick: isMicButton,
             dragTarget
         };
         lastPointerEventTime = Date.now();
@@ -440,7 +548,7 @@ document.addEventListener('pointerup', (e) => {
     endPointerDrag();
     refreshMouseIgnore();
 
-    if (!wasDrag && isMicClick && micContainer.contains(e.target) && !settingsModal.classList.contains('active')) {
+    if (!wasDrag && isMicClick && !settingsModal.classList.contains('active')) {
         if (!isRecording) {
             startRecording();
         } else {
@@ -527,10 +635,13 @@ function refreshMouseIgnore() {
         topBar.classList.remove('visible');
     }
 
-    // While the cursor is anywhere over the widget it responds fully (click,
-    // drag, focus). Click-through only kicks in when the cursor leaves the
-    // window, so the widget never feels "dead" under the pointer.
-    const interactive = cursorInsideWindow;
+    // Click-through for transparent areas: only the VISIBLE interactive
+    // elements (mic circle, pill buttons, retry) capture the pointer.
+    // The invisible margins of the window let clicks pass through to the
+    // app underneath — no more "invisible window eats my clicks".
+    const hitEl = document.elementFromPoint(mouseX, mouseY);
+    const overInteractiveEl = !!(hitEl && (hitEl.closest('#mic-button') || hitEl.closest('.icon-btn') || hitEl.closest('#retry-btn')));
+    const interactive = overInteractiveEl || isSettingsOpen;
 
     document.body.classList.toggle('is-hovering', interactive);
 
@@ -600,6 +711,10 @@ ipcRenderer.on('widget-hover', (event, payload) => {
 ipcRenderer.on('settings-changed', (event, snapshot) => {
     currentSttConfig = snapshot;
     applyAppearanceSnapshot(snapshot);
+    // Live language switch: re-render the whole UI (widget + settings window).
+    if (typeof snapshot.uiLanguage === 'string' && snapshot.uiLanguage !== uiLang) {
+        setUiLanguage(snapshot.uiLanguage);
+    }
     if (isSettingsWindow) refreshSettingsUi(snapshot);
 });
 
@@ -896,8 +1011,8 @@ async function autoCalibrateNoiseFloor() {
 
     const noiseSamples = [];
     let sec = durationSec;
-    autoCalibrateBtn.textContent = `🤫 Listening… (${sec}s)`;
-    if (calibrateFeedback) calibrateFeedback.textContent = `Don't talk — just let the background noise play for ${durationSec} seconds…`;
+    autoCalibrateBtn.textContent = t('autostop.calibrate.listening', { s: sec });
+    if (calibrateFeedback) calibrateFeedback.textContent = t('autostop.calibrate.dontTalk', { s: durationSec });
     const countdown = setInterval(() => {
         sec--;
         if (sec > 0) autoCalibrateBtn.textContent = `🤫 Listening… (${sec}s)`;
@@ -1001,7 +1116,7 @@ function startHotkeyRecording() {
     if (!hotkeyInput || !recordHotkeyBtn) return;
     hotkeyInput.value = 'Press key or mouse btn...';
     hotkeyInput.style.borderColor = 'var(--primary)';
-    recordHotkeyBtn.textContent = 'Listening...';
+    recordHotkeyBtn.textContent = t('autostop.calibrate.listening', { s: '…' });
     
     ipcRenderer.invoke('start-recording-hotkey').then((newHotkeyStr) => {
         hotkeyInput.style.borderColor = 'rgba(255, 255, 255, 0.15)';
@@ -1024,8 +1139,10 @@ async function refreshSettingsUi(snapshot = null) {
     const sttConfig = snapshot || await ipcRenderer.invoke('get-stt-config');
     applyAppearanceSnapshot(sttConfig);
     currentSttConfig = sttConfig;
+    applyI18n(sttConfig.uiLanguage || 'en');
+    if (uiLanguageSelect) uiLanguageSelect.value = sttConfig.uiLanguage || 'en';
     const cachePath = document.getElementById('model-cache-path');
-    if (cachePath && sttConfig.modelCachePath) cachePath.textContent = `Cache: ${sttConfig.modelCachePath}`;
+    if (cachePath && sttConfig.modelCachePath) cachePath.textContent = `${t('models.cachePath')} (${sttConfig.modelCachePath})`;
     const apiStatus = await ipcRenderer.invoke('get-api-key-status');
 
     await loadHotkey();
@@ -1158,11 +1275,11 @@ async function startModelDownload(modelKey, triggerBtn) {
     activeDownloadKey = modelKey;
 
     modelDownloadProgress.style.display = 'block';
-    modelDownloadStatus.textContent = 'Starting download…';
+    modelDownloadStatus.textContent = t('model.downloadStarting');
     modelDownloadPct.textContent = '0%';
     modelDownloadBar.style.width = '0%';
     if (triggerBtn) triggerBtn.disabled = true;
-    modelCardStatus.textContent = '⬇ Downloading';
+    modelCardStatus.textContent = '⬇ ' + t('model.downloading');
     modelCardStatus.className = 'status-pill download-needed';
 
     const downloadStats = {};
@@ -1180,14 +1297,14 @@ async function startModelDownload(modelKey, triggerBtn) {
                 const pct = Math.min(100, Math.round((totalLoaded / totalSize) * 100));
                 modelDownloadBar.style.width = `${pct}%`;
                 modelDownloadPct.textContent = `${pct}%`;
-                modelDownloadStatus.textContent = `Downloading… ${(totalLoaded / 1048576).toFixed(1)} / ${(totalSize / 1048576).toFixed(1)} MB`;
+                modelDownloadStatus.textContent = t('model.downloading2', { a: (totalLoaded / 1048576).toFixed(1), b: (totalSize / 1048576).toFixed(1) });
             }
         } else if (data.status === 'extracting') {
-            modelDownloadStatus.textContent = 'Extracting & verifying…';
+            modelDownloadStatus.textContent = t('model.extracting');
             modelDownloadBar.style.width = '100%';
             modelDownloadPct.textContent = '…';
         } else if (data.status === 'verified') {
-            modelDownloadStatus.textContent = 'Verified ✓';
+            modelDownloadStatus.textContent = t('model.verified');
         }
     };
 
@@ -1205,7 +1322,7 @@ async function startModelDownload(modelKey, triggerBtn) {
             silenceThreshold: parseInt(silenceThresholdSlider ? silenceThresholdSlider.value : 12) || 12,
             ecoMode: document.getElementById('eco-mode-checkbox').checked
         });
-        modelDownloadStatus.textContent = 'Installed ✓';
+        modelDownloadStatus.textContent = t('model.installed');
         modelDownloadPct.textContent = '100%';
         modelDownloadBar.style.width = '100%';
         setStatus('done', '✓ MODEL READY');
@@ -1221,10 +1338,10 @@ async function startModelDownload(modelKey, triggerBtn) {
             setTimeout(closeSettings, 1200);
         }
     } else {
-        modelDownloadStatus.textContent = `Download failed — ${friendlyDownloadError(res.error)}`;
+        modelDownloadStatus.textContent = t('model.downloadFailed', { err: friendlyDownloadError(res.error) });
         modelDownloadBar.style.width = '0%';
         modelDownloadPct.textContent = '—';
-        modelCardStatus.textContent = '⚠️ Retry';
+        modelCardStatus.textContent = t('model.retry');
         modelCardStatus.className = 'status-pill download-needed';
         renderModelCardAction(modelForSelection());
     }
@@ -1260,6 +1377,7 @@ function autoSaveSettings() {
 
             const saved = await ipcRenderer.invoke('save-stt-config', {
                 sttEngine: engine,
+                uiLanguage: uiLanguageSelect ? uiLanguageSelect.value : uiLang,
                 localTier,
                 localLanguage: 'auto',
                 autoStopEnabled,
@@ -1307,6 +1425,7 @@ async function initializeRenderer() {
     await loadModelCatalog();
     const snapshot = await ipcRenderer.invoke('get-stt-config');
     applyAppearanceSnapshot(snapshot);
+    applyI18n(snapshot.uiLanguage || 'en');
     if (isSettingsWindow) {
         settingsModal.classList.add('active');
         await refreshSettingsUi(snapshot);
@@ -1337,7 +1456,7 @@ function drawVisualizer() {
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const baseRadius = 31;
+    const baseRadius = 29;
 
     let dataArray = null;
     let bufferLength = 0;
@@ -1514,9 +1633,10 @@ async function startRecording() {
     if (isRecording || isStartingRecording || micBtn.classList.contains('transcribing')) return;
     isStartingRecording = true;
     const sessionId = ++recordingSessionId;
-    // A new recording supersedes any previous failed one — free its memory.
+    // A new recording supersedes any previous one — free its memory.
     lastAudio = null;
     hideRetryButton();
+    refreshRetranscribeBtn();
     let stream = null;
     try {
         stopSettingsMicPreview();
@@ -1637,6 +1757,7 @@ async function startRecording() {
                         isStartingRecording = false;
                         micBtn.classList.remove('transcribing');
                         micContainer.classList.remove('transcribing');
+                        refreshRetranscribeBtn();
                         setStatus('err', 'MIC TOO QUIET');
                         setTimeout(hideStatus, 3500);
                         return;
@@ -1645,13 +1766,15 @@ async function startRecording() {
                         engine: 'local',
                         modelKey: sttConfig.localModelKey,
                         pcm: float32Pcm.buffer,
-                        sampleRate: 16000
+                        sampleRate: 16000,
+                        uiLanguage: uiLang
                     });
                 } else {
                     result = await ipcRenderer.invoke('transcribe-audio', {
                         engine: 'gemini',
                         arrayBuffer: await audioBlob.arrayBuffer(),
-                        mimeType: mimeType || 'audio/webm'
+                        mimeType: mimeType || 'audio/webm',
+                        uiLanguage: uiLang
                     });
                 }
 
@@ -1661,8 +1784,11 @@ async function startRecording() {
                 isStartingRecording = false;
 
                 if (result.success) {
-                    lastAudio = null;
+                    // Keep the audio in memory so the re-transcribe (↻) button
+                    // can run it again with a different model/engine. Freed on
+                    // the next recording or cancel.
                     hideRetryButton();
+                    refreshRetranscribeBtn();
                     micBtn.classList.add('show-check');
                     setTimeout(() => micBtn.classList.remove('show-check'), 1200);
                     log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
@@ -1671,7 +1797,7 @@ async function startRecording() {
                     if (!currentSttConfig || currentSttConfig.playFinishSound !== false) playFinishChime();
                 } else {
                     log(`[render] transcribe FAIL | code: ${result.code} | err: ${result.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
-                    const status = result.code === 'NO_SPEECH' ? 'NO SPEECH' : (result.code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (result.code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
+                    const status = result.code === 'NO_SPEECH' ? t('status.NO_SPEECH') : (result.code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (result.code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
                     setStatus('err', status);
                     if (isRetryableFailure(result.code)) {
                         showRetryButton();
@@ -1680,6 +1806,7 @@ async function startRecording() {
                         lastAudio = null;
                         setTimeout(hideStatus, 3000);
                     }
+                    refreshRetranscribeBtn();
                 }
             } catch (error) {
                 if (sessionId !== recordingSessionId) return;
@@ -1688,6 +1815,7 @@ async function startRecording() {
                 micContainer.classList.remove('transcribing');
                 setStatus('err', 'ERROR');
                 if (lastAudio) showRetryButton();
+                refreshRetranscribeBtn();
                 setTimeout(hideStatus, 4000);
             }
         };
@@ -1776,6 +1904,7 @@ function cancelRecording() {
     audioChunks = [];
     lastAudio = null;
     hideRetryButton();
+    refreshRetranscribeBtn();
     stopRecordingCore(true);
 }
 
@@ -1803,58 +1932,87 @@ function hideRetryButton() {
     refreshMouseIgnore();
 }
 
-if (retryBtn) {
-    retryBtn.addEventListener('click', async () => {
-        if (!lastAudio || isRecording) return;
-        hideRetryButton();
-        const audio = lastAudio;
-        micBtn.classList.add('transcribing');
-        micContainer.classList.add('transcribing');
-        setStatus('busy', 'TRANSCRIBING');
+async function retranscribeLast() {
+    if (!lastAudio || isRecording || isStartingRecording) return;
+    hideRetryButton();
+    const audio = lastAudio;
+    micBtn.classList.add('transcribing');
+    micContainer.classList.add('transcribing');
+    setStatus('busy', 'TRANSCRIBING');
 
-        let result;
-        try {
-            const cfg = await ipcRenderer.invoke('get-stt-config');
-            currentSttConfig = cfg;
-            if (cfg.sttEngine === 'local') {
-                result = await ipcRenderer.invoke('transcribe-audio', {
-                    engine: 'local',
-                    modelKey: cfg.localModelKey,
-                    pcm: audio.pcm.buffer,
-                    sampleRate: 16000
-                });
-            } else {
-                result = await ipcRenderer.invoke('transcribe-audio', {
-                    engine: 'gemini',
-                    arrayBuffer: await audio.blob.arrayBuffer(),
-                    mimeType: audio.mimeType
-                });
-            }
-        } catch (error) {
-            result = { success: false, code: 'TRANSCRIPTION_ERROR', error: String(error) };
-        }
-
-        micBtn.classList.remove('transcribing');
-        micContainer.classList.remove('transcribing');
-
-        if (result && result.success) {
-            lastAudio = null;
-            micBtn.classList.add('show-check');
-            setTimeout(() => micBtn.classList.remove('show-check'), 1200);
-            log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
-            setStatus('done', '✓ COPIED');
-            setTimeout(hideStatus, 1600);
+    let result;
+    try {
+        const cfg = await ipcRenderer.invoke('get-stt-config');
+        currentSttConfig = cfg;
+        if (cfg.sttEngine === 'local') {
+            result = await ipcRenderer.invoke('transcribe-audio', {
+                engine: 'local',
+                modelKey: cfg.localModelKey,
+                pcm: audio.pcm.buffer,
+                sampleRate: 16000,
+                uiLanguage: uiLang
+            });
         } else {
-            const code = result?.code || 'ERROR';
-            log(`[render] transcribe FAIL(retry) | code: ${code} | err: ${result?.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
-            const status = code === 'NO_SPEECH' ? 'NO SPEECH' : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : (code === 'RATE_LIMITED' ? 'RATE LIMIT' : 'ERROR')));
-            setStatus('err', status);
-            if (isRetryableFailure(code)) {
-                showRetryButton();
-            } else {
-                lastAudio = null;
-            }
+            result = await ipcRenderer.invoke('transcribe-audio', {
+                engine: 'gemini',
+                arrayBuffer: await audio.blob.arrayBuffer(),
+                mimeType: audio.mimeType,
+                uiLanguage: uiLang
+            });
         }
+    } catch (error) {
+        result = { success: false, code: 'TRANSCRIPTION_ERROR', error: String(error) };
+    }
+
+    micBtn.classList.remove('transcribing');
+    micContainer.classList.remove('transcribing');
+
+    if (result && result.success) {
+        micBtn.classList.add('show-check');
+        setTimeout(() => micBtn.classList.remove('show-check'), 1200);
+        log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
+        setStatus('done', '✓ COPIED');
+        setTimeout(hideStatus, 1600);
+    } else {
+        const code = result?.code || 'ERROR';
+        log(`[render] transcribe FAIL(retry) | code: ${code} | err: ${result?.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
+        const status = code === 'NO_SPEECH' ? t('status.NO_SPEECH') : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : (code === 'RATE_LIMITED' ? 'RATE LIMIT' : 'ERROR')));
+        setStatus('err', status);
+        if (isRetryableFailure(code)) {
+            showRetryButton();
+        } else {
+            lastAudio = null;
+        }
+    }
+    refreshRetranscribeBtn();
+}
+
+// The ↻ top-bar button re-runs the LAST transcription (even a successful one).
+const retranscribeBtn = document.getElementById('retranscribe-btn');
+function refreshRetranscribeBtn() {
+    if (!retranscribeBtn) return;
+    const has = !!(lastAudio && !isRecording && !isStartingRecording);
+    retranscribeBtn.style.display = has ? 'flex' : 'none';
+    if (has) refreshMouseIgnore();
+}
+if (retranscribeBtn) {
+    retranscribeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        retranscribeBtn.style.display = 'none';
+        await retranscribeLast();
+    });
+    setInterval(refreshRetranscribeBtn, 700);
+}
+
+if (retryBtn) {
+    retryBtn.addEventListener('click', () => retranscribeLast());
+}
+
+// UI language picker — applies instantly (offline), re-saves config.
+if (uiLanguageSelect) {
+    uiLanguageSelect.addEventListener('change', () => {
+        setUiLanguage(uiLanguageSelect.value);
+        autoSaveSettings();
     });
 }
 

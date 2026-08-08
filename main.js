@@ -8,6 +8,40 @@ const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } =
 const { getModelKey } = require('./stt/model-registry');
 const win32 = require('./win32');
 
+// ─── i18n (offline, bundled locales — same files the renderer uses) ───────
+const LOCALES = {
+    en: require('./locales/en.json'),
+    es: require('./locales/es.json'),
+    zh: require('./locales/zh.json')
+};
+function mapUiLanguage(localeStr) {
+    const l = String(localeStr || '').toLowerCase();
+    if (l.startsWith('es')) return 'es';
+    if (l.startsWith('zh')) return 'zh';
+    return 'en';
+}
+function uiLang() {
+    const c = loadConfigSafe();
+    if (c && typeof c.uiLanguage === 'string' && LOCALES[c.uiLanguage]) return c.uiLanguage;
+    return mapUiLanguage(app.getLocale());
+}
+function L(key, vars) {
+    const lang = uiLang();
+    let v = (LOCALES[lang] || LOCALES.en)[key];
+    if (v === undefined || v === null) v = LOCALES.en[key];
+    if (v === undefined || v === null) v = key;
+    v = String(v);
+    if (vars) for (const k of Object.keys(vars)) v = v.split('{' + k + '}').join(String(vars[k]));
+    return v;
+}
+let _configLoaded = false;
+function loadConfigSafe() {
+    try {
+        if (!fs.existsSync(configPath)) return {};
+        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) { return {}; }
+}
+
 // Gemini failover ladder (best → worst). Models that hit a daily rate limit
 // get a 24h cooldown persisted in config so restarts still skip them.
 const GEMINI_MODEL_LADDER = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
@@ -90,12 +124,16 @@ async function migrateLegacyUserData() {
 function loadConfig() {
     try {
         if (fs.existsSync(configPath)) {
-            return migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
+            const cfg = migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
+            if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
+            return cfg;
         }
     } catch (e) {
         console.error("Failed to load config:", e.message || e);
     }
-    return migrateConfig({});
+    const cfg = migrateConfig({});
+    if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
+    return cfg;
 }
 
 function saveConfig(data) {
@@ -136,6 +174,7 @@ async function getSettingsSnapshot() {
         idleFadeEnabled: config.idleFadeEnabled !== false,
         idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
         geminiModel: config.geminiModel || 'gemini-2.5-flash',
+        uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage] ? config.uiLanguage : mapUiLanguage(app.getLocale()),
         systemRamGB: systemRamGB(),
         recommendedTier: recommendedTierForRam(systemRamGB()),
         playFinishSound: config.playFinishSound !== false
@@ -143,6 +182,7 @@ async function getSettingsSnapshot() {
 }
 
 async function broadcastSettingsChanged() {
+    if (tray) tray.setContextMenu(trayMenuForState(loadConfig().alwaysOnTop !== false));
     const snapshot = await getSettingsSnapshot();
     for (const window of [mainWindow, settingsWindow]) {
         if (window && !window.isDestroyed()) window.webContents.send('settings-changed', snapshot);
@@ -229,7 +269,7 @@ function createSettingsWindow() {
         minHeight: 520,
         parent: mainWindow,
         modal: false,
-        title: 'VoiceToClipboard Settings',
+        title: L('settingsWindow.title'),
         frame: false,
         backgroundColor: '#0e0f14',
         autoHideMenuBar: true,
@@ -271,18 +311,18 @@ function sanitizeErrorMessage(err) {
 function trayMenuForState(alwaysOnTop) {
     return Menu.buildFromTemplate([
         {
-            label: '🎙️ Toggle Recording (Ctrl+Alt+V)',
+            label: L('tray.toggle'),
             click: () => {
                 if (mainWindow) mainWindow.webContents.send('toggle-recording');
             }
         },
         {
-            label: '⚙️ Settings / API Key',
+            label: L('tray.settings'),
             click: () => showSettingsWindow()
         },
         { type: 'separator' },
         {
-            label: '📌 Always on Top',
+            label: L('tray.alwaysOnTop'),
             type: 'checkbox',
             checked: alwaysOnTop,
             click: item => {
@@ -294,7 +334,7 @@ function trayMenuForState(alwaysOnTop) {
         },
         { type: 'separator' },
         {
-            label: '❌ Quit',
+            label: L('tray.quit'),
             click: () => app.quit()
         }
     ]);
@@ -310,7 +350,7 @@ function createTray() {
         icon = nativeImage.createFromDataURL('data:image/png;base64,' + iconBase64);
     }
     tray = new Tray(icon);
-    tray.setToolTip('VoiceToClipboard (Ctrl+Alt+V)');
+    tray.setToolTip(L('tray.tooltip'));
 
     tray.setContextMenu(trayMenuForState(loadConfig().alwaysOnTop !== false));
 
@@ -505,28 +545,51 @@ app.on('window-all-closed', () => {
 // ─── Space-to-paste bubble (v3 prototype) ───────────────────────────────────
 // Tracks the last non-widget foreground window, then after a transcription
 // shows a tiny bubble near it: SPACE = paste into that window, ESC = dismiss.
+// Show the START of the transcript, an ellipsis, then the END — the bubble
+// stays small even for minutes of dictation, and the user can verify both
+// the beginning and the last words before pasting.
+function clipTranscript(text, head = 110, tail = 70) {
+    const s = String(text || '').trim();
+    if (s.length <= head + tail + 4) return s;
+    let h = s.slice(0, head);
+    const hs = h.lastIndexOf(' ');
+    if (hs > head * 0.6) h = h.slice(0, hs);
+    let tl = s.slice(-tail);
+    const ts = tl.indexOf(' ');
+    if (ts !== -1 && ts < tail * 0.4) tl = tl.slice(ts + 1);
+    return `${h}…${tl}`;
+}
+
 const BUBBLE_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body { margin:0; font-family:'Segoe UI',sans-serif; background:rgba(22,22,26,0.97); color:#eee; border-radius:12px; overflow:hidden; }
-.wrap { padding:16px 22px; box-sizing:border-box; }
-.head { font-size:12px; color:#7ee787; font-weight:600; margin-bottom:5px; }
-.text { font-size:13px; color:#ddd; max-height:48px; overflow:hidden; word-break:break-word; margin-bottom:9px; line-height:1.35; }
-.hint { font-size:12.5px; color:#9aa; white-space:nowrap; }
-.hint b { background:rgba(126,231,135,0.16); color:#7ee787; padding:1px 7px; border-radius:5px; font-weight:600; }
-.hint .esc { background:rgba(255,255,255,0.08); color:#bbb; padding:1px 7px; border-radius:5px; font-weight:600; }
-</style></head><body><div class="wrap">
-<div class="head">✓ Transcribed</div>
+body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:transparent; }
+.card {
+  margin:0; background:rgba(18,18,24,0.97); color:#eee;
+  border:1px solid rgba(255,255,255,0.13); border-radius:14px;
+  box-shadow:0 10px 34px rgba(0,0,0,0.55), 0 0 0 1px rgba(230,57,70,0.08);
+  backdrop-filter:blur(18px) saturate(160%); -webkit-backdrop-filter:blur(18px) saturate(160%);
+  overflow:hidden; box-sizing:border-box; width:100%; height:100%;
+}
+.wrap { padding:13px 17px 12px; box-sizing:border-box; }
+.head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.dot { width:7px; height:7px; border-radius:50%; background:#10b981; box-shadow:0 0 9px rgba(16,185,129,0.9); flex:0 0 auto; }
+.title { font-size:11.5px; color:#e9e9ee; font-weight:600; letter-spacing:0.02em; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.key { font-size:10.5px; color:#ff97a0; background:rgba(230,57,70,0.16); border:1px solid rgba(230,57,70,0.4); padding:2px 9px; border-radius:999px; font-weight:700; letter-spacing:0.06em; white-space:nowrap; }
+.text { font-size:12.5px; color:#cfcfd8; line-height:1.45; max-height:37px; overflow:hidden; word-break:break-word; }
+</style></head><body><div class="card"><div class="wrap">
+<div class="head"><span class="dot"></span><span class="title" id="title">✓ Transcribed</span><span class="key" id="key-hint">SPACE</span></div>
 <div class="text" id="t"></div>
-<div class="hint"><b id="key-hint">SPACE</b> to paste</div>
-</div><script>
+</div></div><script>
 const { ipcRenderer } = require('electron');
 const el = document.getElementById('t');
 const keyHint = document.getElementById('key-hint');
+const titleEl = document.getElementById('title');
 let pasteKey = ' ';
 ipcRenderer.on('bubble-set-text', (e, payload) => {
     const data = (typeof payload === 'string') ? { text: payload } : (payload || {});
     el.textContent = data.text || '';
     if (data.key) pasteKey = data.key;
     if (data.keyLabel) keyHint.textContent = data.keyLabel;
+    if (data.title) titleEl.textContent = data.title;
 });
 window.addEventListener('keydown', (e) => {
     if (e.key === pasteKey || e.key === 'Enter') { e.preventDefault(); ipcRenderer.send('bubble-paste'); }
@@ -555,7 +618,7 @@ setInterval(() => {
 function ensureBubbleWindow() {
     if (bubbleWindow && !bubbleWindow.isDestroyed()) return;
     bubbleWindow = new BrowserWindow({
-        width: 330, height: 98, show: false, frame: false, resizable: false,
+        width: 360, height: 96, show: false, frame: false, resizable: false,
         alwaysOnTop: true, skipTaskbar: true, focusable: true, hasShadow: true,
         transparent: true,
         webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
@@ -565,14 +628,14 @@ function ensureBubbleWindow() {
     bubbleWindow.webContents.on('did-finish-load', () => {
         if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
             const _k = loadConfig().pasteKey || ' ';
-            bubbleWindow.webContents.send('bubble-set-text', { text: bubblePendingText, key: _k, keyLabel: _k === ' ' ? 'SPACE' : _k.toUpperCase() });
+            bubbleWindow.webContents.send('bubble-set-text', { text: clipTranscript(bubblePendingText), key: _k, keyLabel: _k === ' ' ? 'SPACE' : _k.toUpperCase(), title: L('bubble.title') });
         }
     });
     bubbleWindow.on('closed', () => { bubbleWindow = null; });
 }
 
 function positionBubbleNear(hwnd) {
-    const W = 330, H = 98;
+    const W = 360, H = 96;
     // Anchor to the WORK AREA (excludes the taskbar) of the display under the
     // cursor, with generous padding so the bubble never hugs the screen edge
     // or hides underneath the Windows taskbar. Everything here is DIP-native
@@ -606,9 +669,9 @@ function maybeShowPasteToast(text) {
     if (!clean) return;
     if (pasteToast) { try { pasteToast.close(); } catch (e) { /* ignore */ } }
     const t = new Notification({
-        title: '✓ Transcribed',
-        body: 'Click to paste into the previous window',
-        actions: [{ type: 'button', text: 'Paste' }],
+        title: L('toast.title'),
+        body: clipTranscript(clean, 130, 90) + ' — ' + L('toast.body'),
+        actions: [{ type: 'button', text: L('toast.action') }],
         silent: true
     });
     pasteToast = t;
@@ -636,7 +699,7 @@ function maybeShowPasteBubble(text) {
     } else {
         const _pasteKey = loadConfig().pasteKey || ' ';
             const _keyLabel = _pasteKey === ' ' ? 'SPACE' : _pasteKey.toUpperCase();
-            bubbleWindow.webContents.send('bubble-set-text', { text: bubbleText, key: _pasteKey, keyLabel: _keyLabel });
+            bubbleWindow.webContents.send('bubble-set-text', { text: clipTranscript(bubbleText), key: _pasteKey, keyLabel: _keyLabel, title: L('bubble.title') });
     }
     bubbleWindow.show();
     bubbleWindow.focus();
@@ -672,7 +735,7 @@ if (process.env.VTC_SHOW_BUBBLE === '1') {
 // Startup diagnostic — helps debug from app.log (userData dir, works packaged).
 {
     const c = loadConfig();
-    logApp(`[main] diag-v4 | engine: ${c.sttEngine} | localTier: ${c.localTier || '?'} | model: ${c.localModelKey || '?'} | threshold: ${c.silenceThreshold} | autoStop: ${c.autoStopEnabled} (${c.autoStopSeconds}s) | spacePaste: ${JSON.stringify(c.spacePaste)} | pasteStyle: ${c.pasteStyle || 'bubble'} | pasteKey: ${JSON.stringify(c.pasteKey)} | win32: ${typeof win32 !== 'undefined' && win32.available ? 'yes' : 'no'} | cfg exists: ${fs.existsSync(configPath)}`);
+    logApp(`[main] diag-v4 | engine: ${c.sttEngine} | localTier: ${c.localTier || '?'} | model: ${c.localModelKey || '?'} | threshold: ${c.silenceThreshold} | autoStop: ${c.autoStopEnabled} (${c.autoStopSeconds}s) | spacePaste: ${JSON.stringify(c.spacePaste)} | pasteStyle: ${c.pasteStyle || 'bubble'} | pasteKey: ${JSON.stringify(c.pasteKey)} | uiLang: ${uiLang()} | win32: ${typeof win32 !== 'undefined' && win32.available ? 'yes' : 'no'} | cfg exists: ${fs.existsSync(configPath)}`);
 }
 
 
@@ -736,7 +799,11 @@ const sttService = new SttService({
                             model,
                             contents: [
                                 { inlineData: { data: buffer.toString('base64'), mimeType } },
-                                'Strict speech-to-text. Output ONLY the exact words spoken in the audio, verbatim. Never add, remove, explain, or respond. If there is no speech, output nothing.'
+                                (uiLang() === 'es'
+                                    ? 'Transcripción estricta de voz a texto. Devuelve SOLO las palabras exactas del audio, palabra por palabra, manteniendo los préstamos de otros idiomas (por ejemplo, palabras en inglés dentro de una frase en español) tal cual. Nunca añadas, corrijas, expliques ni respondas. Si no hay voz, no devuelvas nada.'
+                                    : uiLang() === 'zh'
+                                        ? '严格的语音转文字。只输出音频中说出的话，逐字逐句，保持中英文混说（例如中文句子里的英文单词）原样不变。不要添加、删除、解释或回应任何内容。如果没有语音，则不输出任何内容。'
+                                        : 'Strict speech-to-text. Output ONLY the exact words spoken in the audio, verbatim, preserving code-switched words from other languages exactly as spoken. Never add, remove, explain, or respond. If there is no speech, output nothing.')
                             ]
                         });
                         const transcript = (response.text ?? '').trim();
@@ -825,7 +892,8 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
         pasteKey: typeof settings.pasteKey === 'string' && settings.pasteKey.length > 0 && settings.pasteKey.length <= 12
             ? settings.pasteKey
             : (typeof existing.pasteKey === 'string' && existing.pasteKey.length <= 12 ? existing.pasteKey : ' '),
-        playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false
+        playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false,
+        uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(app.getLocale()))
     });
 
     if (!success) return { success: false };
@@ -999,7 +1067,8 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
                 modelKey: request.modelKey || config.localModelKey,
                 pcm: request.pcm,
                 sampleRate: request.sampleRate || 16000,
-                ecoMode: config.ecoMode !== false
+                ecoMode: config.ecoMode !== false,
+                uiLanguage: request.uiLanguage || uiLang()
             });
             logApp(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
             return r;
@@ -1013,7 +1082,8 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
         const r = await sttService.transcribe({
             engine: 'gemini',
             arrayBuffer: request?.arrayBuffer || request,
-            mimeType: request?.mimeType || 'audio/webm'
+            mimeType: request?.mimeType || 'audio/webm',
+            uiLanguage: request.uiLanguage || uiLang()
         });
         logApp(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
         return r;

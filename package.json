@@ -68,7 +68,8 @@
       "renderer.js",
       "stt/**/*",
       "package.json",
-      "build/**/*"
+      "build/**/*",
+      "locales/**/*"
     ],
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

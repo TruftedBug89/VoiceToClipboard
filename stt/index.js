@@ -93,12 +93,12 @@ class SttService {
         await this.cache.removeStaleModels(Object.keys(this.registry));
     }
 
-    async transcribeLocal({ modelKey, pcm, sampleRate, ecoMode }) {
+    async transcribeLocal({ modelKey, pcm, sampleRate, ecoMode, uiLanguage }) {
         const model = getModel(modelKey);
         if (!model.verified) throw new Error(model.unavailableReason || 'This model is not available.');
         if (!(await this.cache.isInstalled(modelKey))) throw new Error('Model weights are not downloaded yet.');
         const adapter = model.backend === 'vosk' ? this.vosk : this.sherpa;
-        const text = await adapter.transcribe(modelKey, pcm, sampleRate);
+        const text = await adapter.transcribe(modelKey, pcm, sampleRate, { uiLanguage });
         if (ecoMode !== false) await adapter.unload();
         return text;
     }
@@ -117,7 +117,8 @@ class SttService {
                     modelKey: request.modelKey,
                     pcm,
                     sampleRate: request.sampleRate || 16000,
-                    ecoMode: request.ecoMode
+                    ecoMode: request.ecoMode,
+                    uiLanguage: request.uiLanguage
                 });
                 if (!text) return { success: false, code: 'NO_SPEECH', error: 'No speech detected.' };
                 this.copyText(text);

@@ -15,8 +15,14 @@ class SherpaAdapter {
     }
 
     async load(modelKey) {
-        if (this.loaded?.modelKey === modelKey) return this.loaded;
-        await this.unload();
+        if (this.loaded?.modelKey === modelKey) {
+            // If the language hint changed (UI language switched), rebuild the
+            // recognizer so SenseVoice picks up the new language.
+            if (this.loaded.langHint === this._senseVoiceLanguage) return this.loaded;
+            await this.unload();
+        } else {
+            await this.unload();
+        }
         const modelPath = await this.cache.getInstalledPath(modelKey);
         if (!modelPath) throw new Error('Model weights are not downloaded yet.');
 
@@ -87,7 +93,7 @@ class SherpaAdapter {
                 modelConfig: {
                     senseVoice: {
                         model: getRequiredPath(modelPath, 'model.int8.onnx'),
-                        language: 'auto',
+                        language: this._senseVoiceLanguage || 'auto',
                         useInverseTextNormalization: 1
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
@@ -127,7 +133,7 @@ class SherpaAdapter {
         }
 
         const recognizer = await sherpa.OfflineRecognizer.createAsync(config);
-        this.loaded = { modelKey, recognizer, modelPath };
+        this.loaded = { modelKey, recognizer, modelPath, langHint: this._senseVoiceLanguage };
         return this.loaded;
     }
 
@@ -136,7 +142,12 @@ class SherpaAdapter {
         this.loaded = null;
     }
 
-    async transcribe(modelKey, pcm, sampleRate = 16000) {
+    async transcribe(modelKey, pcm, sampleRate = 16000, opts = {}) {
+        // Language hint from the UI language (SenseVoice supports zh/en/yue/ja/ko).
+        if (opts && opts.uiLanguage) {
+            const langMap = { zh: 'zh', en: 'en', es: 'auto', ja: 'ja', ko: 'ko' };
+            this._senseVoiceLanguage = langMap[opts.uiLanguage] || 'auto';
+        }
         const samples = validatePcm(pcm, sampleRate);
         const loaded = await this.load(modelKey);
         const stream = loaded.recognizer.createStream();

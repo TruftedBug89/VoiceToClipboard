@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob: https://aistudio.google.com;">
-    <title>VoiceToClipboard</title>
-    <style>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="default-src 'self' 'unsafe-inline' data: blob: https://aistudio.google.com;" http-equiv="Content-Security-Policy"/>
+<title>VoiceToClipboard</title>
+<style>
         :root {
             --primary: #e63946;
             --primary-hover: #ff4d4d;
@@ -120,12 +120,12 @@
         /* Mic Button Wrapper with Visualizer Canvas */
         #mic-container {
             position: relative;
-            margin-top: 54px;
+            margin-top: 25px;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 90px;
-            height: 90px;
+            width: 150px;
+            height: 150px;
             cursor: grab;
             animation: widget-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
             transition: opacity 0.35s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -148,8 +148,8 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 90px;
-            height: 90px;
+            width: 150px;
+            height: 150px;
             pointer-events: none;
         }
 
@@ -225,8 +225,8 @@
         /* Soft red aura behind the button */
         #mic-aura {
             position: absolute;
-            top: 15px;
-            left: 15px;
+            top: 45px;
+            left: 45px;
             width: 60px;
             height: 60px;
             border-radius: 50%;
@@ -252,8 +252,8 @@
         /* Sonar rings radiating while recording */
         .sonar-ring {
             position: absolute;
-            top: 15px;
-            left: 15px;
+            top: 45px;
+            left: 45px;
             width: 60px;
             height: 60px;
             border-radius: 50%;
@@ -278,8 +278,8 @@
         /* Rotating conic indicator ring */
         .spin-ring {
             position: absolute;
-            top: 8px;
-            left: 8px;
+            top: 38px;
+            left: 38px;
             width: 74px;
             height: 74px;
             border-radius: 50%;
@@ -451,7 +451,7 @@
         /* Minimal status indicator */
         #status-badge {
             position: absolute;
-            top: 150px;
+            top: 158px;
             left: 50%;
             transform: translateX(-50%) translateY(-4px) scale(0.9);
             display: flex;
@@ -1360,297 +1360,290 @@
 </style>
 </head>
 <body>
-    <!-- Top Action Buttons (Settings, Stop/Cancel, Close) -->
-    <div id="top-bar">
-        <div class="icon-btn" id="settings-btn" title="Settings (STT Engine / Keys)">⚙️</div>
-        <div class="icon-btn" id="cancel-btn" title="Cancel Recording (Esc)">■</div>
-        <div class="icon-btn" id="close-btn" title="Quit App">✕</div>
-    </div>
-
-    <!-- Mic Button & Audio Visualizer Canvas -->
-    <div id="mic-container">
-        <div id="mic-aura"></div>
-        <canvas id="visualizer-canvas" width="90" height="90"></canvas>
-        <div class="sonar-ring ring-1"></div>
-        <div class="sonar-ring ring-2"></div>
-        <div class="sonar-ring ring-3"></div>
-        <div class="spin-ring"></div>
-        <div id="mic-button" title="Click to record · Click again to submit · Drag to move · Ctrl+Alt+V">
-            <svg id="mic-icon" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-            <svg id="submit-icon" viewBox="0 0 24 24">
-                <path d="M5 12.5l4.5 4.5L19 7.5"/>
-            </svg>
-            <svg id="check-icon" viewBox="0 0 24 24">
-                <path d="M5 12.5l4.5 4.5L19 7.5"/>
-            </svg>
-            <div class="burst-ring"></div>
-        </div>
-    </div>
-
-    <!-- Minimal Status Indicator -->
-    <div id="status-badge" role="status" aria-live="polite" aria-atomic="true">
-        <div class="rec-dot" id="status-dot"></div>
-        <span id="status-text">REC</span>
-    </div>
-
-    <!-- Transcribe Again: appears only when the last transcription failed -->
-    <button id="retry-btn" type="button" title="Transcribe the last recording again with the current engine">↻ Transcribe Again</button>
-
-    <!-- In-App Settings Modal -->
-    <div id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <div class="modal-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div style="display: flex; flex-direction: column; line-height: 1.25;">
-                    <span id="settings-title">Settings</span>
-                    <span style="font-size: 9.5px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.05em;">VoiceToClipboard</span>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-                <div class="icon-btn window-ctl" id="close-modal-btn" title="Close Settings">✕</div>
-            </div>
-        </div>
-
-        <div class="modal-body">
-            <div class="settings-section">
-            <div class="settings-section-title"><span>Recording</span></div>
-            <!-- Global Recording Hotkey -->
-            <div class="input-group">
-                <label for="hotkey-input">Global Recording Hotkey</label>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="text" id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly style="flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15);" />
-                    <button class="btn-secondary" id="record-hotkey-btn" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Change Key</button>
-                </div>
-                <div id="hotkey-note" style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Click input or Change Key, then press key combination.</div>
-            </div>
-            
-            <!-- Always on Top Toggle -->
-            <div class="input-group">
-                <div class="switch-row">
-                    <label class="switch-label" for="always-on-top-checkbox">📌 Always on Top</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="always-on-top-checkbox" checked />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Finish Sound Toggle -->
-            <div class="input-group">
-                <div class="switch-row">
-                    <label class="switch-label" for="finish-sound-checkbox">🔔 Sound when transcription finishes</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="finish-sound-checkbox" checked />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
-            </div>
-
-            </div>
-            <div class="settings-section">
-            <div class="settings-section-title"><span>Speech Engine</span></div>
-            <!-- STT Engine Selector -->
-            <div class="input-group">
-                <label>STT Engine</label>
-                <div class="segmented-control">
-                    <div class="segment-btn active" id="engine-btn-local" role="button" tabindex="0" aria-pressed="true">Offline Models</div>
-                    <div class="segment-btn" id="engine-btn-gemini" role="button" tabindex="0" aria-pressed="false">Gemini API</div>
-                </div>
-            </div>
-
-            <!-- Local Model Selector -->
-            <div class="input-group" id="local-model-group" style="display: none;">
-                <label for="local-tier-select">Offline Local Models</label>
-                <div class="model-dropdown" id="model-dropdown">
-                    <button type="button" class="model-dropdown-btn" id="model-dropdown-btn" aria-haspopup="listbox" aria-expanded="false">
-                        <span class="model-dropdown-current" id="model-dropdown-current">Loading models…</span>
-                        <span class="model-dropdown-chip" id="model-dropdown-chip" style="display: none;">⭐ Recommended</span>
-                        <span class="model-dropdown-chev" id="model-dropdown-chev">▾</span>
-                    </button>
-                    <div class="model-dropdown-panel" id="model-dropdown-panel" role="listbox" style="display: none;"></div>
-                </div>
-                <select id="local-tier-select" style="display: none;" aria-hidden="true">
-                    <option value="tiny">Tiny</option>
-                    <option value="mini">Mini</option>
-                    <option value="zh-light">Chinese + English (Light)</option>
-                    <option value="light">Light</option>
-                    <option value="big">Big</option>
-                    <option value="zh-big">Chinese + English (Big)</option>
-                </select>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>.</div>
-                <div id="model-card" style="display: none;">
-                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
-                        <div style="min-width: 0;">
-                            <strong id="model-card-name"></strong>
-                            <div id="model-card-meta" style="font-size: 10px; color: var(--text-dim); margin-top: 2px;"></div>
-                        </div>
-                        <span id="model-card-status" class="status-pill"></span>
-                    </div>
-                    <div id="model-card-desc" style="font-size: 10.5px; color: var(--text-dim); line-height: 1.45; margin-top: 6px;"></div>
-                    <div id="model-card-license" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.75; margin-top: 4px;"></div>
-                    <div id="model-card-action" style="margin-top: 9px;"></div>
-                    <div id="model-download-progress" style="display: none; margin-top: 9px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 3px;">
-                            <span id="model-download-status">Downloading…</span>
-                            <span id="model-download-pct">0%</span>
-                        </div>
-                        <div class="progress-bar-bg" style="margin-top: 0;">
-                            <div class="progress-bar-fill" id="model-download-bar"></div>
-                        </div>
-                    </div>
-                </div>
-                <div id="model-cache-path" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.8; margin-top: 6px;">Model cache location is shown after startup.</div>
-            </div>
-
-            <!-- Local AI Memory Mode Toggle -->
-            <div class="input-group" id="eco-mode-group" style="display: none;">
-                <div class="switch-row">
-                    <label class="switch-label" for="eco-mode-checkbox">Power-Saving Mode</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="eco-mode-checkbox" checked />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
-            </div>
-
-            <!-- Gemini API Keys Input -->
-            <div class="input-group" id="gemini-key-group">
-                <label for="api-key-input">Gemini API Keys <span style="opacity:.6;font-weight:400;">(one per line)</span></label>
-                <textarea id="api-key-input" rows="3" placeholder="Paste API keys, one per line..." autocomplete="off" spellcheck="false"
-                          style="width: 100%; resize: none; padding: 6px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 12px; -webkit-text-security: disc; box-sizing: border-box;"></textarea>
-                <div id="api-key-note"></div>
-                <div style="margin-top: 6px; font-size: 11px; opacity: .65;">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
-            </div>
-
-            </div>
-            <div class="settings-section">
-            <div class="settings-section-title"><span>Auto-Stop</span></div>
-            <!-- Auto-Stop Silence Toggle Switch & Options -->
-            <div class="input-group">
-                <div class="switch-row">
-                    <label class="switch-label" for="auto-stop-checkbox">Auto-Stop on Silence</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="auto-stop-checkbox" />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div id="auto-stop-options" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 11px; color: var(--text-dim);">Stop after</span>
-                        <select id="auto-stop-seconds" style="flex: 1; padding: 5px 8px;">
-                            <option value="1.5">1.5 sec</option>
-                            <option value="2.0">2.0 sec</option>
-                            <option value="3.0">3.0 sec</option>
-                            <option value="3.5">3.5 sec (Rec.)</option>
-                            <option value="4.0">4.0 sec</option>
-                            <option value="5.0">5.0 sec</option>
-                        </select>
-                        <span style="font-size: 11px; color: var(--text-dim);">silence</span>
-                    </div>
-
-                    <!-- Live Silence Threshold Limiter -->
-                    <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px; margin-top: 2px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
-                            <span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="range" id="silence-threshold-slider" min="2" max="100" value="12" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                            <button type="button" class="btn-secondary" id="reset-threshold-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Restore the default threshold (12)">↺ Reset</button>
-                        </div>
-
-                        <!-- Calibration controls -->
-                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 7px;">
-                            <button type="button" class="btn-secondary" id="auto-calibrate-btn" style="padding: 5px 10px; font-size: 10px; white-space: nowrap; flex: 1;" title="Measure the background noise for a few seconds, then set the threshold automatically">⚡ Auto-Calibrate</button>
-                            <span style="font-size: 9.5px; color: var(--text-dim); white-space: nowrap;">sec</span>
-                            <select id="calibrate-duration-select" style="padding: 4px 6px; font-size: 10px;" title="How many seconds to measure the background noise during calibration">
-                                <option value="3">3</option>
-                                <option value="5" selected>5</option>
-                                <option value="10">10</option>
-                            </select>
-                        </div>
-                        <div id="calibrate-feedback" style="font-size: 9.5px; color: var(--text-dim); margin-top: 4px; min-height: 12px;">Auto-calibration measures your background noise for a few seconds and sets the threshold so silence never triggers a stop.</div>
-
-                        <!-- Live Mic Volume Level Meter (visible only while calibrating) -->
-                        <div id="noise-meter-wrap" style="display: none; margin-top: 8px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
-                                <span>Live Mic Level</span>
-                                <span id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
-                            </div>
-                            <div style="position: relative; width: 100%; height: 14px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 30%, rgba(245, 158, 11, 0.3) 60%, rgba(239, 68, 68, 0.3) 100%); border-radius: 5px; overflow: hidden;">
-                                <div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
-                                <div id="noise-threshold-marker" style="position: absolute; top: -2px; bottom: -2px; left: 12%; width: 2px; background: #ffffff; box-shadow: 0 0 5px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 8.5px; color: var(--text-dim); margin-top: 2px;">
-                                <span>quiet</span>
-                                <span>speech →</span>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-            </div>
+<!-- Top Action Buttons (Settings, Stop/Cancel, Close) -->
+<div id="top-bar">
+<div class="icon-btn" data-i18n="topbar.settings" id="settings-btn" title="Settings (STT Engine / Keys)">⚙️</div>
+<div class="icon-btn" data-i18n="topbar.retranscribe" id="retranscribe-btn" title="Re-transcribe last audio" style="display:none;">↻</div>
+<div class="icon-btn" data-i18n="topbar.cancel" id="cancel-btn" title="Cancel Recording (Esc)">■</div>
+<div class="icon-btn" data-i18n="topbar.close" id="close-btn" title="Quit App">✕</div>
+</div>
+<!-- Mic Button & Audio Visualizer Canvas -->
+<div id="mic-container">
+<div id="mic-aura"></div>
+<canvas height="150" id="visualizer-canvas" width="150"></canvas>
+<div class="sonar-ring ring-1"></div>
+<div class="sonar-ring ring-2"></div>
+<div class="sonar-ring ring-3"></div>
+<div class="spin-ring"></div>
+<div data-i18n-title="mic.title" id="mic-button" title="Click to record · Click again to submit · Drag to move · Ctrl+Alt+V">
+<svg id="mic-icon" viewbox="0 0 24 24">
+<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path>
+<path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"></path>
+</svg>
+<svg id="submit-icon" viewbox="0 0 24 24">
+<path d="M5 12.5l4.5 4.5L19 7.5"></path>
+</svg>
+<svg id="check-icon" viewbox="0 0 24 24">
+<path d="M5 12.5l4.5 4.5L19 7.5"></path>
+</svg>
+<div class="burst-ring"></div>
+</div>
+</div>
+<!-- Minimal Status Indicator -->
+<div aria-atomic="true" aria-live="polite" id="status-badge" role="status">
+<div class="rec-dot" id="status-dot"></div>
+<span id="status-text">REC</span>
+</div>
+<!-- Transcribe Again: appears only when the last transcription failed -->
+<button data-i18n="retry.btn" id="retry-btn" title="Transcribe the last recording again with the current engine" type="button">↻ Transcribe Again</button>
+<!-- In-App Settings Modal -->
+<div aria-labelledby="settings-title" aria-modal="true" id="settings-modal" role="dialog">
+<div class="modal-header">
+<div style="display: flex; align-items: center; gap: 8px;">
+<div style="display: flex; flex-direction: column; line-height: 1.25;">
+<span data-i18n="settings.title" id="settings-title">Settings</span>
+<span style="font-size: 9.5px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.05em;">VoiceToClipboard</span>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 6px;">
+<div class="icon-btn window-ctl" id="close-modal-btn" title="Close Settings">✕</div>
+</div>
+</div>
+<div class="modal-body">
 
             <div class="settings-section">
-            <div class="settings-section-title"><span>Space-to-Paste</span></div>
+            <div class="settings-section-title"><span data-i18n="settings.language">Language</span></div>
             <div class="input-group">
-                <div class="switch-row">
-                    <label class="switch-label" for="space-paste-checkbox">Enable Space-to-Paste <span style="opacity:.6;font-weight:400;">(bubble after transcribing)</span></label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="space-paste-checkbox" />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
-                    <label for="paste-style-select" style="font-size: 12px; flex: 1;">Paste style</label>
-                    <select id="paste-style-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
-                        <option value="bubble">Bubble (press a key)</option>
-                        <option value="toast">Windows notification (click)</option>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label for="ui-language-select" style="font-size: 12px; flex: 1;" data-i18n="lang.label">UI Language</label>
+                    <select id="ui-language-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
+                        <option value="en" data-i18n="lang.en">English</option>
+                        <option value="es" data-i18n="lang.es">Español</option>
+                        <option value="zh" data-i18n="lang.zh">中文</option>
                     </select>
                 </div>
-                <div id="paste-key-row" style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
-                    <label for="paste-key-input" style="font-size: 12px; flex: 1;">Paste key</label>
-                    <input type="text" id="paste-key-input" readonly placeholder="Press a key…" autocomplete="off"
-                           style="width: 110px; padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); text-align: center; cursor: pointer;" />
-                </div>
+                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;" data-i18n="lang.note">Interface language and speech hint. Applies instantly, offline.</div>
             </div>
             </div>
-
-            <div class="settings-section">
-            <div class="settings-section-title"><span>Appearance</span></div>
-            <!-- Idle Transparency Toggle & Slider -->
-            <div class="input-group">
-                <div class="switch-row">
-                    <label class="switch-label" for="idle-fade-checkbox">Idle Transparency</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="idle-fade-checkbox" />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div id="idle-fade-options" style="display: none; align-items: center; gap: 8px; margin-top: 6px;">
-                    <span style="font-size: 11px; color: var(--text-dim);">Idle Opacity:</span>
-                    <input type="range" id="idle-opacity-slider" min="10" max="90" value="60" step="5" style="flex: 1; cursor: pointer; accent-color: var(--primary);" />
-                    <span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">60%</span>
-                </div>
+<div class="settings-section">
+<div class="settings-section-title"><span data-i18n="settings.recording">Recording</span></div>
+<!-- Global Recording Hotkey -->
+<div class="input-group">
+<label data-i18n="hotkey.label" for="hotkey-input">Global Recording Hotkey</label>
+<div style="display: flex; gap: 8px; align-items: center;">
+<input id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly="" style="flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15);" type="text"/>
+<button class="btn-secondary" data-i18n="hotkey.change" id="record-hotkey-btn" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Change Key</button>
+</div>
+<div data-i18n="hotkey.note" id="hotkey-note" style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Click input or Change Key, then press key combination.</div>
+</div>
+<!-- Always on Top Toggle -->
+<div class="input-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="alwaysOnTop" for="always-on-top-checkbox">📌 Always on Top</label>
+<label class="toggle-switch">
+<input checked="" id="always-on-top-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+</div>
+<!-- Finish Sound Toggle -->
+<div class="input-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="finishSound" for="finish-sound-checkbox">🔔 Sound when transcription finishes</label>
+<label class="toggle-switch">
+<input checked="" id="finish-sound-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;" data-i18n="finishSound.note">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title"><span data-i18n="settings.speechEngine">Speech Engine</span></div>
+<!-- STT Engine Selector -->
+<div class="input-group">
+<label data-i18n="engine.label">STT Engine</label>
+<div class="segmented-control">
+<div aria-pressed="true" class="segment-btn active" data-i18n="engine.offline" id="engine-btn-local" role="button" tabindex="0">Offline Models</div>
+<div aria-pressed="false" class="segment-btn" data-i18n="engine.gemini" id="engine-btn-gemini" role="button" tabindex="0">Gemini API</div>
+</div>
+</div>
+<!-- Local Model Selector -->
+<div class="input-group" id="local-model-group" style="display: none;">
+<label data-i18n="models.label" for="local-tier-select">Offline Local Models</label>
+<div class="model-dropdown" id="model-dropdown">
+<button aria-expanded="false" aria-haspopup="listbox" class="model-dropdown-btn" id="model-dropdown-btn" type="button">
+<span class="model-dropdown-current" data-i18n="models.loading" id="model-dropdown-current">Loading models…</span>
+<span class="model-dropdown-chip" data-i18n="models.recommended" id="model-dropdown-chip" style="display: none;">⭐ Recommended</span>
+<span class="model-dropdown-chev" id="model-dropdown-chev">▾</span>
+</button>
+<div class="model-dropdown-panel" id="model-dropdown-panel" role="listbox" style="display: none;"></div>
+</div>
+<select aria-hidden="true" id="local-tier-select" style="display: none;">
+<option data-i18n="models.tier.tiny" value="tiny">Tiny</option>
+<option data-i18n="models.tier.mini" value="mini">Mini</option>
+<option data-i18n="models.tier.zh-light" value="zh-light">Chinese + English (Light)</option>
+<option data-i18n="models.tier.light" value="light">Light</option>
+<option data-i18n="models.tier.big" value="big">Big</option>
+<option data-i18n="models.tier.zh-big" value="zh-big">Chinese + English (Big)</option>
+</select>
+<div id="model-reco-note" style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>.</div>
+<div id="model-card" style="display: none;">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+<div style="min-width: 0;">
+<strong id="model-card-name"></strong>
+<div id="model-card-meta" style="font-size: 10px; color: var(--text-dim); margin-top: 2px;"></div>
+</div>
+<span class="status-pill" id="model-card-status"></span>
+</div>
+<div id="model-card-desc" style="font-size: 10.5px; color: var(--text-dim); line-height: 1.45; margin-top: 6px;"></div>
+<div id="model-card-license" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.75; margin-top: 4px;"></div>
+<div id="model-card-action" style="margin-top: 9px;"></div>
+<div id="model-download-progress" style="display: none; margin-top: 9px;">
+<div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 3px;">
+<span data-i18n="model.downloading" id="model-download-status">Downloading…</span>
+<span id="model-download-pct">0%</span>
+</div>
+<div class="progress-bar-bg" style="margin-top: 0;">
+<div class="progress-bar-fill" id="model-download-bar"></div>
+</div>
+</div>
+</div>
+<div data-i18n="models.cachePath" id="model-cache-path" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.8; margin-top: 6px;">Model cache location is shown after startup.</div>
+</div>
+<!-- Local AI Memory Mode Toggle -->
+<div class="input-group" id="eco-mode-group" style="display: none;">
+<div class="switch-row">
+<label class="switch-label" data-i18n="eco.label" for="eco-mode-checkbox">Power-Saving Mode</label>
+<label class="toggle-switch">
+<input checked="" id="eco-mode-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;" data-i18n="eco.note">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
+</div>
+<!-- Gemini API Keys Input -->
+<div class="input-group" id="gemini-key-group">
+<label data-i18n="gemini.keys" for="api-key-input">Gemini API Keys </label>
+<textarea autocomplete="off" id="api-key-input" placeholder="Paste API keys, one per line..." rows="3" spellcheck="false" style="width: 100%; resize: none; padding: 6px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 12px; -webkit-text-security: disc; box-sizing: border-box;" data-i18n-placeholder="gemini.placeholder"></textarea>
+<div id="api-key-note"></div>
+<div style="margin-top: 6px; font-size: 11px; opacity: .65;" data-i18n="gemini.note">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title"><span data-i18n="settings.autoStop">Auto-Stop</span></div>
+<!-- Auto-Stop Silence Toggle Switch & Options -->
+<div class="input-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="autostop.label" for="auto-stop-checkbox">Auto-Stop on Silence</label>
+<label class="toggle-switch">
+<input id="auto-stop-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div id="auto-stop-options" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
+<div style="display: flex; align-items: center; gap: 6px;">
+<span style="font-size: 11px; color: var(--text-dim);" data-i18n="autostop.stopAfter">Stop after</span>
+<select id="auto-stop-seconds" style="flex: 1; padding: 5px 8px;">
+<option value="1.5" data-i18n="autostop.seconds.1.5">1.5 sec</option>
+<option value="2.0" data-i18n="autostop.seconds.2.0">2.0 sec</option>
+<option value="3.0" data-i18n="autostop.seconds.3.0">3.0 sec</option>
+<option value="3.5" data-i18n="autostop.seconds.3.5">3.5 sec (Rec.)</option>
+<option value="4.0" data-i18n="autostop.seconds.4.0">4.0 sec</option>
+<option value="5.0" data-i18n="autostop.seconds.5.0">5.0 sec</option>
+</select>
+<span style="font-size: 11px; color: var(--text-dim);" data-i18n="autostop.silence">silence</span>
+</div>
+<!-- Live Silence Threshold Limiter -->
+<div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px; margin-top: 2px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+<span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
+<span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px;">
+<input id="silence-threshold-slider" max="100" min="2" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" type="range" value="12"/>
+<button class="btn-secondary" data-i18n="autostop.reset" id="reset-threshold-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Restore the default threshold (12)" type="button">↺ Reset</button>
+</div>
+<!-- Calibration controls -->
+<div style="display: flex; align-items: center; gap: 6px; margin-top: 7px;">
+<button class="btn-secondary" data-i18n="autostop.calibrate" id="auto-calibrate-btn" style="padding: 5px 10px; font-size: 10px; white-space: nowrap; flex: 1;" title="Measure the background noise for a few seconds, then set the threshold automatically" type="button">⚡ Auto-Calibrate</button>
+<span style="font-size: 9.5px; color: var(--text-dim); white-space: nowrap;">sec</span>
+<select id="calibrate-duration-select" style="padding: 4px 6px; font-size: 10px;" title="How many seconds to measure the background noise during calibration">
+<option value="3">3</option>
+<option selected="" value="5">5</option>
+<option value="10">10</option>
+</select>
+</div>
+<div data-i18n="autostop.calibrate.feedback" id="calibrate-feedback" style="font-size: 9.5px; color: var(--text-dim); margin-top: 4px; min-height: 12px;">Auto-calibration measures your background noise for a few seconds and sets the threshold so silence never triggers a stop.</div>
+<!-- Live Mic Volume Level Meter (visible only while calibrating) -->
+<div id="noise-meter-wrap" style="display: none; margin-top: 8px;">
+<div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
+<span data-i18n="meter.live">Live Mic Level</span>
+<span data-i18n="meter.silent" id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
+</div>
+<div style="position: relative; width: 100%; height: 14px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 30%, rgba(245, 158, 11, 0.3) 60%, rgba(239, 68, 68, 0.3) 100%); border-radius: 5px; overflow: hidden;">
+<div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
+<div id="noise-threshold-marker" style="position: absolute; top: -2px; bottom: -2px; left: 12%; width: 2px; background: #ffffff; box-shadow: 0 0 5px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 8.5px; color: var(--text-dim); margin-top: 2px;">
+<span data-i18n="meter.quiet">quiet</span>
+<span data-i18n="meter.speech">speech →</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title"><span data-i18n="settings.spacePaste">Space-to-Paste</span></div>
+<div class="input-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="spacepaste.label" for="space-paste-checkbox">Enable Space-to-Paste </label>
+<label class="toggle-switch">
+<input id="space-paste-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+<label data-i18n="spacepaste.style" for="paste-style-select" style="font-size: 12px; flex: 1;">Paste style</label>
+<select id="paste-style-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
+<option value="bubble" data-i18n="spacepaste.styleBubble">Bubble (press a key)</option>
+<option value="toast" data-i18n="spacepaste.styleToast">Windows notification (click)</option>
+</select>
+</div>
+<div id="paste-key-row" style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+<label data-i18n="spacepaste.key" for="paste-key-input" style="font-size: 12px; flex: 1;">Paste key</label>
+<input autocomplete="off" id="paste-key-input" placeholder="Press a key…" readonly="" style="width: 110px; padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); text-align: center; cursor: pointer;" type="text"/ data-i18n-placeholder="spacepaste.keyPlaceholder">
+</div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title"><span data-i18n="settings.appearance">Appearance</span></div>
+<!-- Idle Transparency Toggle & Slider -->
+<div class="input-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="appearance.idleFade" for="idle-fade-checkbox">Idle Transparency</label>
+<label class="toggle-switch">
+<input id="idle-fade-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div id="idle-fade-options" style="display: none; align-items: center; gap: 8px; margin-top: 6px;">
+<span style="font-size: 11px; color: var(--text-dim);" data-i18n="appearance.idleOpacity">Idle Opacity:</span>
+<input id="idle-opacity-slider" max="90" min="10" step="5" style="flex: 1; cursor: pointer; accent-color: var(--primary);" type="range" value="60"/>
+<span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">60%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Actions Footer -->
+<div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+<div style="font-size: 10.5px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;">
+<span style="color: #10b981; font-weight: bold;">✓</span> Auto-saved
             </div>
-            </div>
-        </div>
-
-        <!-- Modal Actions Footer -->
-        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
-            <div style="font-size: 10.5px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;">
-                <span style="color: #10b981; font-weight: bold;">✓</span> Auto-saved
-            </div>
-            <button class="btn-remove" id="remove-key-btn">Remove Key</button>
-        </div>
-    </div>
-
-    <script src="renderer.js"></script>
+<button class="btn-remove" data-i18n="footer.removeKey" id="remove-key-btn">Remove Key</button>
+</div>
+</div>
+<script src="renderer.js"></script>
 </body>
 </html>
-
