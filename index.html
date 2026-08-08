@@ -1517,17 +1517,13 @@
                 <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
             </div>
 
-            <!-- Gemini API Key Input -->
+            <!-- Gemini API Keys Input -->
             <div class="input-group" id="gemini-key-group">
-                <label for="api-key-input">Gemini API Key</label>
-                <input type="password" id="api-key-input" placeholder="Paste Gemini API key..." autocomplete="off" />
+                <label for="api-key-input">Gemini API Keys <span style="opacity:.6;font-weight:400;">(one per line)</span></label>
+                <textarea id="api-key-input" rows="3" placeholder="Paste API keys, one per line..." autocomplete="off" spellcheck="false"
+                          style="width: 100%; resize: none; padding: 6px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 12px; -webkit-text-security: disc; box-sizing: border-box;"></textarea>
                 <div id="api-key-note"></div>
-                <label for="gemini-model-select" style="margin-top: 6px;">Gemini Model</label>
-                <select id="gemini-model-select">
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast &amp; balanced (recommended)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro — higher accuracy</option>
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash — fastest &amp; cheapest</option>
-                </select>
+                <div style="margin-top: 6px; font-size: 11px; opacity: .65;">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
             </div>
 
             </div>
@@ -1598,8 +1594,33 @@
                     </div>
                 </div>
             </div>
-
             </div>
+
+            <div class="settings-section">
+            <div class="settings-section-title"><span>Space-to-Paste</span></div>
+            <div class="input-group">
+                <div class="switch-row">
+                    <label class="switch-label" for="space-paste-checkbox">Enable Space-to-Paste <span style="opacity:.6;font-weight:400;">(bubble after transcribing)</span></label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="space-paste-checkbox" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                    <label for="paste-style-select" style="font-size: 12px; flex: 1;">Paste style</label>
+                    <select id="paste-style-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
+                        <option value="bubble">Bubble (press a key)</option>
+                        <option value="toast">Windows notification (click)</option>
+                    </select>
+                </div>
+                <div id="paste-key-row" style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                    <label for="paste-key-input" style="font-size: 12px; flex: 1;">Paste key</label>
+                    <input type="text" id="paste-key-input" readonly placeholder="Press a key…" autocomplete="off"
+                           style="width: 110px; padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); text-align: center; cursor: pointer;" />
+                </div>
+            </div>
+            </div>
+
             <div class="settings-section">
             <div class="settings-section-title"><span>Appearance</span></div>
             <!-- Idle Transparency Toggle & Slider -->

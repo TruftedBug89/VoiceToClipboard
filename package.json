@@ -63,6 +63,7 @@
     ],
     "files": [
       "main.js",
+      "win32.js",
       "index.html",
       "renderer.js",
       "stt/**/*",

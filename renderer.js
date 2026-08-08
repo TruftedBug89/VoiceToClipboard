@@ -100,7 +100,6 @@ const modelDropdownCurrent = document.getElementById('model-dropdown-current');
 const modelDropdownChip = document.getElementById('model-dropdown-chip');
 const modelDropdownPanel = document.getElementById('model-dropdown-panel');
 const geminiKeyGroup = document.getElementById('gemini-key-group');
-const geminiModelSelect = document.getElementById('gemini-model-select');
 const modelCard = document.getElementById('model-card');
 const modelCardName = document.getElementById('model-card-name');
 const modelCardMeta = document.getElementById('model-card-meta');
@@ -357,10 +356,6 @@ engineBtnLocal.addEventListener('click', () => {
     autoSaveSettings();
 });
 
-if (geminiModelSelect) {
-    geminiModelSelect.addEventListener('change', () => autoSaveSettings());
-}
-
 // Convert webm audio blob to 16kHz mono Float32Array PCM for offline engines
 async function audioBlobTo16kHzFloat32(audioBlob) {
     const arrayBuffer = await audioBlob.arrayBuffer();
@@ -569,6 +564,10 @@ document.addEventListener('mouseleave', () => {
 // Main-process cursor polling is the source of truth for hover/leave. The
 // payload carries the real OS cursor position (window-relative) so the pill
 // wakes instantly even when forwarded mouse events are missed.
+ipcRenderer.on('gemini-fallback', (e, model) => {
+        setStatus('busy', `Rate limit — switched to ${model}`);
+    });
+
 ipcRenderer.on('widget-hover', (event, payload) => {
     const inside = typeof payload === 'boolean' ? payload : !!(payload && payload.inside);
     const entered = inside && !cursorInsideWindow;
@@ -610,8 +609,6 @@ ipcRenderer.on('sync-settings', () => {
 
 ipcRenderer.on('models-changed', async () => {
     await loadModelCatalog();
-    if (geminiModelSelect) geminiModelSelect.value = sttConfig.geminiModel || 'gemini-2.5-flash';
-
     await checkModelStatus();
 });
 
@@ -677,6 +674,25 @@ if (idleOpacitySlider) {
     });
 }
 
+let pasteKeyVal = ' ';
+const pasteStyleEl = document.getElementById('paste-style-select');
+if (pasteStyleEl) {
+    pasteStyleEl.addEventListener('change', () => {
+        const row = document.getElementById('paste-key-row');
+        if (row) row.style.display = pasteStyleEl.value === 'toast' ? 'none' : 'flex';
+        autoSaveSettings();
+    });
+}
+const pasteKeyInputEl = document.getElementById('paste-key-input');
+if (pasteKeyInputEl) {
+    pasteKeyInputEl.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        pasteKeyVal = e.key;
+        pasteKeyInputEl.value = e.key === ' ' ? 'SPACE' : e.key.toUpperCase();
+        autoSaveSettings();
+    });
+    pasteKeyInputEl.addEventListener('focus', () => { pasteKeyInputEl.select(); });
+}
 autoStopCheckbox.addEventListener('change', () => {
     autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
     // The live mic meter is only active during Auto-Calibrate now (keeps the
@@ -724,6 +740,7 @@ let currentSttConfig = null;
 let hasSpoken = false;
 let speechFramesCount = 0;
 let silenceStartTime = null;
+let recordStartTime = 0;
 let smoothedSpeechVolume = 0;
 
 // Preview mic context for settings live meter
@@ -993,6 +1010,20 @@ async function refreshSettingsUi(snapshot = null) {
     if (finishSoundCheckbox) finishSoundCheckbox.checked = sttConfig.playFinishSound !== false;
 
     autoStopCheckbox.checked = !!sttConfig.autoStopEnabled;
+    const spacePasteCheckbox = document.getElementById('space-paste-checkbox');
+    if (spacePasteCheckbox) spacePasteCheckbox.checked = sttConfig.spacePaste === true;
+    const pasteKeyInput = document.getElementById('paste-key-input');
+    if (pasteKeyInput) {
+        const rawKey = (typeof sttConfig.pasteKey === 'string' && sttConfig.pasteKey) ? sttConfig.pasteKey : ' ';
+        pasteKeyVal = rawKey;
+        pasteKeyInput.value = rawKey === ' ' ? 'SPACE' : rawKey.toUpperCase();
+    }
+    const pasteStyleSelect = document.getElementById('paste-style-select');
+    if (pasteStyleSelect) {
+        pasteStyleSelect.value = sttConfig.pasteStyle === 'toast' ? 'toast' : 'bubble';
+        const pasteKeyRow = document.getElementById('paste-key-row');
+        if (pasteKeyRow) pasteKeyRow.style.display = sttConfig.pasteStyle === 'toast' ? 'none' : 'flex';
+    }
     autoStopSecondsSelect.value = (sttConfig.autoStopSeconds || 3.5).toFixed(1);
     autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
 
@@ -1014,11 +1045,12 @@ async function refreshSettingsUi(snapshot = null) {
     applyIdleFadeState(idleFadeEnabled, idleOpacity);
 
     apiKeyInput.value = '';
-    removeKeyBtn.style.display = apiStatus.source === 'config' ? 'inline-block' : 'none';
-    if (apiStatus.source === 'env') {
+    removeKeyBtn.style.display = (apiStatus.source === 'config' || (apiStatus.count || 0) > 0) ? 'inline-block' : 'none';
+    const nKeys = apiStatus.count || 0;
+    if (apiStatus.source === 'env' && nKeys <= 1) {
         apiKeyNote.innerHTML = 'Key set via <code>GEMINI_API_KEY</code> environment var.';
-    } else if (apiStatus.source === 'config') {
-        apiKeyNote.textContent = '✓ Saved in app config.';
+    } else if (nKeys > 0) {
+        apiKeyNote.textContent = nKeys === 1 ? '✓ 1 key saved in app config.' : `✓ ${nKeys} keys saved — rate-limited keys are skipped automatically.`;
     } else {
         apiKeyNote.innerHTML = 'No key yet — get one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
     }
@@ -1191,14 +1223,13 @@ function autoSaveSettings() {
             const idleOpacityPct = parseInt(idleOpacitySlider ? idleOpacitySlider.value : 60) || 60;
             const idleOpacity = idleOpacityPct / 100;
 
-            const apiKeyVal = apiKeyInput.value.trim();
-            if (apiKeyVal) {
-                await ipcRenderer.invoke('save-api-key', apiKeyVal);
+            const keyLines = apiKeyInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+            if (keyLines.length) {
+                await ipcRenderer.invoke('save-api-key', keyLines);
                 apiKeyInput.value = '';
                 await checkApiKeyStatus();
             }
 
-            const geminiModel = geminiModelSelect ? geminiModelSelect.value : 'gemini-2.5-flash';
             const saved = await ipcRenderer.invoke('save-stt-config', {
                 sttEngine: engine,
                 localTier,
@@ -1210,8 +1241,14 @@ function autoSaveSettings() {
                 alwaysOnTop,
                 idleFadeEnabled,
                 idleOpacity,
-                geminiModel,
-                playFinishSound
+                playFinishSound,
+                spacePaste: document.getElementById('space-paste-checkbox')
+                    ? document.getElementById('space-paste-checkbox').checked
+                    : false,
+                pasteStyle: document.getElementById('paste-style-select')
+                    ? document.getElementById('paste-style-select').value
+                    : 'bubble',
+                pasteKey: pasteKeyVal
             });
             if (!saved.success) return;
 
@@ -1220,7 +1257,6 @@ function autoSaveSettings() {
                 localTier,
                 localLanguage: 'auto',
                 localModelKey: getSelectedModelKey(),
-                geminiModel: geminiModelSelect ? geminiModelSelect.value : 'gemini-2.5-flash',
                 autoStopEnabled,
                 autoStopSeconds,
                 silenceThreshold,
@@ -1303,7 +1339,9 @@ function drawVisualizer() {
                 }
             } else {
                 speechFramesCount = 0;
-                if (hasSpoken) {
+                // 2s grace after record start: don't arm the silence timer
+                // before the user has had a chance to start speaking.
+                if (hasSpoken && Date.now() - recordStartTime >= 2000) {
                     if (!silenceStartTime) {
                         silenceStartTime = Date.now();
                     } else {
@@ -1533,10 +1571,12 @@ async function startRecording() {
                     hideRetryButton();
                     micBtn.classList.add('show-check');
                     setTimeout(() => micBtn.classList.remove('show-check'), 1200);
-                    setStatus('done', '✓ COPIED');
+                    log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
+            setStatus('done', '✓ COPIED');
                     setTimeout(hideStatus, 1600);
                     if (!currentSttConfig || currentSttConfig.playFinishSound !== false) playFinishChime();
                 } else {
+                    log(`[render] transcribe FAIL | code: ${result.code} | err: ${result.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
                     const status = result.code === 'NO_SPEECH' ? 'NO SPEECH' : (result.code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (result.code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
                     setStatus('err', status);
                     if (isRetryableFailure(result.code)) {
@@ -1561,6 +1601,7 @@ async function startRecording() {
         mediaRecorder.start();
         isStartingRecording = false;
         isRecording = true;
+        recordStartTime = Date.now();
         document.body.classList.add('is-recording');
 
         // ---- START FX ----
@@ -1632,6 +1673,11 @@ function cancelRecording() {
     stopRecordingCore(true);
 }
 
+// ---- App log (main writes it to %APPDATA%\VoiceToClipboard\app.log) ----
+function log(msg) {
+    try { ipcRenderer.send('renderer-log', String(msg)); } catch (e) { /* ignore */ }
+}
+
 // ---- Transcribe Again ----
 // Codes where re-running the SAME audio with the current engine can succeed
 // (e.g. after switching engine, adding an API key, or downloading a model).
@@ -1689,11 +1735,13 @@ if (retryBtn) {
             lastAudio = null;
             micBtn.classList.add('show-check');
             setTimeout(() => micBtn.classList.remove('show-check'), 1200);
+            log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
             setStatus('done', '✓ COPIED');
             setTimeout(hideStatus, 1600);
         } else {
             const code = result?.code || 'ERROR';
-            const status = code === 'NO_SPEECH' ? 'NO SPEECH' : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
+            log(`[render] transcribe FAIL(retry) | code: ${code} | err: ${result?.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
+            const status = code === 'NO_SPEECH' ? 'NO SPEECH' : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : (code === 'RATE_LIMITED' ? 'RATE LIMIT' : 'ERROR')));
             setStatus('err', status);
             if (isRetryableFailure(code)) {
                 showRetryButton();

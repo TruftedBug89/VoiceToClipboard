@@ -57,3 +57,6 @@ coverage/
 *.tsbuildinfo
 *.tgz
 /.commandcode
+
+# Local tutorial screenshots (never committed)
+tutorial-assets/

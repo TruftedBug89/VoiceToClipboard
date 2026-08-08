@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen, Notification } = require('electron');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
@@ -6,8 +6,15 @@ const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { SttService } = require('./stt');
 const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } = require('./stt/config');
 const { getModelKey } = require('./stt/model-registry');
+const win32 = require('./win32');
+
+// Gemini failover ladder (best → worst). Models that hit a daily rate limit
+// get a 24h cooldown persisted in config so restarts still skip them.
+const GEMINI_MODEL_LADDER = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
+
 
 app.disableHardwareAcceleration();
 // Windows App User Model ID — required before windows are created so the
@@ -36,6 +43,22 @@ let settingsWindow = null;
 let tray = null;
 const configPath = path.join(canonicalUserDataPath, 'config.json');
 const modelsDir = path.join(canonicalUserDataPath, 'models');
+
+// App log: writes to %APPDATA%\VoiceToClipboard\app.log — writable in BOTH dev
+// and packaged (asar) runs (the old __dirname target silently fails when
+// packaged, leaving the exe with zero observability).
+function logApp(msg) {
+    try {
+        const line = `[${new Date().toISOString()}] ${msg}\n`;
+        fs.appendFileSync(path.join(canonicalUserDataPath, 'app.log'), line);
+    } catch (e) { /* logging must never crash the app */ }
+}
+// Redact anything that looks like a secret before it reaches the log.
+function redactLog(s) {
+    return String(s)
+        .replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza…REDACTED')
+        .replace(/(key|api[_-]?key|token)=[^&\s"']+/gi, '$1=REDACTED');
+}
 const legacyUserDataPaths = [
     path.join(app.getPath('appData'), 'voicetoclipboard')
 ];
@@ -104,6 +127,9 @@ async function getSettingsSnapshot() {
         modelCachePath: modelsDir,
         autoStopEnabled: !!config.autoStopEnabled,
         autoStopSeconds: typeof config.autoStopSeconds === 'number' ? Math.max(1.5, Math.min(5, config.autoStopSeconds)) : 3.5,
+        spacePaste: config.spacePaste === true,
+        pasteStyle: config.pasteStyle === 'toast' ? 'toast' : 'bubble',
+        pasteKey: typeof config.pasteKey === 'string' && config.pasteKey.length <= 12 ? config.pasteKey : ' ',
         silenceThreshold: typeof config.silenceThreshold === 'number' ? Math.max(2, Math.min(100, config.silenceThreshold)) : 12,
         ecoMode: config.ecoMode !== false,
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
@@ -130,12 +156,20 @@ function broadcastModelsChanged() {
 }
 
 // Get API Key from process.env or saved config
-function getApiKey() {
+function getApiKeys() {
+    const keys = [];
     const envKey = process.env.GEMINI_API_KEY;
-    if (envKey && envKey.trim()) return envKey.trim();
+    if (envKey && envKey.trim()) keys.push(envKey.trim());
     const config = loadConfig();
-    return config.apiKey || '';
+    if (config.apiKey && config.apiKey.trim()) keys.push(config.apiKey.trim());
+    if (Array.isArray(config.apiKeys)) {
+        for (const k of config.apiKeys) {
+            if (typeof k === 'string' && k.trim()) keys.push(k.trim());
+        }
+    }
+    return [...new Set(keys)];
 }
+function getApiKey() { return getApiKeys()[0] || ''; }
 
 function createWindow() {
     const config = loadConfig();
@@ -164,7 +198,9 @@ function createWindow() {
 
     // Forward renderer console (incl. errors) to app.log
     mainWindow.webContents.on('console-message', (event) => {
-        console.log(`[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`);
+        const msg = `[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`;
+        console.log(msg);
+        logApp(redactLog(msg));
     });
 
     // Save window position once the drag settles
@@ -465,39 +501,286 @@ app.on('window-all-closed', () => {
     }
 });
 
+
+// ─── Space-to-paste bubble (v3 prototype) ───────────────────────────────────
+// Tracks the last non-widget foreground window, then after a transcription
+// shows a tiny bubble near it: SPACE = paste into that window, ESC = dismiss.
+const BUBBLE_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+body { margin:0; font-family:'Segoe UI',sans-serif; background:rgba(22,22,26,0.97); color:#eee; border-radius:12px; overflow:hidden; }
+.wrap { padding:16px 22px; box-sizing:border-box; }
+.head { font-size:12px; color:#7ee787; font-weight:600; margin-bottom:5px; }
+.text { font-size:13px; color:#ddd; max-height:48px; overflow:hidden; word-break:break-word; margin-bottom:9px; line-height:1.35; }
+.hint { font-size:12.5px; color:#9aa; white-space:nowrap; }
+.hint b { background:rgba(126,231,135,0.16); color:#7ee787; padding:1px 7px; border-radius:5px; font-weight:600; }
+.hint .esc { background:rgba(255,255,255,0.08); color:#bbb; padding:1px 7px; border-radius:5px; font-weight:600; }
+</style></head><body><div class="wrap">
+<div class="head">✓ Transcribed</div>
+<div class="text" id="t"></div>
+<div class="hint"><b id="key-hint">SPACE</b> to paste</div>
+</div><script>
+const { ipcRenderer } = require('electron');
+const el = document.getElementById('t');
+const keyHint = document.getElementById('key-hint');
+let pasteKey = ' ';
+ipcRenderer.on('bubble-set-text', (e, payload) => {
+    const data = (typeof payload === 'string') ? { text: payload } : (payload || {});
+    el.textContent = data.text || '';
+    if (data.key) pasteKey = data.key;
+    if (data.keyLabel) keyHint.textContent = data.keyLabel;
+});
+window.addEventListener('keydown', (e) => {
+    if (e.key === pasteKey || e.key === 'Enter') { e.preventDefault(); ipcRenderer.send('bubble-paste'); }
+    else if (e.key === 'Escape') { ipcRenderer.send('bubble-dismiss'); }
+});
+</script></body></html>`;
+
+let lastExternalHwnd = null;
+let bubbleWindow = null;
+let bubbleTarget = null;
+let bubbleText = '';
+let bubbleTimer = null;
+let bubblePendingText = '';
+let pasteToast = null;
+
+// Remember the window the user was working in (ignores our own widget).
+setInterval(() => {
+    if (!win32.available) return;
+    try {
+        if (BrowserWindow.getFocusedWindow()) return; // our own window is focused
+        const hwnd = win32.getForegroundWindow();
+        if (hwnd) lastExternalHwnd = hwnd;
+    } catch (e) { /* ignore polling errors */ }
+}, 500);
+
+function ensureBubbleWindow() {
+    if (bubbleWindow && !bubbleWindow.isDestroyed()) return;
+    bubbleWindow = new BrowserWindow({
+        width: 330, height: 98, show: false, frame: false, resizable: false,
+        alwaysOnTop: true, skipTaskbar: true, focusable: true, hasShadow: true,
+        transparent: true,
+        webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
+    });
+    bubbleWindow.setAlwaysOnTop(true, 'screen-saver');
+    bubbleWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(BUBBLE_HTML));
+    bubbleWindow.webContents.on('did-finish-load', () => {
+        if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
+            const _k = loadConfig().pasteKey || ' ';
+            bubbleWindow.webContents.send('bubble-set-text', { text: bubblePendingText, key: _k, keyLabel: _k === ' ' ? 'SPACE' : _k.toUpperCase() });
+        }
+    });
+    bubbleWindow.on('closed', () => { bubbleWindow = null; });
+}
+
+function positionBubbleNear(hwnd) {
+    const W = 330, H = 98;
+    let x = 100, y = 100;
+    const rect = win32.getWindowRect(hwnd);
+    if (rect && rect.right > rect.left && rect.bottom > rect.top) {
+        x = rect.right - W - 28;
+        y = rect.bottom - H - 36;
+    } else {
+        const pt = win32.getCursorPos();
+        if (pt) { x = pt.x + 14; y = pt.y + 14; }
+    }
+    const wa = screen.getDisplayNearestPoint({ x, y }).workArea;
+    x = Math.min(Math.max(x, wa.x), wa.x + wa.width - W);
+    y = Math.min(Math.max(y, wa.y), wa.y + wa.height - H);
+    bubbleWindow.setPosition(Math.round(x), Math.round(y));
+}
+
+function closePasteBubble() {
+    if (bubbleTimer) { clearTimeout(bubbleTimer); bubbleTimer = null; }
+    if (bubbleWindow && !bubbleWindow.isDestroyed()) bubbleWindow.destroy();
+    bubbleWindow = null;
+}
+
+function pasteToTarget(target, text) {
+    if (!target || !win32.isWindow(target)) return;
+    clipboard.writeText(text);
+    win32.setForegroundWindow(target);
+    setTimeout(() => win32.sendCtrlV(), 80);
+}
+
+function maybeShowPasteToast(text) {
+    if (!win32.available) return;
+    if (!lastExternalHwnd || !win32.isWindow(lastExternalHwnd)) return;
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    if (pasteToast) { try { pasteToast.close(); } catch (e) { /* ignore */ } }
+    const t = new Notification({
+        title: '✓ Transcribed',
+        body: 'Click to paste into the previous window',
+        actions: [{ type: 'button', text: 'Paste' }],
+        silent: true
+    });
+    pasteToast = t;
+    t.on('click', () => pasteToTarget(lastExternalHwnd, clean));
+    t.on('action', () => pasteToTarget(lastExternalHwnd, clean));
+    t.on('close', () => { if (pasteToast === t) pasteToast = null; });
+    t.show();
+}
+
+function maybeShowPasteBubble(text) {
+    if (!win32.available) return;
+    if (loadConfig().spacePaste !== true) return;
+    if (!lastExternalHwnd || !win32.isWindow(lastExternalHwnd)) return;
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    if (loadConfig().pasteStyle === 'toast') { maybeShowPasteToast(clean); return; }
+    bubbleText = clean;
+    bubbleTarget = lastExternalHwnd;
+    bubblePendingText = clean;
+    ensureBubbleWindow();
+    if (!bubbleWindow) return;
+    positionBubbleNear(bubbleTarget);
+    if (bubbleWindow.webContents.isLoading()) {
+        // did-finish-load will deliver the text
+    } else {
+        const _pasteKey = loadConfig().pasteKey || ' ';
+            const _keyLabel = _pasteKey === ' ' ? 'SPACE' : _pasteKey.toUpperCase();
+            bubbleWindow.webContents.send('bubble-set-text', { text: bubbleText, key: _pasteKey, keyLabel: _keyLabel });
+    }
+    bubbleWindow.show();
+    bubbleWindow.focus();
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(closePasteBubble, 3000);
+}
+
+ipcMain.on('bubble-paste', () => {
+    const target = bubbleTarget;
+    const text = bubbleText;
+    closePasteBubble();
+    if (!target || !win32.isWindow(target)) return;
+    clipboard.writeText(text);
+    win32.setForegroundWindow(target);
+    setTimeout(() => win32.sendCtrlV(), 80);
+});
+
+ipcMain.on('bubble-dismiss', () => closePasteBubble());
+
+// Renderer pushes structured events (transcription results, errors) to app.log
+ipcMain.on('renderer-log', (_e, msg) => { logApp(redactLog(msg)); });
+
+// Dev/test helper (opt-in only): VTC_SHOW_BUBBLE=1 shows a sample bubble ~6s after launch.
+if (process.env.VTC_SHOW_BUBBLE === '1') {
+    setTimeout(() => {
+        try { maybeShowPasteBubble('This is your transcribed text. Press SPACE to paste it anywhere.'); } catch (e) { /* ignore */ }
+    }, 6000);
+}
+// ─── end space-to-paste bubble ──────────────────────────────────────────────
+
+
+
+// Startup diagnostic — helps debug from app.log (userData dir, works packaged).
+{
+    const c = loadConfig();
+    logApp(`[main] diag-v4 | engine: ${c.sttEngine} | localTier: ${c.localTier || '?'} | model: ${c.localModelKey || '?'} | threshold: ${c.silenceThreshold} | autoStop: ${c.autoStopEnabled} (${c.autoStopSeconds}s) | spacePaste: ${JSON.stringify(c.spacePaste)} | pasteStyle: ${c.pasteStyle || 'bubble'} | pasteKey: ${JSON.stringify(c.pasteKey)} | win32: ${typeof win32 !== 'undefined' && win32.available ? 'yes' : 'no'} | cfg exists: ${fs.existsSync(configPath)}`);
+}
+
+
 const sttService = new SttService({
     modelsDir,
-    copyText: text => clipboard.writeText(text),
+    copyText: text => { clipboard.writeText(text); maybeShowPasteBubble(text); },
     geminiTranscriber: async ({ arrayBuffer, mimeType = 'audio/webm' }) => {
-        const apiKey = getApiKey();
-        if (!apiKey) return { success: false, code: 'NO_API_KEY', error: 'GEMINI_API_KEY is not configured.' };
+        const keys = getApiKeys();
+        if (keys.length === 0) return { success: false, code: 'NO_API_KEY', error: 'GEMINI_API_KEY is not configured.' };
 
-        const ai = new GoogleGenAI({ apiKey });
         const buffer = Buffer.from(arrayBuffer);
-        let attempts = 0;
-        const maxAttempts = 2;
-        let lastError = null;
 
-        while (attempts < maxAttempts) {
-            attempts++;
-            try {
-                const response = await ai.models.generateContent({
-                    model: loadConfig().geminiModel || 'gemini-2.5-flash',
-                    contents: [
-                        { inlineData: { data: buffer.toString('base64'), mimeType } },
-                        'Transcribe this audio precisely. Return ONLY the transcribed text. Do not add conversational filler or punctuation explanation. Automatically detect the language.'
-                    ]
-                });
-                const transcript = (response.text ?? '').trim();
-                if (transcript) {
-                    clipboard.writeText(transcript);
-                    return { success: true, text: transcript };
+        const isRateLimitError = (err) => {
+            const status = err && (err.status || err.code);
+            const msg = (err && (err.message || String(err))) || '';
+            return status === 429 || status === 'RESOURCE_EXHAUSTED'
+                || /rate.?limit|quota|RESOURCE_EXHAUSTED|429|too many requests|daily/i.test(msg);
+        };
+
+        // Rate-limited models AND API keys get a persisted 24h cooldown;
+        // both are skipped until they expire (survives app restarts).
+        const now = Date.now();
+        const pruneCooldowns = (raw) => {
+            const cd = { ...(raw || {}) };
+            let changed = false;
+            for (const [k, until] of Object.entries(cd)) {
+                if (until <= now) { delete cd[k]; changed = true; }
+            }
+            return { cd, changed };
+        };
+        const { cd: modelCds, changed: mc } = pruneCooldowns(loadConfig().modelCooldowns);
+        const { cd: keyCds, changed: kc } = pruneCooldowns(loadConfig().keyCooldowns);
+        if (mc || kc) saveConfig({ modelCooldowns: modelCds, keyCooldowns: keyCds });
+
+        // Build the try-chain: preferred model first, then the fixed ladder, minus cooldowns.
+        const preferred = loadConfig().geminiModel || 'gemini-2.5-flash';
+        const chain = [preferred, ...GEMINI_MODEL_LADDER.filter(m => m !== preferred)]
+            .filter(m => !(modelCds[m] && modelCds[m] > now));
+        const usableKeys = keys.filter(k => !(keyCds[k] && keyCds[k] > now));
+
+        if (usableKeys.length === 0 || chain.length === 0) {
+            const why = usableKeys.length === 0 && chain.length === 0
+                ? 'All Gemini API keys and models are rate-limited'
+                : usableKeys.length === 0
+                    ? 'All Gemini API keys are rate-limited'
+                    : 'All Gemini models are rate-limited';
+            return { success: false, code: 'RATE_LIMITED', error: `${why} — try again tomorrow.` };
+        }
+
+        let lastError = null;
+        let usedModel = null;
+        const keyRateHits = {}; // distinct-model 429s per key within this run
+
+        outer:
+        for (const key of usableKeys) {
+            const ai = new GoogleGenAI({ apiKey: key });
+            for (const model of chain) {
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                        const response = await ai.models.generateContent({
+                            model,
+                            contents: [
+                                { inlineData: { data: buffer.toString('base64'), mimeType } },
+                                'Strict speech-to-text. Output ONLY the exact words spoken in the audio, verbatim. Never add, remove, explain, or respond. If there is no speech, output nothing.'
+                            ]
+                        });
+                        const transcript = (response.text ?? '').trim();
+                        if (!transcript) {
+                            return { success: false, code: 'NO_SPEECH', error: 'No speech detected.' };
+                        }
+                        usedModel = model;
+                        // Model worked: clear any stale cooldowns and remember it as preferred.
+                        const cd = { ...(loadConfig().modelCooldowns || {}) };
+                        if (cd[model]) { delete cd[model]; saveConfig({ modelCooldowns: cd }); }
+                        const kd = { ...(loadConfig().keyCooldowns || {}) };
+                        if (kd[key]) { delete kd[key]; saveConfig({ keyCooldowns: kd }); }
+                        if (model !== preferred) {
+                            saveConfig({ geminiModel: model });
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('gemini-fallback', model);
+                            }
+                        }
+                        clipboard.writeText(transcript);
+                        maybeShowPasteBubble(transcript);
+                        return { success: true, text: transcript, model };
+                    } catch (error) {
+                        lastError = error;
+                        console.warn(`Gemini API attempt failed (${model}):`, sanitizeErrorMessage(error));
+                        if (isRateLimitError(error)) {
+                            // 24h cooldown for this model, move to the next one instantly.
+                            const cd = { ...(loadConfig().modelCooldowns || {}) };
+                            cd[model] = Date.now() + GEMINI_COOLDOWN_MS;
+                            saveConfig({ modelCooldowns: cd });
+                            // 2+ distinct-model 429s → this key's daily quota is spent: cool it too.
+                            keyRateHits[key] = (keyRateHits[key] || 0) + 1;
+                            if (keyRateHits[key] >= 2) {
+                                const kd = { ...(loadConfig().keyCooldowns || {}) };
+                                kd[key] = Date.now() + GEMINI_COOLDOWN_MS;
+                                saveConfig({ keyCooldowns: kd });
+                                continue outer;
+                            }
+                            break;
+                        }
+                        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 400));
+                    }
                 }
-                return { success: false, code: 'NO_SPEECH', error: 'No speech detected.' };
-            } catch (error) {
-                lastError = error;
-                console.warn(`Gemini API attempt ${attempts} failed:`, sanitizeErrorMessage(error));
-                if (attempts < maxAttempts) await new Promise(resolve => setTimeout(resolve, 400));
             }
         }
 
@@ -509,9 +792,11 @@ const sttService = new SttService({
 ipcMain.handle('get-api-key-status', () => {
     const envKey = process.env.GEMINI_API_KEY;
     const config = loadConfig();
+    const count = getApiKeys().length;
     return {
-        hasKey: !!((envKey && envKey.trim()) || config.apiKey),
-        source: (envKey && envKey.trim()) ? 'env' : (config.apiKey ? 'config' : 'none')
+        hasKey: count > 0,
+        count,
+        source: (envKey && envKey.trim()) ? 'env' : (config.apiKey || (Array.isArray(config.apiKeys) && config.apiKeys.length) ? 'config' : 'none')
     };
 });
 
@@ -537,6 +822,11 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
         idleFadeEnabled: settings.idleFadeEnabled !== undefined ? settings.idleFadeEnabled !== false : existing.idleFadeEnabled !== false,
         idleOpacity,
         geminiModel: settings.geminiModel || existing.geminiModel || 'gemini-2.5-flash',
+        spacePaste: settings.spacePaste !== undefined ? !!settings.spacePaste : !!existing.spacePaste,
+        pasteStyle: settings.pasteStyle === 'toast' ? 'toast' : (settings.pasteStyle !== undefined ? 'bubble' : (existing.pasteStyle === 'toast' ? 'toast' : 'bubble')),
+        pasteKey: typeof settings.pasteKey === 'string' && settings.pasteKey.length > 0 && settings.pasteKey.length <= 12
+            ? settings.pasteKey
+            : (typeof existing.pasteKey === 'string' && existing.pasteKey.length <= 12 ? existing.pasteKey : ' '),
         playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false
     });
 
@@ -602,13 +892,16 @@ ipcMain.handle('remove-local-model', async (event, modelKey) => {
 });
 
 ipcMain.handle('save-api-key', async (event, newKey) => {
-    const success = saveConfig({ apiKey: newKey.trim() });
+    const list = Array.isArray(newKey)
+        ? newKey.map(k => String(k || '').trim()).filter(Boolean)
+        : [String(newKey || '').trim()].filter(Boolean);
+    const success = saveConfig({ apiKey: list[0] || '', apiKeys: list });
     if (success) await broadcastSettingsChanged();
     return { success };
 });
 
 ipcMain.handle('remove-api-key', async () => {
-    const success = saveConfig({ apiKey: '' });
+    const success = saveConfig({ apiKey: '', apiKeys: [] });
     if (success) await broadcastSettingsChanged();
     return { success };
 });
@@ -699,19 +992,36 @@ setInterval(() => {
 
 ipcMain.handle('transcribe-audio', async (event, request) => {
     const config = loadConfig();
+    const started = Date.now();
     if (request?.engine === 'local') {
-        return sttService.transcribe({
-            engine: 'local',
-            modelKey: request.modelKey || config.localModelKey,
-            pcm: request.pcm,
-            sampleRate: request.sampleRate || 16000,
-            ecoMode: config.ecoMode !== false
-        });
+        logApp(`[main] transcribe START | engine: local | model: ${request.modelKey || config.localModelKey} | pcmBytes: ${request.pcm ? request.pcm.byteLength : '?'}`);
+        try {
+            const r = await sttService.transcribe({
+                engine: 'local',
+                modelKey: request.modelKey || config.localModelKey,
+                pcm: request.pcm,
+                sampleRate: request.sampleRate || 16000,
+                ecoMode: config.ecoMode !== false
+            });
+            logApp(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
+            return r;
+        } catch (e) {
+            logApp(`[main] transcribe THREW | engine: local | ${String(e && e.stack ? e.stack : e).slice(0, 400)}`);
+            return { success: false, code: 'TRANSCRIPTION_ERROR', error: String(e) };
+        }
     }
-    return sttService.transcribe({
-        engine: 'gemini',
-        arrayBuffer: request?.arrayBuffer || request,
-        mimeType: request?.mimeType || 'audio/webm'
-    });
+    logApp(`[main] transcribe START | engine: gemini | mime: ${request?.mimeType || '?'}`);
+    try {
+        const r = await sttService.transcribe({
+            engine: 'gemini',
+            arrayBuffer: request?.arrayBuffer || request,
+            mimeType: request?.mimeType || 'audio/webm'
+        });
+        logApp(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
+        return r;
+    } catch (e) {
+        logApp(`[main] transcribe THREW | engine: gemini | ${String(e && e.stack ? e.stack : e).slice(0, 400)}`);
+        return { success: false, code: 'TRANSCRIPTION_ERROR', error: String(e) };
+    }
 });
 

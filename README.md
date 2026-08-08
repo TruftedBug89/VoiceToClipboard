@@ -4,6 +4,8 @@
 
 <h1 align="center">VoiceToClipboard</h1>
 
+> Made for everything — but built with **vibe coders** in mind. 🎙️→📋
+
 > A lightweight, always-on-top Windows widget that turns microphone speech into clipboard text.
 
 ![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
@@ -11,11 +13,15 @@
 ![Electron](https://img.shields.io/badge/Electron-v43.2.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
+> [!NOTE]
+> **Project Status:** 🟢 **Working / Functional**  
+> *This status must not be changed by AI unless explicitly instructed by the repository owner.*
+
 ## Highlights
 
 - Global recording shortcut, customizable in Settings.
 - Click-to-record, click again to submit, or press `Esc` to cancel.
-- Gemini cloud transcription with selectable models (2.5 Flash, 2.5 Pro, 2.0 Flash) and automatic language detection.
+- Gemini cloud transcription with automatic 5-model fallback (rate-limited models are remembered and skipped until the next day).
 - **Six local offline models** — all multilingual/bilingual with automatic language detection (no language setting, ever):
   - **Tiny · FastConformer EN/DE/ES/FR** (~98 MB) and **Mini · FastConformer 10 languages** (~102 MB) — NVIDIA NeMo, tiny footprint.
   - **Chinese + English (Light) · SenseVoice** (~158 MB, ~300 MB RAM) and **Chinese + English (Big) · FireRedASR2** (~496 MB, ~800 MB RAM) — mainly Mandarin, plus English.

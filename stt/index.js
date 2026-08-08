@@ -1,5 +1,7 @@
 // Patch koffi.load() for packaged (asar) builds BEFORE vosk-koffi loads its DLLs.
 require('./koffi-asar-fix').applyKoffiAsarFix();
+// MUST run before sherpa-adapter loads sherpa-onnx-node's native addon.
+require('./ort-preload').preloadOrt();
 
 const { MODEL_REGISTRY, getModel } = require('./model-registry');
 const { ModelCache } = require('./model-cache');
