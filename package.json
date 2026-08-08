@@ -1,6 +1,6 @@
 {
   "name": "voicetoclipboard",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "description": "Lightweight, always-on-top Windows widget that transcribes your voice with Gemini AI and copies the text to your clipboard.",
   "main": "main.js",
   "author": "TruftedBug89",

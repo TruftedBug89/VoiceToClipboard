@@ -573,18 +573,16 @@ function ensureBubbleWindow() {
 
 function positionBubbleNear(hwnd) {
     const W = 330, H = 98;
-    let x = 100, y = 100;
-    const rect = win32.getWindowRect(hwnd);
-    if (rect && rect.right > rect.left && rect.bottom > rect.top) {
-        x = rect.right - W - 28;
-        y = rect.bottom - H - 36;
-    } else {
-        const pt = win32.getCursorPos();
-        if (pt) { x = pt.x + 14; y = pt.y + 14; }
-    }
-    const wa = screen.getDisplayNearestPoint({ x, y }).workArea;
-    x = Math.min(Math.max(x, wa.x), wa.x + wa.width - W);
-    y = Math.min(Math.max(y, wa.y), wa.y + wa.height - H);
+    // Anchor to the WORK AREA (excludes the taskbar) of the display under the
+    // cursor, with generous padding so the bubble never hugs the screen edge
+    // or hides underneath the Windows taskbar. Everything here is DIP-native
+    // (workArea from Electron, setPosition in DIPs) — no physical/DIP mixing.
+    const disp = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const wa = disp.workArea;
+    const padRight = 56;
+    const padBottom = 64;
+    const x = wa.x + wa.width - W - padRight;
+    const y = wa.y + wa.height - H - padBottom;
     bubbleWindow.setPosition(Math.round(x), Math.round(y));
 }
 

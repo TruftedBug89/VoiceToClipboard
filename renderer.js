@@ -693,6 +693,21 @@ if (pasteKeyInputEl) {
     });
     pasteKeyInputEl.addEventListener('focus', () => { pasteKeyInputEl.select(); });
 }
+// Toggles that auto-save on change. (Missing listeners here = settings that
+// silently never persisted — spacePaste/finishSound were affected.)
+const spacePasteToggleEl = document.getElementById('space-paste-checkbox');
+if (spacePasteToggleEl) {
+    spacePasteToggleEl.addEventListener('change', () => {
+        autoSaveSettings();
+    });
+}
+const finishSoundToggleEl = document.getElementById('finish-sound-checkbox');
+if (finishSoundToggleEl) {
+    finishSoundToggleEl.addEventListener('change', () => {
+        autoSaveSettings();
+    });
+}
+
 autoStopCheckbox.addEventListener('change', () => {
     autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
     // The live mic meter is only active during Auto-Calibrate now (keeps the
@@ -742,6 +757,19 @@ let speechFramesCount = 0;
 let silenceStartTime = null;
 let recordStartTime = 0;
 let smoothedSpeechVolume = 0;
+// Adaptive noise-floor VAD (see drawVisualizer): the effective silence
+// threshold tracks the ambient floor so auto-stop survives room changes and
+// thresholds calibrated in a noisy environment.
+let noiseFloor = null;
+let silenceAccumMs = 0;
+let lastFrameTs = 0;
+let vadDeadMicLogged = false;
+let vadMin = 0, vadMax = 0, vadSum = 0, vadCount = 0;
+let vadBlockEntries = 0, vadSpeechFrames = 0, vadSilenceFrames = 0, vadErrors = 0;
+let vizErrLogged = false;
+const NOISE_MARGIN = 8;
+const MIN_VAD_THRESHOLD = 6;
+const SPEECH_ARM_FRAMES = 3;
 
 // Preview mic context for settings live meter
 let settingsPreviewStream = null;
@@ -1302,6 +1330,7 @@ let visualizerStartTime = 0;
 function drawVisualizer() {
     // Settings window hides the mic canvas - no need for the ring loop there.
     if (isSettingsWindow) return;
+    try {
     if (!visualizerStartTime) visualizerStartTime = performance.now();
     const elapsed = (performance.now() - visualizerStartTime) / 1000;
 
@@ -1320,6 +1349,10 @@ function drawVisualizer() {
         // Frequency-weighted RMS volume for VAD silence auto-stop
         const currentVol = calculateSpeechVolume(dataArray);
         smoothedSpeechVolume = smoothedSpeechVolume * 0.65 + currentVol * 0.35;
+        vadMin = vadCount === 0 ? smoothedSpeechVolume : Math.min(vadMin, smoothedSpeechVolume);
+        vadMax = Math.max(vadMax, smoothedSpeechVolume);
+        vadSum += smoothedSpeechVolume;
+        vadCount++;
 
         const silenceThresh = (currentSttConfig && typeof currentSttConfig.silenceThreshold === 'number')
             ? currentSttConfig.silenceThreshold
@@ -1330,34 +1363,69 @@ function drawVisualizer() {
         }
 
         if (currentSttConfig && currentSttConfig.autoStopEnabled) {
-            if (smoothedSpeechVolume > silenceThresh) {
+            vadBlockEntries++;
+            if (vadBlockEntries === 1) log(`[render] VAD block entered | cfgKeys=${Object.keys(currentSttConfig).filter(k => k.startsWith('auto')).join(',')}`);
+            try {
+            // Adaptive ambient floor: the quietest level seen recently. The
+            // effective threshold is the configured one capped by ambient +
+            // margin, so a threshold calibrated in a noisy room still detects
+            // speech once the room is quiet again — and silence stays honest
+            // when the room is louder than the configured value.
+            if (noiseFloor === null) {
+                noiseFloor = Math.max(4, smoothedSpeechVolume);
+            } else if (smoothedSpeechVolume < noiseFloor) {
+                noiseFloor = noiseFloor * 0.6 + smoothedSpeechVolume * 0.4;
+            } else {
+                noiseFloor = noiseFloor * 0.9995 + smoothedSpeechVolume * 0.0005;
+            }
+            const effectiveThresh = Math.max(MIN_VAD_THRESHOLD, Math.min(silenceThresh, noiseFloor + NOISE_MARGIN));
+
+            const nowTs = performance.now();
+            const frameDt = lastFrameTs ? Math.min(200, nowTs - lastFrameTs) : 16;
+            lastFrameTs = nowTs;
+
+            if (smoothedSpeechVolume > effectiveThresh) {
+                vadSpeechFrames++;
                 speechFramesCount++;
-                if (speechFramesCount >= 2) hasSpoken = true;
+                if (speechFramesCount >= SPEECH_ARM_FRAMES) hasSpoken = true;
+                // Isolated blips (keyboard clicks, pops) only eat their own
+                // duration from the silence budget instead of hard-resetting
+                // the whole 2s timer — the auto-stop stays reliable in
+                // semi-noisy rooms.
+                if (silenceAccumMs > 0) silenceAccumMs = Math.max(0, silenceAccumMs - frameDt);
                 if (silenceStartTime !== null) {
                     silenceStartTime = null;
                     setStatus('', 'REC');
                 }
             } else {
+                vadSilenceFrames++;
                 speechFramesCount = 0;
+                // Dead-mic watchdog: if we never hear ANYTHING for a long time,
+                // log it once so app.log can tell a silent mic from real speech.
+                if (!hasSpoken && Date.now() - recordStartTime > 8000 && !vadDeadMicLogged) {
+                    vadDeadMicLogged = true;
+                    log(`[render] VAD watchdog: no speech armed after 8s (smoothed=${smoothedSpeechVolume.toFixed(1)}, thresh=${silenceThresh}, ctx=${audioCtx ? audioCtx.state : 'none'}) — mic may be muted or silent`);
+                }
                 // 2s grace after record start: don't arm the silence timer
                 // before the user has had a chance to start speaking.
                 if (hasSpoken && Date.now() - recordStartTime >= 2000) {
-                    if (!silenceStartTime) {
-                        silenceStartTime = Date.now();
-                    } else {
-                        const silenceDurationSec = (Date.now() - silenceStartTime) / 1000;
-                        const maxSec = currentSttConfig.autoStopSeconds || 3.5;
-                        if (silenceDurationSec >= maxSec) {
-                            silenceStartTime = null;
-                            hasSpoken = false;
-                            stopRecording();
-                            return;
-                        } else if (silenceDurationSec > 0.3) {
-                            const remaining = Math.max(0.1, maxSec - silenceDurationSec).toFixed(1);
-                            setStatus('busy', `PAUSE (${remaining}s)`);
-                        }
+                    if (silenceStartTime === null) silenceStartTime = Date.now();
+                    silenceAccumMs += frameDt;
+                    const maxSec = currentSttConfig.autoStopSeconds || 3.5;
+                    if (silenceAccumMs >= maxSec * 1000) {
+                        silenceStartTime = null;
+                        hasSpoken = false;
+                        stopRecording();
+                        return;
+                    } else if (silenceAccumMs > 300) {
+                        const remaining = Math.max(0.1, maxSec - silenceAccumMs / 1000).toFixed(1);
+                        setStatus('busy', `PAUSE (${remaining}s)`);
                     }
                 }
+            }
+            } catch (vadErr) {
+                vadErrors++;
+                if (vadErrors <= 3) log(`[render] VAD exception: ${String(vadErr && vadErr.stack ? vadErr.stack : vadErr).slice(0, 300)}`);
             }
         }
     }
@@ -1381,13 +1449,13 @@ function drawVisualizer() {
             smoothValues[i] += (target - smoothValues[i]) * 0.3;
             const val = smoothValues[i];
             // Base height so quiet moments still show a moving ring, not flat silence.
-            barHeight = 4 + (val / 255) * 14;
+            barHeight = 6 + (val / 255) * 22;
             intensity = val / 255;
         } else {
             // Idle: uniform ticks that gently breathe (wave travels around the ring).
             const wave = 0.5 + 0.5 * Math.sin(elapsed * 1.6 - i * 0.55);
-            barHeight = 3 + wave * 4;
-            intensity = 0.18 + 0.1 * wave;
+            barHeight = 4 + wave * 5;
+            intensity = 0.35 + 0.25 * wave;
         }
 
         const angle = i * step + rot;
@@ -1400,10 +1468,16 @@ function drawVisualizer() {
         const x2 = centerX + cos * h2;
         const y2 = centerY + sin * h2;
 
-        const alpha = isRecordingNow ? (0.55 + intensity * 0.4) : (0.16 + intensity * 0.2);
+        const alpha = isRecordingNow ? (0.7 + intensity * 0.3) : (0.35 + intensity * 0.25);
         canvasCtx.strokeStyle = `rgba(230, 57, 70, ${alpha})`;
-        canvasCtx.lineWidth = isRecordingNow ? (1.6 + intensity * 1.2) : 1.2;
-        canvasCtx.shadowBlur = 0;
+        canvasCtx.lineWidth = isRecordingNow ? (2 + intensity * 2) : 1.6;
+        if (isRecordingNow) {
+            canvasCtx.shadowColor = 'rgba(230, 57, 70, 0.55)';
+            canvasCtx.shadowBlur = 6 + intensity * 6;
+        } else {
+            canvasCtx.shadowColor = 'transparent';
+            canvasCtx.shadowBlur = 0;
+        }
 
         canvasCtx.beginPath();
         canvasCtx.moveTo(x1, y1);
@@ -1412,13 +1486,20 @@ function drawVisualizer() {
     }
 
     // Thin guide ring, visible faintly so the circle reads as intentional.
-    canvasCtx.strokeStyle = isRecordingNow ? 'rgba(230, 57, 70, 0.22)' : 'rgba(230, 57, 70, 0.14)';
+    canvasCtx.strokeStyle = isRecordingNow ? 'rgba(230, 57, 70, 0.3)' : 'rgba(230, 57, 70, 0.22)';
     canvasCtx.lineWidth = 1;
     canvasCtx.beginPath();
     canvasCtx.arc(centerX, centerY, baseRadius + 1, 0, Math.PI * 2);
     canvasCtx.stroke();
 
-    animationFrameId = requestAnimationFrame(drawVisualizer);
+    } catch (vizErr) {
+        if (!vizErrLogged) {
+            vizErrLogged = true;
+            log(`[render] visualizer exception: ${String(vizErr && vizErr.stack ? vizErr.stack : vizErr).slice(0, 400)}`);
+        }
+    } finally {
+        animationFrameId = requestAnimationFrame(drawVisualizer);
+    }
 }
 
 // Start the visualizer loop once at init (idle ring), not only while recording.
@@ -1443,8 +1524,15 @@ async function startRecording() {
         setStatus('busy', 'STARTING');
         const sttConfig = await ipcRenderer.invoke('get-stt-config');
         currentSttConfig = sttConfig;
+        log(`[render] record start | autoStop=${!!sttConfig.autoStopEnabled} (${sttConfig.autoStopSeconds}s) | threshold=${sttConfig.silenceThreshold} | engine=${sttConfig.sttEngine}`);
         hasSpoken = false;
         silenceStartTime = null;
+        noiseFloor = null;
+        silenceAccumMs = 0;
+        lastFrameTs = 0;
+        vadDeadMicLogged = false;
+        vadMin = 0; vadMax = 0; vadSum = 0; vadCount = 0;
+        vadBlockEntries = 0; vadSpeechFrames = 0; vadSilenceFrames = 0; vadErrors = 0;
 
         if (sttConfig.sttEngine === 'gemini') {
             const status = await ipcRenderer.invoke('get-api-key-status');
@@ -1475,6 +1563,12 @@ async function startRecording() {
 
         // Setup Visualizer Node
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Chromium can create the context 'suspended' (autoplay policy, or after
+        // a previous context closed) — without resume the analyser feeds zeros
+        // and VAD auto-stop goes blind (recording never stops on its own).
+        if (audioCtx.state === 'suspended') {
+            try { await audioCtx.resume(); } catch (error) { /* analyser stays silent; watchdog below will flag it */ }
+        }
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 64;
         source = audioCtx.createMediaStreamSource(stream);
@@ -1628,6 +1722,7 @@ async function startRecording() {
 function stopRecordingCore(cancel) {
     if (!isRecording) return;
     cancelPending = cancel;
+    const wasArmed = hasSpoken;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
     }
@@ -1637,6 +1732,17 @@ function stopRecordingCore(cancel) {
     speechFramesCount = 0;
     silenceStartTime = null;
     hasSpoken = false;
+    noiseFloor = null;
+    silenceAccumMs = 0;
+    lastFrameTs = 0;
+    vadDeadMicLogged = false;
+    if (vadCount > 0 && !cancel) {
+        const avg = (vadSum / vadCount).toFixed(1);
+        const eff = currentSttConfig && typeof currentSttConfig.silenceThreshold === 'number'
+            ? Math.max(6, Math.min(currentSttConfig.silenceThreshold, (noiseFloor === null ? 0 : noiseFloor) + 8))
+            : '?';
+        log(`[render] VAD summary | ${((Date.now() - recordStartTime) / 1000).toFixed(1)}s | smoothed min=${vadMin.toFixed(1)} max=${vadMax.toFixed(1)} avg=${avg} | effThresh≈${typeof eff === 'number' ? eff.toFixed(1) : eff} | armed=${wasArmed} | autoStopCfg=${!!(currentSttConfig && currentSttConfig.autoStopEnabled)} | ctx=${audioCtx ? audioCtx.state : 'closed'}`);
+    }
     smoothValues.fill(0);
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
