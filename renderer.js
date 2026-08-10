@@ -368,7 +368,15 @@ function buildModelDropdown() {
         if (model.tier === recommendedTier) {
             const chip = document.createElement('span');
             chip.className = 'mo-chip';
-            chip.textContent = '⭐ Recommended';
+            chip.textContent = '⭐ ' + t('models.recommended', null, 'Recommended');
+            name.appendChild(chip);
+        }
+        // Quality scales with size in this registry — flag the top tier so users
+        // can pick accuracy when their PC has the RAM for it.
+        if (model.tier === 'big' || model.tier === 'zh-big') {
+            const chip = document.createElement('span');
+            chip.className = 'mo-chip mo-chip-best';
+            chip.textContent = '🏆 ' + t('models.bestQuality', null, 'Best quality');
             name.appendChild(chip);
         }
         const sub = document.createElement('span');
@@ -727,6 +735,9 @@ ipcRenderer.on('sync-settings', () => {
 ipcRenderer.on('models-changed', async () => {
     await loadModelCatalog();
     await checkModelStatus();
+    updateLocalModelUi();
+    buildModelDropdown();
+    renderModelCard();
 });
 
 ipcRenderer.on('toggle-recording', () => {
@@ -1271,8 +1282,24 @@ if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
 if (closeBtn) closeBtn.addEventListener('click', () => window.close());
 
 let activeDownloadKey = null;
+let downloadSpinnerEl = null;
+
+function addDownloadSpinner() {
+    if (!modelDownloadStatus || downloadSpinnerEl) return;
+    downloadSpinnerEl = document.createElement('span');
+    downloadSpinnerEl.className = 'download-spinner';
+    downloadSpinnerEl.setAttribute('aria-hidden', 'true');
+    modelDownloadStatus.appendChild(downloadSpinnerEl);
+}
+
+function removeDownloadSpinner() {
+    if (!downloadSpinnerEl) return;
+    downloadSpinnerEl.remove();
+    downloadSpinnerEl = null;
+}
 
 async function startModelDownload(modelKey, triggerBtn) {
+    removeDownloadSpinner();
     if (activeDownloadKey) return;
     activeDownloadKey = modelKey;
 
@@ -1302,10 +1329,16 @@ async function startModelDownload(modelKey, triggerBtn) {
                 modelDownloadStatus.textContent = t('model.downloading2', { a: (totalLoaded / 1048576).toFixed(1), b: (totalSize / 1048576).toFixed(1) });
             }
         } else if (data.status === 'extracting') {
+            // Extraction has no byte counter — show an indeterminate spinner
+            // and pulse the bar so it is obvious the app is busy, not frozen.
             modelDownloadStatus.textContent = t('model.extracting');
+            addDownloadSpinner();
+            modelDownloadBar.classList.add('extracting');
             modelDownloadBar.style.width = '100%';
             modelDownloadPct.textContent = '…';
         } else if (data.status === 'verified') {
+            modelDownloadBar.classList.remove('extracting');
+            removeDownloadSpinner();
             modelDownloadStatus.textContent = t('model.verified');
         }
     };
@@ -1324,13 +1357,22 @@ async function startModelDownload(modelKey, triggerBtn) {
             silenceThreshold: parseInt(silenceThresholdSlider ? silenceThresholdSlider.value : 12) || 12,
             ecoMode: document.getElementById('eco-mode-checkbox').checked
         });
+        removeDownloadSpinner();
+        modelDownloadBar.classList.remove('extracting');
         modelDownloadStatus.textContent = t('model.installed');
         modelDownloadPct.textContent = '100%';
         modelDownloadBar.style.width = '100%';
         setStatus('done', '✓ MODEL READY');
         setTimeout(hideStatus, 2000);
+        // Refresh from disk truth, then force every consumer re-render in THIS
+        // window (broadcastModelsChanged covers the other one). The previous
+        // checkModelStatus() alone left renderModelCard()/'installed' stale when
+        // the request-id guard dropped the earlier refresh.
         await loadModelCatalog();
-        checkModelStatus();
+        await checkModelStatus();
+        updateLocalModelUi();
+        buildModelDropdown();
+        renderModelCard();
         if (isSettingsWindow) {
             setTimeout(() => {
                 modelDownloadProgress.style.display = 'none';

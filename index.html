@@ -1085,6 +1085,33 @@
             transition: width 0.2s ease;
         }
 
+        /* Indeterminate spinner shown while the downloaded archive is being
+           extracted/verifying — extraction can take several seconds with no
+           byte progress, so the bar alone looks frozen. */
+        .download-spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            margin-left: 6px;
+            vertical-align: -1px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: v2c-spin 0.8s linear infinite;
+        }
+        @keyframes v2c-spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Extraction phase: pulse the progress bar so it's obviously alive. */
+        .progress-bar-fill.extracting {
+            width: 100% !important;
+            animation: v2c-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes v2c-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+
         /* ===== Professional settings window look ===== */
         body.settings-window {
             background: #15161b;
@@ -1331,6 +1358,11 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .mo-chip-best {
+            color: #7ee2b8;
+            background: rgba(126, 226, 184, 0.10);
+            border-color: rgba(126, 226, 184, 0.3);
+        }
         .mo-chip {
             display: inline-flex;
             align-items: center;
@@ -1487,7 +1519,7 @@
 <option data-i18n="models.tier.big" value="big">Big</option>
 <option data-i18n="models.tier.zh-big" value="zh-big">Chinese + English (Big)</option>
 </select>
-<div id="model-reco-note" style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>.</div>
+<div id="model-reco-note" style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>. <span data-i18n="models.qualityNote">RAM is used only while transcribing when Power-Saving Mode is on.</span></div>
 <div id="model-card" style="display: none;">
 <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
 <div style="min-width: 0;">

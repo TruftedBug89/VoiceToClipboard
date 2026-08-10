@@ -8,6 +8,30 @@ function getRequiredPath(root, fileName) {
     return path.join(root, fileName);
 }
 
+// sherpa-onnx-node exposes explicit release handles on newer builds, but older
+// ones only free the native recognizer when V8 garbage-collects its wrapper.
+// We do both: call any explicit releaser that exists, then schedule a forced
+// GC (main.js enables --expose-gc) so the ~0.3–1.2 GB of native RAM comes back
+// immediately when Power-Saving Mode unloads the model.
+function freeNativeMemory(recognizer) {
+    if (!recognizer) return;
+    for (const method of ['free', 'delete', 'close', 'dispose', 'release']) {
+        try {
+            const fn = recognizer[method];
+            if (typeof fn === 'function') {
+                fn.call(recognizer);
+                return;
+            }
+        } catch (e) { /* keep trying other releasers */ }
+    }
+}
+
+function scheduleGc() {
+    setImmediate(() => {
+        try { global.gc && global.gc(); } catch (e) { /* --expose-gc not set: lazy GC */ }
+    });
+}
+
 class SherpaAdapter {
     constructor(cache) {
         this.cache = cache;
@@ -139,7 +163,10 @@ class SherpaAdapter {
 
     async unload() {
         if (!this.loaded) return;
+        const { recognizer } = this.loaded;
         this.loaded = null;
+        freeNativeMemory(recognizer);
+        scheduleGc();
     }
 
     async transcribe(modelKey, pcm, sampleRate = 16000, opts = {}) {

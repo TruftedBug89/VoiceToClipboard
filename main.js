@@ -51,6 +51,10 @@ const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v
 
 
 app.disableHardwareAcceleration();
+// Force V8 incremental GC to actually run when Power-Saving Mode unloads the
+// ~0.3–1.2 GB of native STT weights — without --expose-gc the memory stays
+// resident until Node/JetBrains decides to collect, which can take minutes.
+app.commandLine.appendSwitch('js-flags', '--expose-gc');
 // Windows App User Model ID — required before windows are created so the
 // taskbar groups the app correctly and pinning the icon works properly.
 app.setAppUserModelId('com.voicetoclipboard.app');

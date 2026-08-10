@@ -131,11 +131,13 @@
   "model.downloadActivate": "📥 Download & Activate",
   "model.downloadStarting": "Starting download…",
   "model.downloading2": "Downloading… {a} / {b} MB",
-  "model.extracting": "Extracting & verifying…",
+  "model.extracting": "Extracting & verifying… (may take a few seconds)",
   "model.verified": "Verified ✓",
   "model.downloadFailed": "Download failed — {err}",
   "model.retry": "⚠️ Retry",
   "model.cardMeta": "{backend} · {lang} · {size} · {ram}",
   "spacepaste.styleBubble": "Bubble (press a key)",
-  "spacepaste.styleToast": "Windows notification (click)"
+  "spacepaste.styleToast": "Windows notification (click)",
+  "models.bestQuality": "Best quality",
+  "models.qualityNote": "RAM is used only while transcribing when Power-Saving Mode is on — bigger models = higher accuracy."
 }

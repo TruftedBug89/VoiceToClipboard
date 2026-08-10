@@ -22,6 +22,11 @@ class VoskAdapter {
         if (!this.loaded) return;
         this.loaded.model.free();
         this.loaded = null;
+        // Native RAM is already freed via model.free(); trigger the JS wrapper
+        // cleanup promptly when --expose-gc is available (see main.js).
+        setImmediate(() => {
+            try { global.gc && global.gc(); } catch (e) { /* GC runs lazily instead */ }
+        });
     }
 
     async transcribe(modelKey, pcm, sampleRate = 16000) {

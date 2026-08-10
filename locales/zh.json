@@ -131,11 +131,13 @@
   "model.downloadActivate": "📥 下载并启用",
   "model.downloadStarting": "开始下载…",
   "model.downloading2": "正在下载… {a} / {b} MB",
-  "model.extracting": "正在解压与校验…",
+  "model.extracting": "正在解压并验证…（可能需要几秒钟）",
   "model.verified": "校验通过 ✓",
   "model.downloadFailed": "下载失败 — {err}",
   "model.retry": "⚠️ 重试",
   "model.cardMeta": "{backend} · {lang} · {size} · {ram}",
   "spacepaste.styleBubble": "气泡（按快捷键粘贴）",
-  "spacepaste.styleToast": "Windows 通知（点击粘贴）"
+  "spacepaste.styleToast": "Windows 通知（点击粘贴）",
+  "models.bestQuality": "最佳质量",
+  "models.qualityNote": "开启省电模式后，RAM 仅在转录时占用 — 模型越大，识别精度越高。"
 }
