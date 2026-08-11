@@ -234,8 +234,10 @@ function createWindow() {
         resizable: false,
         skipTaskbar: false,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
             backgroundThrottling: false
         }
     });
@@ -285,8 +287,10 @@ function createSettingsWindow() {
         autoHideMenuBar: true,
         resizable: true,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
             backgroundThrottling: false
         }
     });
@@ -572,42 +576,7 @@ function clipTranscript(text, head = 110, tail = 70) {
     return `${h}…${tl}`;
 }
 
-const BUBBLE_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:transparent; }
-.card {
-  margin:0; background:rgba(18,18,24,0.97); color:#eee;
-  border:1px solid rgba(255,255,255,0.13); border-radius:14px;
-  box-shadow:0 10px 34px rgba(0,0,0,0.55), 0 0 0 1px rgba(230,57,70,0.08);
-  backdrop-filter:blur(18px) saturate(160%); -webkit-backdrop-filter:blur(18px) saturate(160%);
-  overflow:hidden; box-sizing:border-box; width:100%; height:100%;
-}
-.wrap { padding:13px 17px 12px; box-sizing:border-box; }
-.head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.dot { width:7px; height:7px; border-radius:50%; background:#10b981; box-shadow:0 0 9px rgba(16,185,129,0.9); flex:0 0 auto; }
-.title { font-size:11.5px; color:#e9e9ee; font-weight:600; letter-spacing:0.02em; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.key { font-size:10.5px; color:#ff97a0; background:rgba(230,57,70,0.16); border:1px solid rgba(230,57,70,0.4); padding:2px 9px; border-radius:999px; font-weight:700; letter-spacing:0.06em; white-space:nowrap; }
-.text { font-size:12.5px; color:#cfcfd8; line-height:1.45; max-height:37px; overflow:hidden; word-break:break-word; }
-</style></head><body><div class="card"><div class="wrap">
-<div class="head"><span class="dot"></span><span class="title" id="title">✓ Transcribed</span><span class="key" id="key-hint">SPACE</span></div>
-<div class="text" id="t"></div>
-</div></div><script>
-const { ipcRenderer } = require('electron');
-const el = document.getElementById('t');
-const keyHint = document.getElementById('key-hint');
-const titleEl = document.getElementById('title');
-let pasteKey = ' ';
-ipcRenderer.on('bubble-set-text', (e, payload) => {
-    const data = (typeof payload === 'string') ? { text: payload } : (payload || {});
-    el.textContent = data.text || '';
-    if (data.key) pasteKey = data.key;
-    if (data.keyLabel) keyHint.textContent = data.keyLabel;
-    if (data.title) titleEl.textContent = data.title;
-});
-window.addEventListener('keydown', (e) => {
-    if (e.key === pasteKey || e.key === 'Enter') { e.preventDefault(); ipcRenderer.send('bubble-paste'); }
-    else if (e.key === 'Escape') { ipcRenderer.send('bubble-dismiss'); }
-});
-</script></body></html>`;
+// Paste-bubble markup lives in bubble.html / bubble-renderer.js (loaded via bubble-preload.js).
 
 let lastExternalHwnd = null;
 let bubbleWindow = null;
@@ -633,10 +602,15 @@ function ensureBubbleWindow() {
         width: 360, height: 96, show: false, frame: false, resizable: false,
         alwaysOnTop: true, skipTaskbar: true, focusable: true, hasShadow: true,
         transparent: true,
-        webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
+        webPreferences: {
+            preload: path.join(__dirname, 'bubble-preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false
+        },
     });
     bubbleWindow.setAlwaysOnTop(true, 'screen-saver');
-    bubbleWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(BUBBLE_HTML));
+    bubbleWindow.loadFile(path.join(__dirname, 'bubble.html'));
     bubbleWindow.webContents.on('did-finish-load', () => {
         if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
             const _k = loadConfig().pasteKey || ' ';
@@ -732,7 +706,7 @@ ipcMain.on('bubble-paste', () => {
 ipcMain.on('bubble-dismiss', () => closePasteBubble());
 
 // Renderer pushes structured events (transcription results, errors) to app.log
-ipcMain.on('renderer-log', (_e, msg) => { logApp(msg); });
+ipcMain.on('renderer-log', (_e, msg) => { logApp(String(msg).slice(0, 4000)); });
 
 // Dev/test helper (opt-in only): VTC_SHOW_BUBBLE=1 shows a sample bubble ~6s after launch.
 if (process.env.VTC_SHOW_BUBBLE === '1') {
@@ -956,6 +930,7 @@ ipcMain.handle('check-model-downloaded', async (event, modelKey) => {
 });
 
 ipcMain.handle('download-local-model', async (event, modelKey) => {
+    if (typeof modelKey !== 'string' || !/^[a-z0-9-]{1,64}$/.test(modelKey)) return { success: false, code: 'BAD_MODEL', error: 'Invalid model key.' };
     const result = await sttService.download(modelKey, data => {
         if (event.sender && !event.sender.isDestroyed()) event.sender.send('download-progress', data);
     });
@@ -964,15 +939,17 @@ ipcMain.handle('download-local-model', async (event, modelKey) => {
 });
 
 ipcMain.handle('remove-local-model', async (event, modelKey) => {
+    if (typeof modelKey !== 'string' || !/^[a-z0-9-]{1,64}$/.test(modelKey)) return { success: false, code: 'BAD_MODEL', error: 'Invalid model key.' };
     const result = await sttService.remove(modelKey);
     broadcastModelsChanged();
     return result;
 });
 
 ipcMain.handle('save-api-key', async (event, newKey) => {
-    const list = Array.isArray(newKey)
-        ? newKey.map(k => String(k || '').trim()).filter(Boolean)
-        : [String(newKey || '').trim()].filter(Boolean);
+    const list = (Array.isArray(newKey) ? newKey : [newKey])
+        .map(k => String(k || '').trim())
+        .filter(k => k.length > 0 && k.length <= 512)
+        .slice(0, 8);
     const success = saveConfig({ apiKey: list[0] || '', apiKeys: list });
     if (success) await broadcastSettingsChanged();
     return { success };
@@ -1069,6 +1046,9 @@ setInterval(() => {
 }, 200);
 
 ipcMain.handle('transcribe-audio', async (event, request) => {
+    if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
+    const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
+    if (audioBytes && audioBytes > 33554432) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
     const config = loadConfig();
     const started = Date.now();
     if (request?.engine === 'local') {

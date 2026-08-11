@@ -1,4 +1,5 @@
-const { ipcRenderer } = require('electron');
+// window.api is injected by preload.js (contextIsolation: true, nodeIntegration: false).
+// See preload.js for the full bridge surface.
 
 // ─── i18n (offline, bundled locales) ───────────────────────────────────────
 const LOCALES = {
@@ -258,7 +259,7 @@ function renderModelCardAction(model) {
         removeBtn.textContent = '🗑 Remove';
         removeBtn.style.cssText = 'padding: 5px 10px; font-size: 10px; white-space: nowrap;';
         removeBtn.addEventListener('click', async () => {
-            await ipcRenderer.invoke('remove-local-model', model.key);
+            await window.api.removeLocalModel(model.key);
             await loadModelCatalog();
             checkModelStatus();
         });
@@ -446,7 +447,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 async function loadModelCatalog() {
-    modelCatalog = await ipcRenderer.invoke('get-model-catalog');
+    modelCatalog = await window.api.getModelCatalog();
     renderModelCard();
     buildModelDropdown();
 }
@@ -524,7 +525,7 @@ document.addEventListener('pointerdown', (e) => {
         };
         lastPointerEventTime = Date.now();
         try { dragTarget.setPointerCapture(e.pointerId); } catch (err) {}
-        ipcRenderer.send('drag-start');
+        window.api.dragStart();
     }
 });
 
@@ -537,7 +538,7 @@ document.addEventListener('pointermove', (e) => {
         if (pointerDrag.dragTarget) pointerDrag.dragTarget.classList.add('dragging');
     }
     if (pointerDrag.moved) {
-        ipcRenderer.send('drag-move');
+        window.api.dragMove();
     }
 });
 
@@ -549,7 +550,7 @@ function endPointerDrag() {
         }
         pointerDrag = null;
         micContainer.classList.remove('dragging');
-        ipcRenderer.send('drag-end');
+        window.api.dragEnd();
     }
 }
 
@@ -622,7 +623,7 @@ function refreshMouseIgnore() {
         topBar.classList.add('visible');
         if (mouseIgnored) {
             mouseIgnored = false;
-            ipcRenderer.send('set-ignore-mouse', false);
+            window.api.setIgnoreMouse(false);
         }
         return;
     }
@@ -664,7 +665,7 @@ function refreshMouseIgnore() {
     const shouldIgnore = !interactive;
     if (shouldIgnore !== mouseIgnored) {
         mouseIgnored = shouldIgnore;
-        ipcRenderer.send('set-ignore-mouse', shouldIgnore);
+        window.api.setIgnoreMouse(shouldIgnore);
     }
 }
 
@@ -683,7 +684,7 @@ document.addEventListener('mouseleave', () => {
         topBar.classList.remove('visible', 'hover-active');
         if (!mouseIgnored) {
             mouseIgnored = true;
-            ipcRenderer.send('set-ignore-mouse', true);
+            window.api.setIgnoreMouse(true);
         }
     }
 });
@@ -691,11 +692,11 @@ document.addEventListener('mouseleave', () => {
 // Main-process cursor polling is the source of truth for hover/leave. The
 // payload carries the real OS cursor position (window-relative) so the pill
 // wakes instantly even when forwarded mouse events are missed.
-ipcRenderer.on('gemini-fallback', (e, model) => {
+window.api.on('gemini-fallback', (e, model) => {
         setStatus('busy', `Rate limit — switched to ${model}`);
     });
 
-ipcRenderer.on('widget-hover', (event, payload) => {
+window.api.on('widget-hover', (event, payload) => {
     const inside = typeof payload === 'boolean' ? payload : !!(payload && payload.inside);
     const entered = inside && !cursorInsideWindow;
     cursorInsideWindow = inside;
@@ -707,7 +708,7 @@ ipcRenderer.on('widget-hover', (event, payload) => {
             topBar.classList.remove('visible', 'hover-active');
             if (!mouseIgnored) {
                 mouseIgnored = true;
-                ipcRenderer.send('set-ignore-mouse', true);
+                window.api.setIgnoreMouse(true);
             }
         }
         return;
@@ -724,7 +725,7 @@ ipcRenderer.on('widget-hover', (event, payload) => {
 });
 
 // Global Hotkey / IPC handlers
-ipcRenderer.on('settings-changed', (event, snapshot) => {
+window.api.on('settings-changed', (event, snapshot) => {
     currentSttConfig = snapshot;
     applyAppearanceSnapshot(snapshot);
     // Live language switch: re-render the whole UI (widget + settings window).
@@ -734,11 +735,11 @@ ipcRenderer.on('settings-changed', (event, snapshot) => {
     if (isSettingsWindow) refreshSettingsUi(snapshot);
 });
 
-ipcRenderer.on('sync-settings', () => {
+window.api.on('sync-settings', () => {
     refreshSettingsUi();
 });
 
-ipcRenderer.on('models-changed', async () => {
+window.api.on('models-changed', async () => {
     await loadModelCatalog();
     await checkModelStatus();
     updateLocalModelUi();
@@ -746,7 +747,7 @@ ipcRenderer.on('models-changed', async () => {
     renderModelCard();
 });
 
-ipcRenderer.on('toggle-recording', () => {
+window.api.on('toggle-recording', () => {
     if (!isRecording) {
         startRecording();
     } else {
@@ -754,7 +755,7 @@ ipcRenderer.on('toggle-recording', () => {
     }
 });
 
-ipcRenderer.on('open-settings', () => {
+window.api.on('open-settings', () => {
     openSettings();
 });
 
@@ -1102,10 +1103,10 @@ if (autoCalibrateBtn) {
 }
 
 async function checkApiKeyStatus() {
-    const sttConfig = await ipcRenderer.invoke('get-stt-config');
+    const sttConfig = await window.api.getSttConfig();
     currentSttConfig = sttConfig;
     if (sttConfig.sttEngine === 'gemini') {
-        const status = await ipcRenderer.invoke('get-api-key-status');
+        const status = await window.api.getApiKeyStatus();
         if (!status.hasKey) {
             setStatus('err', 'API KEY REQUIRED');
         }
@@ -1118,7 +1119,7 @@ async function checkApiKeyStatus() {
 
 function openSettings() {
     if (isSettingsWindow) return;
-    ipcRenderer.send('show-settings-window');
+    window.api.showSettingsWindow();
 }
 
 const hotkeyInput = document.getElementById('hotkey-input');
@@ -1127,7 +1128,7 @@ let isRecordingHotkey = false;
 
 async function loadHotkey() {
     if (!hotkeyInput) return;
-    const currentKey = await ipcRenderer.invoke('get-hotkey');
+    const currentKey = await window.api.getHotkey();
     hotkeyInput.value = currentKey || 'CommandOrControl+Alt+V';
 }
 
@@ -1137,7 +1138,7 @@ function startHotkeyRecording() {
     hotkeyInput.style.borderColor = 'var(--primary)';
     recordHotkeyBtn.textContent = t('autostop.calibrate.listening', { s: '…' });
     
-    ipcRenderer.invoke('start-recording-hotkey').then((newHotkeyStr) => {
+    window.api.startRecordingHotkey().then((newHotkeyStr) => {
         hotkeyInput.style.borderColor = 'rgba(255, 255, 255, 0.15)';
         recordHotkeyBtn.textContent = 'Change Key';
         if (newHotkeyStr) {
@@ -1155,14 +1156,14 @@ if (hotkeyInput) hotkeyInput.addEventListener('click', startHotkeyRecording);
 if (recordHotkeyBtn) recordHotkeyBtn.addEventListener('click', startHotkeyRecording);
 
 async function refreshSettingsUi(snapshot = null) {
-    const sttConfig = snapshot || await ipcRenderer.invoke('get-stt-config');
+    const sttConfig = snapshot || await window.api.getSttConfig();
     applyAppearanceSnapshot(sttConfig);
     currentSttConfig = sttConfig;
     applyI18n(sttConfig.uiLanguage || 'en');
     if (uiLanguageSelect) uiLanguageSelect.value = sttConfig.uiLanguage || 'en';
     const cachePath = document.getElementById('model-cache-path');
     if (cachePath && sttConfig.modelCachePath) cachePath.textContent = `${t('models.cachePath')} (${sttConfig.modelCachePath})`;
-    const apiStatus = await ipcRenderer.invoke('get-api-key-status');
+    const apiStatus = await window.api.getApiKeyStatus();
 
     await loadHotkey();
     applyModelRecommendation(sttConfig);
@@ -1243,7 +1244,7 @@ async function checkModelStatus() {
     const model = modelForSelection();
     const modelKey = model?.key || getSelectedModelKey();
     updateLocalModelUi();
-    const res = await ipcRenderer.invoke('check-model-downloaded', modelKey);
+    const res = await window.api.checkModelDownloaded(modelKey);
     if (requestId !== modelStatusRequestId) return;
     const catalogModel = modelCatalog.find(m => m.key === modelKey);
     if (catalogModel) catalogModel.installed = !!res.downloaded;
@@ -1274,7 +1275,7 @@ apiKeyInput.addEventListener('change', () => {
 function closeSettings() {
     stopSettingsMicPreview();
     if (isSettingsWindow) {
-        ipcRenderer.send('close-settings-window');
+        window.api.closeSettingsWindow();
         return;
     }
     settingsModal.classList.remove('active');
@@ -1349,13 +1350,13 @@ async function startModelDownload(modelKey, triggerBtn) {
         }
     };
 
-    ipcRenderer.on('download-progress', progressListener);
-    const res = await ipcRenderer.invoke('download-local-model', modelKey);
-    ipcRenderer.removeListener('download-progress', progressListener);
+    window.api.on('download-progress', progressListener);
+    const res = await window.api.downloadLocalModel(modelKey);
+    window.api.removeListener('download-progress', progressListener);
     activeDownloadKey = null;
 
     if (res.success) {
-        await ipcRenderer.invoke('save-stt-config', {
+        await window.api.saveSttConfig({
             sttEngine: 'local',
             localTier: localTierSelect.value,
             autoStopEnabled: autoStopCheckbox.checked,
@@ -1420,12 +1421,12 @@ function autoSaveSettings() {
 
             const keyLines = apiKeyInput.value.split('\n').map(s => s.trim()).filter(Boolean);
             if (keyLines.length) {
-                await ipcRenderer.invoke('save-api-key', keyLines);
+                await window.api.saveApiKey(keyLines);
                 apiKeyInput.value = '';
                 await checkApiKeyStatus();
             }
 
-            const saved = await ipcRenderer.invoke('save-stt-config', {
+            const saved = await window.api.saveSttConfig({
                 sttEngine: engine,
                 uiLanguage: uiLanguageSelect ? uiLanguageSelect.value : uiLang,
                 localTier,
@@ -1467,13 +1468,13 @@ function autoSaveSettings() {
 }
 
 removeKeyBtn.addEventListener('click', async () => {
-    await ipcRenderer.invoke('remove-api-key');
+    await window.api.removeApiKey();
     refreshSettingsUi();
 });
 
 async function initializeRenderer() {
     await loadModelCatalog();
-    const snapshot = await ipcRenderer.invoke('get-stt-config');
+    const snapshot = await window.api.getSttConfig();
     applyAppearanceSnapshot(snapshot);
     applyI18n(snapshot.uiLanguage || 'en');
     if (isSettingsWindow) {
@@ -1690,9 +1691,9 @@ async function startRecording() {
     let stream = null;
     try {
         stopSettingsMicPreview();
-        ipcRenderer.send('widget-raise');
+        window.api.widgetRaise();
         setStatus('busy', 'STARTING');
-        const sttConfig = await ipcRenderer.invoke('get-stt-config');
+        const sttConfig = await window.api.getSttConfig();
         currentSttConfig = sttConfig;
         log(`[render] record start | autoStop=${!!sttConfig.autoStopEnabled} (${sttConfig.autoStopSeconds}s) | threshold=${sttConfig.silenceThreshold} | engine=${sttConfig.sttEngine}`);
         hasSpoken = false;
@@ -1705,7 +1706,7 @@ async function startRecording() {
         vadBlockEntries = 0; vadSpeechFrames = 0; vadSilenceFrames = 0; vadErrors = 0;
 
         if (sttConfig.sttEngine === 'gemini') {
-            const status = await ipcRenderer.invoke('get-api-key-status');
+            const status = await window.api.getApiKeyStatus();
             if (!status.hasKey) {
                 setStatus('err', 'NO API KEY');
                 setTimeout(hideStatus, 2500);
@@ -1812,7 +1813,7 @@ async function startRecording() {
                         setTimeout(hideStatus, 3500);
                         return;
                     }
-                    result = await ipcRenderer.invoke('transcribe-audio', {
+                    result = await window.api.transcribeAudio({
                         engine: 'local',
                         modelKey: sttConfig.localModelKey,
                         pcm: float32Pcm.buffer,
@@ -1820,7 +1821,7 @@ async function startRecording() {
                         uiLanguage: uiLang
                     });
                 } else {
-                    result = await ipcRenderer.invoke('transcribe-audio', {
+                    result = await window.api.transcribeAudio({
                         engine: 'gemini',
                         arrayBuffer: await audioBlob.arrayBuffer(),
                         mimeType: mimeType || 'audio/webm',
@@ -1960,7 +1961,7 @@ function cancelRecording() {
 
 // ---- App log (main writes it to %APPDATA%\VoiceToClipboard\app.log) ----
 function log(msg) {
-    try { ipcRenderer.send('renderer-log', String(msg)); } catch (e) { /* ignore */ }
+    try { window.api.rendererLog(String(msg)); } catch (e) { /* ignore */ }
 }
 
 // ---- Transcribe Again ----
@@ -1992,10 +1993,10 @@ async function retranscribeLast() {
 
     let result;
     try {
-        const cfg = await ipcRenderer.invoke('get-stt-config');
+        const cfg = await window.api.getSttConfig();
         currentSttConfig = cfg;
         if (cfg.sttEngine === 'local') {
-            result = await ipcRenderer.invoke('transcribe-audio', {
+            result = await window.api.transcribeAudio({
                 engine: 'local',
                 modelKey: cfg.localModelKey,
                 pcm: audio.pcm.buffer,
@@ -2003,7 +2004,7 @@ async function retranscribeLast() {
                 uiLanguage: uiLang
             });
         } else {
-            result = await ipcRenderer.invoke('transcribe-audio', {
+            result = await window.api.transcribeAudio({
                 engine: 'gemini',
                 arrayBuffer: await audio.blob.arrayBuffer(),
                 mimeType: audio.mimeType,
