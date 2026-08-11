@@ -1722,6 +1722,15 @@ function drawVisualizer() {
     }
 }
 
+// Hidden widget: stop burning GPU/CPU on the idle ring; resume on visibility.
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+    } else if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(drawVisualizer);
+    }
+});
+
 // Start the visualizer loop once at init (idle ring), not only while recording.
 requestAnimationFrame(drawVisualizer);
 

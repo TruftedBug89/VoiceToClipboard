@@ -547,6 +547,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('will-quit', () => {
+    clearInterval(foregroundPoll);
+    clearInterval(widgetHoverPoll);
     uIOhook.stop();
     // Do NOT unload native STT models here: vosk-koffi/sherpa-onnx native calls
     // racing with Electron teardown caused koffi.node fail-fast crashes (0xc0000409)
@@ -589,8 +591,9 @@ let bubblePendingText = '';
 let pasteToast = null;
 
 // Remember the window the user was working in (ignores our own widget).
-setInterval(() => {
-    if (!win32.available) return;
+// Poll only when it can matter — skip when the app is quitting or no window exists.
+const foregroundPoll = setInterval(() => {
+    if (!win32.available || !mainWindow || mainWindow.isDestroyed()) return;
     try {
         if (BrowserWindow.getFocusedWindow()) return; // our own window is focused
         const hwnd = win32.getForegroundWindow();
@@ -1031,7 +1034,7 @@ ipcMain.on('widget-raise', () => {
 // mouseleave is unreliable, which leaves the top pill visible and blocks the
 // idle transparency. Poll the OS cursor against the widget bounds instead.
 let lastWidgetHoverState = null;
-setInterval(() => {
+const widgetHoverPoll = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
     const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = mainWindow.getPosition();
