@@ -788,7 +788,56 @@ function applyAppearanceSnapshot(snapshot) {
     if (!snapshot) return;
     const idleOpacity = typeof snapshot.idleOpacity === 'number' ? Math.round(snapshot.idleOpacity * 100) : 60;
     applyIdleFadeState(snapshot.idleFadeEnabled, idleOpacity);
+    if (typeof snapshot.widgetStyle === 'string') { currentWidgetStyle = (snapshot.widgetStyle === 'ocean' || snapshot.widgetStyle === 'aurora') ? snapshot.widgetStyle : 'crimson'; applyWidgetStyle(currentWidgetStyle); }
 }
+
+
+// Widget Style (theme) — mirrored into autoSaveSettings and applied live.
+let currentWidgetStyle = 'crimson';
+function setWidgetStyle(style, { save = true } = {}) {
+    const s = (style === 'ocean' || style === 'aurora') ? style : 'crimson';
+    currentWidgetStyle = s;
+    applyWidgetStyle(s);
+    if (save) autoSaveSettings();
+}
+
+function wireStylePicker() {
+    const picker = document.getElementById('style-picker');
+    if (!picker) return;
+    const swatches = Array.from(picker.querySelectorAll('.style-swatch'));
+    swatches.forEach((sw, idx) => {
+        sw.addEventListener('click', () => setWidgetStyle(sw.getAttribute('data-style')));
+        sw.addEventListener('keydown', (e) => {
+            let next = null;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % swatches.length;
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + swatches.length) % swatches.length;
+            else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setWidgetStyle(sw.getAttribute('data-style')); return; }
+            if (next !== null) { e.preventDefault(); swatches[next].focus(); setWidgetStyle(swatches[next].getAttribute('data-style')); }
+        });
+    });
+    // Reflect the persisted style on open.
+    markActiveSwatch(picker, currentWidgetStyle);
+}
+
+// Theme: reflect the saved Widget Style onto <html data-widget-style="...">.
+function applyWidgetStyle(style) {
+    const s = (style === 'ocean' || style === 'aurora') ? style : 'crimson';
+    document.documentElement.setAttribute('data-widget-style', s);
+    const picker = document.getElementById('style-picker');
+    if (picker) markActiveSwatch(picker, s);
+}
+
+function markActiveSwatch(picker, style) {
+    for (const sw of picker.querySelectorAll('.style-swatch')) {
+        const active = sw.getAttribute('data-style') === style;
+        sw.classList.toggle('active', active);
+        sw.setAttribute('aria-checked', active ? 'true' : 'false');
+        sw.tabIndex = active ? 0 : -1;
+    }
+}
+
+// Wire the Widget Style picker once (settings window).
+wireStylePicker();
 
 if (idleFadeCheckbox) {
     idleFadeCheckbox.addEventListener('change', () => {
@@ -1445,7 +1494,8 @@ function autoSaveSettings() {
                 pasteStyle: document.getElementById('paste-style-select')
                     ? document.getElementById('paste-style-select').value
                     : 'bubble',
-                pasteKey: pasteKeyVal
+                pasteKey: pasteKeyVal,
+                widgetStyle: currentWidgetStyle
             });
             if (!saved.success) return;
 

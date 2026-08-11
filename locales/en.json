@@ -139,5 +139,14 @@
   "spacepaste.styleBubble": "Bubble (press a key)",
   "spacepaste.styleToast": "Windows notification (click)",
   "models.bestQuality": "Best quality",
-  "models.qualityNote": "RAM is used only while transcribing when Power-Saving Mode is on — bigger models = higher accuracy."
+  "models.qualityNote": "RAM is used only while transcribing when Power-Saving Mode is on — bigger models = higher accuracy.",
+  "appearance": {
+    "widgetStyle": "Widget Style",
+    "style": {
+      "crimson": "Crimson",
+      "ocean": "Ocean",
+      "aurora": "Aurora"
+    },
+    "widgetStyleTooltip": "Recolor the widget and this window."
+  }
 }

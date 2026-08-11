@@ -125,6 +125,7 @@ function loadConfig() {
         if (fs.existsSync(configPath)) {
             const cfg = migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
             if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
+            if (!['crimson','ocean','aurora'].includes(cfg.widgetStyle)) cfg.widgetStyle = 'crimson';
             return cfg;
         }
     } catch (e) {
@@ -174,6 +175,7 @@ async function getSettingsSnapshot() {
         idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
         geminiModel: config.geminiModel || 'gemini-2.5-flash',
         uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage] ? config.uiLanguage : mapUiLanguage(app.getLocale()),
+        widgetStyle: (config.widgetStyle === 'ocean' || config.widgetStyle === 'aurora') ? config.widgetStyle : 'crimson',
         systemRamGB: systemRamGB(),
         recommendedTier: recommendedTierForRam(systemRamGB()),
         playFinishSound: config.playFinishSound !== false
@@ -879,7 +881,8 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
             ? settings.pasteKey
             : (typeof existing.pasteKey === 'string' && existing.pasteKey.length <= 12 ? existing.pasteKey : ' '),
         playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false,
-        uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(app.getLocale()))
+        uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(app.getLocale())),
+        widgetStyle: ['crimson','ocean','aurora'].includes(settings.widgetStyle) ? settings.widgetStyle : (['crimson','ocean','aurora'].includes(existing.widgetStyle) ? existing.widgetStyle : 'crimson')
     });
 
     if (!success) return { success: false };

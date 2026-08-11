@@ -139,5 +139,14 @@
   "spacepaste.styleBubble": "Burbuja (pulsa una tecla)",
   "spacepaste.styleToast": "Notificación de Windows (clic)",
   "models.bestQuality": "Mejor calidad",
-  "models.qualityNote": "La RAM solo se usa durante la transcripción con el modo ahorro activado — modelos más grandes = mayor precisión."
+  "models.qualityNote": "La RAM solo se usa durante la transcripción con el modo ahorro activado — modelos más grandes = mayor precisión.",
+  "appearance": {
+    "widgetStyle": "Estilo del widget",
+    "style": {
+      "crimson": "Carmesí",
+      "ocean": "Océano",
+      "aurora": "Aurora"
+    },
+    "widgetStyleTooltip": "Cambia el color del widget y de esta ventana."
+  }
 }

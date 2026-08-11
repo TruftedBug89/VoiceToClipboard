@@ -139,5 +139,14 @@
   "spacepaste.styleBubble": "气泡（按快捷键粘贴）",
   "spacepaste.styleToast": "Windows 通知（点击粘贴）",
   "models.bestQuality": "最佳质量",
-  "models.qualityNote": "开启省电模式后，RAM 仅在转录时占用 — 模型越大，识别精度越高。"
+  "models.qualityNote": "开启省电模式后，RAM 仅在转录时占用 — 模型越大，识别精度越高。",
+  "appearance": {
+    "widgetStyle": "小组件样式",
+    "style": {
+      "crimson": "绯红",
+      "ocean": "海洋",
+      "aurora": "极光"
+    },
+    "widgetStyleTooltip": "为小组件和本窗口重新配色。"
+  }
 }
