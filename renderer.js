@@ -48,7 +48,9 @@ function applyI18n(lang) {
         el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
     });
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
-        el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+        const label = t(el.getAttribute('data-i18n-title'));
+        el.setAttribute('title', label);
+        el.setAttribute('aria-label', label);
     });
     // Models note has an embedded styled span — rebuild innerHTML.
     const recoNote = document.getElementById('model-reco-note');
@@ -581,9 +583,13 @@ document.addEventListener('lostpointercapture', (e) => {
     }
 });
 
-// Esc cancels an active recording
+// Keyboard parity for the custom mic control; Escape cancels recording.
 document.addEventListener('keydown', (e) => {
-    if (isRecording && e.key === 'Escape') {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === micBtn) {
+        e.preventDefault();
+        if (!isRecording) startRecording();
+        else stopRecording();
+    } else if (isRecording && e.key === 'Escape') {
         cancelRecording();
     }
 });

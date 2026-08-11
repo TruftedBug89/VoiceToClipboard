@@ -19,6 +19,9 @@ function validatePcm(value, sampleRate = 16000) {
     if (samples.length / sampleRate > MAX_AUDIO_SECONDS) {
         throw new Error(`Recording exceeds the ${MAX_AUDIO_SECONDS / 60}-minute limit.`);
     }
+    for (let i = 0; i < samples.length; i++) {
+        if (!Number.isFinite(samples[i])) throw new Error('Audio buffer contains invalid samples.');
+    }
     return samples;
 }
 

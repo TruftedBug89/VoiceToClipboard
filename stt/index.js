@@ -8,9 +8,10 @@ const { ModelCache } = require('./model-cache');
 const { validatePcm } = require('./audio');
 const { VoskAdapter } = require('./vosk-adapter');
 const { SherpaAdapter } = require('./sherpa-adapter');
+const { sanitizeErrorMessage } = require('./error-sanitizer');
 
 function normalizeError(error) {
-    const message = error?.message || String(error || 'Unknown transcription error.');
+    const message = sanitizeErrorMessage(error || 'Unknown transcription error.');
     if (/weights|download|model/i.test(message)) return { code: 'MODEL_UNAVAILABLE', message };
     if (/api key|configured/i.test(message)) return { code: 'NO_API_KEY', message };
     if (/network|http|timeout|fetch/i.test(message)) return { code: 'NETWORK_ERROR', message };

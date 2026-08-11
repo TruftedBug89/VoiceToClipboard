@@ -7,6 +7,7 @@ const { deriveLocalModelKey, migrateConfig, validateSttConfig } = require('../st
 const { getModel, MODEL_REGISTRY } = require('../stt/model-registry');
 const { pcmToWav, validatePcm } = require('../stt/audio');
 const { ModelCache } = require('../stt/model-cache');
+const { sanitizeErrorMessage } = require('../stt/error-sanitizer');
 
 test('derives multilingual model keys (no language selection)', () => {
     assert.equal(deriveLocalModelKey('tiny'), 'tiny-multilingual');
@@ -159,6 +160,15 @@ test('validates PCM and writes a mono 16-bit WAV header', () => {
 test('rejects invalid and empty PCM', () => {
     assert.throws(() => validatePcm(new Float32Array(), 16000), /empty/);
     assert.throws(() => validatePcm(new Float32Array([0]), 0), /sample rate/);
+    assert.throws(() => validatePcm(new Float32Array([Number.NaN]), 16000), /invalid samples/);
+});
+
+test('redacts API keys and authorization values from errors', () => {
+    const googleKey = `AIza${'A'.repeat(32)}`;
+    const message = sanitizeErrorMessage(new Error(`request failed?key=${googleKey} authorization: Bearer top-secret`));
+    assert.equal(message.includes(googleKey), false);
+    assert.equal(message.includes('top-secret'), false);
+    assert.match(message, /\[REDACTED\]/);
 });
 
 test('keeps model cache paths inside the configured cache directory', async () => {

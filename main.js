@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen, Notification, shell } = require('electron');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
@@ -7,6 +7,7 @@ const { SttService } = require('./stt');
 const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } = require('./stt/config');
 const { getModelKey } = require('./stt/model-registry');
 const win32 = require('./win32');
+const { sanitizeErrorMessage } = require('./stt/error-sanitizer');
 
 // ─── i18n (offline, bundled locales — same files the renderer uses) ───────
 const LOCALES = {
@@ -87,15 +88,9 @@ const modelsDir = path.join(canonicalUserDataPath, 'models');
 // packaged, leaving the exe with zero observability).
 function logApp(msg) {
     try {
-        const line = `[${new Date().toISOString()}] ${msg}\n`;
+        const line = `[${new Date().toISOString()}] ${sanitizeErrorMessage(msg)}\n`;
         fs.appendFileSync(path.join(canonicalUserDataPath, 'app.log'), line);
     } catch (e) { /* logging must never crash the app */ }
-}
-// Redact anything that looks like a secret before it reaches the log.
-function redactLog(s) {
-    return String(s)
-        .replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza…REDACTED')
-        .replace(/(key|api[_-]?key|token)=[^&\s"']+/gi, '$1=REDACTED');
 }
 const legacyUserDataPaths = [
     path.join(app.getPath('appData'), 'voicetoclipboard')
@@ -215,6 +210,16 @@ function getApiKeys() {
 }
 function getApiKey() { return getApiKeys()[0] || ''; }
 
+function secureWebContents(webContents) {
+    webContents.setWindowOpenHandler(({ url }) => {
+        if (url === 'https://aistudio.google.com/apikey') shell.openExternal(url).catch(() => {});
+        return { action: 'deny' };
+    });
+    webContents.on('will-navigate', (event, url) => {
+        if (url !== webContents.getURL()) event.preventDefault();
+    });
+}
+
 function createWindow() {
     const config = loadConfig();
 
@@ -235,6 +240,7 @@ function createWindow() {
         }
     });
 
+    secureWebContents(mainWindow.webContents);
     mainWindow.loadFile('index.html');
 
     // Click-through transparent areas; renderer re-enables over interactive spots
@@ -243,8 +249,8 @@ function createWindow() {
     // Forward renderer console (incl. errors) to app.log
     mainWindow.webContents.on('console-message', (event) => {
         const msg = `[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`;
-        console.log(msg);
-        logApp(redactLog(msg));
+        console.log(sanitizeErrorMessage(msg));
+        logApp(msg);
     });
 
     // Save window position once the drag settles
@@ -285,6 +291,7 @@ function createSettingsWindow() {
         }
     });
 
+    secureWebContents(settingsWindow.webContents);
     settingsWindow.loadFile('index.html', { query: { settings: '1' } });
     settingsWindow.on('closed', () => {
         settingsWindow = null;
@@ -303,14 +310,15 @@ function showSettingsWindow() {
 }
 
 process.on('uncaughtException', (err) => {
-    console.error('MAIN UNCAUGHT:', err);
+    const message = sanitizeErrorMessage(err);
+    console.error('MAIN UNCAUGHT:', message);
+    logApp(`[main] uncaught exception | ${message}`);
 });
-
-function sanitizeErrorMessage(err) {
-    if (!err) return "Unknown error";
-    let msg = typeof err === 'string' ? err : (err.message || String(err));
-    return msg.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
-}
+process.on('unhandledRejection', (reason) => {
+    const message = sanitizeErrorMessage(reason);
+    console.error('MAIN UNHANDLED REJECTION:', message);
+    logApp(`[main] unhandled rejection | ${message}`);
+});
 
 function trayMenuForState(alwaysOnTop) {
     return Menu.buildFromTemplate([
@@ -724,7 +732,7 @@ ipcMain.on('bubble-paste', () => {
 ipcMain.on('bubble-dismiss', () => closePasteBubble());
 
 // Renderer pushes structured events (transcription results, errors) to app.log
-ipcMain.on('renderer-log', (_e, msg) => { logApp(redactLog(msg)); });
+ipcMain.on('renderer-log', (_e, msg) => { logApp(msg); });
 
 // Dev/test helper (opt-in only): VTC_SHOW_BUBBLE=1 shows a sample bubble ~6s after launch.
 if (process.env.VTC_SHOW_BUBBLE === '1') {
@@ -1077,8 +1085,9 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
             logApp(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
             return r;
         } catch (e) {
-            logApp(`[main] transcribe THREW | engine: local | ${String(e && e.stack ? e.stack : e).slice(0, 400)}`);
-            return { success: false, code: 'TRANSCRIPTION_ERROR', error: String(e) };
+            const message = sanitizeErrorMessage(e);
+            logApp(`[main] transcribe THREW | engine: local | ${message.slice(0, 400)}`);
+            return { success: false, code: 'TRANSCRIPTION_ERROR', error: message };
         }
     }
     logApp(`[main] transcribe START | engine: gemini | mime: ${request?.mimeType || '?'}`);
@@ -1092,8 +1101,9 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
         logApp(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
         return r;
     } catch (e) {
-        logApp(`[main] transcribe THREW | engine: gemini | ${String(e && e.stack ? e.stack : e).slice(0, 400)}`);
-        return { success: false, code: 'TRANSCRIPTION_ERROR', error: String(e) };
+        const message = sanitizeErrorMessage(e);
+        logApp(`[main] transcribe THREW | engine: gemini | ${message.slice(0, 400)}`);
+        return { success: false, code: 'TRANSCRIPTION_ERROR', error: message };
     }
 });
 

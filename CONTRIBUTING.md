@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-The app supports Gemini cloud transcription and three local offline tiers. Local model archives are downloaded into Electron's user-data cache and must not be committed.
+The app supports Gemini cloud transcription and six multilingual/bilingual local offline models. Local model archives are downloaded into Electron's user-data cache and must not be committed.
 
 ## Code structure
 
@@ -21,7 +21,7 @@ The app supports Gemini cloud transcription and three local offline tiers. Local
 - `stt/`: model registry, cache verification, audio validation, common dispatcher, and Vosk/Sherpa adapters.
 - `tests/`: pure unit tests that do not download model archives.
 
-The local service presents one app-level transcription contract while keeping Vosk, Moonshine, and Parakeet model-specific inference adapters. Do not add Whisper-specific chunking or cleanup without a model-specific reason.
+The local service presents one app-level transcription contract while keeping model-specific Sherpa branches isolated. Do not add model-specific chunking or cleanup without a verified backend requirement.
 
 ## Guidelines
 
@@ -32,8 +32,8 @@ The local service presents one app-level transcription contract while keeping Vo
 - Preserve the shared recording lifecycle and result contract: `{ success, text }` or `{ success: false, code, error }`.
 - Validate model archives before installation and use the user-data cache, not the application directory.
 - Test native runtime changes with both regular Node and Electron 43 on Windows x64.
-- Remember that Vosk small models are compact on disk but roughly 300 MB at runtime.
-- Do not label Moonshine Spanish as ready until its exact native model package is verified.
+- Keep registry metadata, expected files, licensing, download size, and RAM estimates aligned with verified model packages.
+- Do not label a model ready until its exact native package is verified on Windows x64.
 
 ## Validation
 
@@ -41,8 +41,8 @@ Run the pure tests and syntax checks before packaging:
 
 ```bash
 npm test
-node --check main.js
-node --check renderer.js
+npm run check
+npm audit --omit=dev
 ```
 
 On Windows, also test:
@@ -50,7 +50,7 @@ On Windows, also test:
 - `npm start` and `npm run pack`.
 - Native addon loading from the unpacked executable.
 - Tiny English and Spanish model downloads/transcription.
-- Verified Moonshine English and Parakeet model loading.
+- Representative NeMo, Omnilingual, Chinese/English, and Parakeet model loading.
 - Missing, partial, corrupt, and interrupted model downloads.
 - Recording, global hotkey, auto-stop, Escape cancellation, repeated hotkeys, and clipboard output.
 - Settings persistence and power-saving unload behavior.

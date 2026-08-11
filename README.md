@@ -109,9 +109,11 @@ npm run icon
 
 ```bash
 npm test
+npm run check
+npm audit --omit=dev
 ```
 
-The tests cover model-key selection, legacy config migration, PCM/WAV validation, registry integrity, and model-cache path safety. Full model validation additionally requires Windows x64 and downloading the relevant model archives.
+The tests cover model-key selection, legacy config migration, PCM/WAV validation, registry integrity, model-cache path safety, and secret redaction. Full model validation additionally requires Windows x64 and downloading the relevant model archives.
 
 The local inference layer uses a common main-process service and normalized IPC contract. Every backend (NeMo CTC, NeMo transducer, SenseVoice, FireRedASR CTC, Omnilingual, Parakeet) has its own adapter branch because their model formats and decoder APIs differ.
 

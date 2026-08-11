@@ -1,0 +1,4 @@
+786: function applyAppearanceSnapshot(snapshot) {
+1157: async function refreshSettingsUi(snapshot = null) {
+780: function applyIdleFadeState(enabled, opacityPct) {
+793: idleFadeCheckbox.addEventListener('change', () => {

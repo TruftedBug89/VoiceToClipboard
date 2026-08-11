@@ -60,3 +60,7 @@ coverage/
 
 # Local tutorial screenshots (never committed)
 tutorial-assets/
+
+# Local Postman workspace infrastructure (never committed)
+.postman/
+postman/
