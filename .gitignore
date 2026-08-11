@@ -64,3 +64,14 @@ tutorial-assets/
 # Local Postman workspace infrastructure (never committed)
 .postman/
 postman/
+
+# ─── Scratch / clutter (one-off agent artifacts) ─────────────
+tmp_lines.txt
+60
+scan.json
+pack-validation.log
+scripts/_inject*.js
+scripts/_inject*.txt
+scripts/_marker.txt
+dist_build*/
+extract-*/
