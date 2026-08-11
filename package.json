@@ -30,7 +30,8 @@
     "build": "electron-builder --win",
     "pack": "electron-builder --dir",
     "clean:dist": "node scripts/clean-dist.js",
-    "icon": "node scripts/generate-icon.js"
+    "icon": "node scripts/generate-icon.js",
+    "check:i18n": "node scripts/check-i18n.js"
   },
   "build": {
     "appId": "com.voicetoclipboard.app",
@@ -70,7 +71,13 @@
       "stt/**/*",
       "package.json",
       "build/**/*",
-      "locales/**/*"
+      "locales/**/*",
+      "preload.js",
+      "bubble-preload.js",
+      "bubble-renderer.js",
+      "bubble.html",
+      "logger.js",
+      "styles/**/*"
     ],
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

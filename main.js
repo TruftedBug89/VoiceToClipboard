@@ -8,6 +8,7 @@ const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } =
 const { getModelKey } = require('./stt/model-registry');
 const win32 = require('./win32');
 const { sanitizeErrorMessage } = require('./stt/error-sanitizer');
+const { logger } = require('./logger');
 
 // ─── i18n (offline, bundled locales — same files the renderer uses) ───────
 const LOCALES = {
@@ -62,6 +63,7 @@ app.setAppUserModelId('com.voicetoclipboard.app');
 
 const canonicalUserDataPath = path.join(app.getPath('appData'), 'VoiceToClipboard');
 app.setPath('userData', canonicalUserDataPath);
+logger.init(canonicalUserDataPath);
 
 // Ensure single instance
 const gotTheLock = app.requestSingleInstanceLock();
@@ -86,11 +88,9 @@ const modelsDir = path.join(canonicalUserDataPath, 'models');
 // App log: writes to %APPDATA%\VoiceToClipboard\app.log — writable in BOTH dev
 // and packaged (asar) runs (the old __dirname target silently fails when
 // packaged, leaving the exe with zero observability).
-function logApp(msg) {
-    try {
-        const line = `[${new Date().toISOString()}] ${sanitizeErrorMessage(msg)}\n`;
-        fs.appendFileSync(path.join(canonicalUserDataPath, 'app.log'), line);
-    } catch (e) { /* logging must never crash the app */ }
+function logApp(msg, level = 'INFO') {
+    // Centralized in logger.js (always sanitized; never logs secrets).
+    logger[level === 'INFO' ? 'info' : level === 'WARN' ? 'warn' : 'error'](msg);
 }
 const legacyUserDataPaths = [
     path.join(app.getPath('appData'), 'voicetoclipboard')
@@ -1045,6 +1045,41 @@ setInterval(() => {
     }
 }, 200);
 
+
+// ─── Copy diagnostics (sanitized) ───
+// Dumps a redacted snapshot + recent log tail to the clipboard for bug reports.
+let lastErrorText = '';
+ipcMain.handle('copy-diagnostics', async (event, extra) => {
+    try {
+        const cfg = loadConfig();
+        const safe = { ...cfg };
+        delete safe.apiKey; delete safe.apiKeys;
+        for (const k of Object.keys(safe)) if (/key|token|secret/i.test(k)) safe[k] = '[REDACTED]';
+        let tail = '';
+        try {
+            const logPath = path.join(canonicalUserDataPath, 'app.log');
+            if (fs.existsSync(logPath)) {
+                const txt = fs.readFileSync(logPath, 'utf8');
+                tail = txt.split('\n').slice(-40).join('\n');
+            }
+        } catch (e) { /* ignore */ }
+        const report = [
+            'VoiceToClipboard diagnostics (sanitized)',
+            `version: ${require('./package.json').version}`,
+            `platform: ${process.platform} ${process.arch}`,
+            `electron: ${process.versions.electron}`,
+            `config: ${JSON.stringify(safe, null, 2)}`,
+            `lastError: ${sanitizeErrorMessage(lastErrorText || 'none')}`,
+            '--- recent app.log tail ---',
+            sanitizeErrorMessage(tail),
+        ].join('\n');
+        clipboard.writeText(sanitizeErrorMessage(report));
+        return { success: true };
+    } catch (e) {
+        return { success: false, code: 'DIAG_FAIL', error: sanitizeErrorMessage(e) };
+    }
+});
+
 ipcMain.handle('transcribe-audio', async (event, request) => {
     if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
     const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
@@ -1062,10 +1097,12 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
                 ecoMode: config.ecoMode !== false,
                 uiLanguage: request.uiLanguage || uiLang()
             });
+            if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
             logApp(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
             return r;
         } catch (e) {
             const message = sanitizeErrorMessage(e);
+            lastErrorText = message;
             logApp(`[main] transcribe THREW | engine: local | ${message.slice(0, 400)}`);
             return { success: false, code: 'TRANSCRIPTION_ERROR', error: message };
         }
