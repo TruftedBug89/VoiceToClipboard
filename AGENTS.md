@@ -3,6 +3,15 @@
 ## Project Goal
 A lightweight Windows widget that records microphone audio, transcribes it with Gemini or a local offline model, and copies the result to the clipboard.
 
+## Security model (v4.0.0)
+- Renderer has `contextIsolation: true`, `nodeIntegration: false`; the only main↔renderer
+  surface is the whitelisted `window.api` in `preload.js` (contextBridge). `index.html` has a
+  strict CSP (no `unsafe-inline` for scripts or styles).
+- CSS is split into `styles/{base,widget,settings,themes}.css`; Widget Styles (Crimson/Ocean/
+  Aurora) are `:root[data-widget-style]` overrides in `styles/themes.css`, persisted as
+  `widgetStyle` in config and applied live to both windows.
+- Every log line is redaction-safe via `logger.js` → `stt/error-sanitizer.js`.
+
 ## Current State (v4.0.0)
 - **Language/Environment:** Node.js, Electron 43, Windows 10/11.
 - **Core files:** `main.js` (windows, tray, hotkeys, config, IPC, STT service, clipboard, startup cleanup), `index.html` + `renderer.js` (widget, settings, Web Audio capture, VAD, visualizer, click-through, Transcribe Again).

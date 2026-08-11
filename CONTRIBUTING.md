@@ -1,66 +1,62 @@
 # Contributing to VoiceToClipboard
 
-VoiceToClipboard is a lightweight Windows Electron widget for recording microphone speech and copying transcription to the clipboard.
+A lightweight, always-on-top Windows 10/11 widget that records your voice and copies the
+transcription to the clipboard via **Gemini (cloud)** or a **local offline model** (sherpa/vosk).
 
-## Getting started
+## Prerequisites
+- Windows 10/11 (this is a Windows-only app).
+- Node.js **22 LTS** and npm.
 
+## Setup
 ```bash
-git clone https://github.com/YOUR-USERNAME/VoiceToClipboard.git
+git clone https://github.com/TruftedBug89/VoiceToClipboard.git
 cd VoiceToClipboard
-npm install
-npm start
+npm ci            # exact dependency install (native modules are prebuilt)
+npm start         # launch the widget (Electron)
 ```
+Set `GEMINI_API_KEY` if you want the cloud engine, or open Settings and paste it there.
 
-The app supports Gemini cloud transcription and six multilingual/bilingual local offline models. Local model archives are downloaded into Electron's user-data cache and must not be committed.
+## Day-to-day commands
+| Command | What it does |
+|---|---|
+| `npm start` | Launch the app |
+| `npm test` | Run the unit test suite (`node --test tests/*.test.js`) |
+| `npm run check` | Syntax-check every JS file (`scripts/check-js.js`) |
+| `npm run check:i18n` | Locale parity check (`scripts/check-i18n.js`) |
+| `npm run pack` | Build an unpacked app to `dist/win-unpacked/` |
+| `npm run build` | Build the NSIS installer **and** portable `.exe` to `dist/` |
+| `npm run clean:dist` | Remove generated build output |
+| `npm run icon` | Regenerate `build/icon.ico` |
 
-## Code structure
+CI (`.github/workflows/ci.yml`) runs `check` → `check:i18n` → `test` on a Windows runner.
 
-- `main.js`: Electron windows, tray, global hotkeys, config migration, clipboard writes, Gemini calls, and the shared local-ASR service.
-- `renderer.js`: Web Audio capture, visualizer, VAD/auto-stop, recording lifecycle, click-through behavior, settings interactions, and IPC calls.
-- `index.html`: Widget and settings-window UI.
-- `stt/`: model registry, cache verification, audio validation, common dispatcher, and Vosk/Sherpa adapters.
-- `tests/`: pure unit tests that do not download model archives.
+## Code conventions
+- **CommonJS** in the main process and STT layer; 4-space indentation; no TypeScript build step.
+- Keep the app **lightweight** — do not add ffmpeg/sox or heavy deps to the recording path.
+- **Never** log, print, commit, or expose `GEMINI_API_KEY` or model archives. Logs go through
+  `logger.js`, which redacts secrets via `stt/error-sanitizer.js`.
+- The renderer has **no Node integration**. All main↔renderer traffic goes through the minimal
+  `window.api` bridge defined in `preload.js` (contextIsolation + contextBridge).
 
-The local service presents one app-level transcription contract while keeping model-specific Sherpa branches isolated. Do not add model-specific chunking or cleanup without a verified backend requirement.
+## Adding an IPC channel
+1. In `preload.js`, add a method to the `window.api` object (invoke/send) or the `LISTEN_CHANNELS`
+   whitelist (for main→renderer push).
+2. In `main.js`, register the `ipcMain.handle(...)`/`ipcMain.on(...)` handler and **validate the
+   payload** (type, enum, size) before acting.
+3. Call `window.api.<method>(...)` from `renderer.js`.
 
-## Guidelines
+## Adding or editing translations
+Edit all three locale files (`locales/en.json` is the source of truth, plus `es.json`, `zh.json`)
+with the **same key set**, then run `npm run check:i18n`. In markup prefer `data-i18n`,
+`data-i18n-title`, or `data-i18n-placeholder`; in logic use `t('section.key')`.
 
-- Keep the app lightweight and Windows-focused.
-- Do not introduce ffmpeg or sox for ordinary recording paths.
-- Never log, print, or expose API keys.
-- Do not bundle downloaded model archives or user config into the installer.
-- Preserve the shared recording lifecycle and result contract: `{ success, text }` or `{ success: false, code, error }`.
-- Validate model archives before installation and use the user-data cache, not the application directory.
-- Test native runtime changes with both regular Node and Electron 43 on Windows x64.
-- Keep registry metadata, expected files, licensing, download size, and RAM estimates aligned with verified model packages.
-- Do not label a model ready until its exact native package is verified on Windows x64.
+## Theming (Widget Style)
+Three styles — **Crimson** (default), **Ocean**, **Aurora** — live in `styles/themes.css` as
+`:root[data-widget-style="..."]` custom-property overrides. To add one, add an override block with
+the same variables and a swatch in `index.html` (`data-style="<name>"`), then whitelist the name in
+`main.js` (`widgetStyle`) and `renderer.js` (`applyWidgetStyle`).
 
-## Validation
-
-Run the pure tests and syntax checks before packaging:
-
-```bash
-npm test
-npm run check
-npm audit --omit=dev
-```
-
-On Windows, also test:
-
-- `npm start` and `npm run pack`.
-- Native addon loading from the unpacked executable.
-- Tiny English and Spanish model downloads/transcription.
-- Representative NeMo, Omnilingual, Chinese/English, and Parakeet model loading.
-- Missing, partial, corrupt, and interrupted model downloads.
-- Recording, global hotkey, auto-stop, Escape cancellation, repeated hotkeys, and clipboard output.
-- Settings persistence and power-saving unload behavior.
-- Gemini API-key errors without secret leakage.
-
-## Packaging
-
-```bash
-npm run pack
-npm run build
-```
-
-The only configured generated output is `dist/`. Run `npm run clean:dist` to safely clear that directory before a reproducible build. Do not stage `dist/`, `dist_build*/`, installers, blockmaps, model archives, logs, or unpacked Electron output. Releases are uploaded to GitHub Releases only when explicitly requested.
+## Releasing
+`npm run build` produces `VoiceToClipboard-<ver>-Setup.exe` (installer) and
+`VoiceToClipboard-<ver>-portable.exe` in `dist/`. **Installers belong in GitHub Releases, not git**
+— never commit `dist/`, installers, blockmaps, or `latest.yml`. Only the maintainer publishes releases.
