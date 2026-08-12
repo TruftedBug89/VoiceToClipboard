@@ -49,6 +49,7 @@ function removeListener(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld('api', {
+    appVersion: require('./package.json').version,
     locales: { en, es, zh },
 
     // invoke (request/response)

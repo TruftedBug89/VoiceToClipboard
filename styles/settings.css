@@ -996,6 +996,8 @@
         }
         .modal-actions-footer { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
         .autosave-status { font-size: 10.5px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; }
+        .app-version-badge { font-size: 10.5px; font-weight: 600; color: var(--text-dim); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 2px 8px; user-select: none; transition: all 0.2s ease; }
+        .app-version-badge:hover { color: var(--text-main); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.1); }
         .check-green { color: #10b981; font-weight: bold; }
         .text-gold { color: #ffd76a; }
 

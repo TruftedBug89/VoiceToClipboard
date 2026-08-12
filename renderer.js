@@ -1594,6 +1594,12 @@ async function refreshSettingsUi(snapshot = null) {
         apiKeyNote.innerHTML = 'No key yet — get one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
     }
 
+    const appVersionDisplay = document.getElementById('app-version-display');
+    if (appVersionDisplay) {
+        const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.0';
+        appVersionDisplay.textContent = `v${ver}`;
+    }
+
     await checkModelStatus();
 }
 
