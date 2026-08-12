@@ -156,5 +156,8 @@
       "aurora": "Aurora"
     },
     "widgetStyleTooltip": "Cambia el color del widget y de esta ventana."
-  }
+  },
+  "recordings.label": "Grabaciones de voz",
+  "recordings.note": "Todas las grabaciones de voz se guardan automáticamente como archivos de audio en su PC y se conservan para siempre.",
+  "recordings.openFolder": "📁 Abrir carpeta de grabaciones"
 }

@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('api', {
     removeApiKey: () => ipcRenderer.invoke('remove-api-key'),
     transcribeAudio: (request) => ipcRenderer.invoke('transcribe-audio', request),
     copyDiagnostics: (extra) => ipcRenderer.invoke('copy-diagnostics', extra),
+    openRecordingsFolder: () => ipcRenderer.invoke('open-recordings-folder'),
 
     // send (fire-and-forget)
     rendererLog: (msg) => ipcRenderer.send('renderer-log', msg),

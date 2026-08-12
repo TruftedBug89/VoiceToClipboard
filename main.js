@@ -8,6 +8,7 @@ const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } =
 const { getModelKey } = require('./stt/model-registry');
 const win32 = require('./win32');
 const { sanitizeErrorMessage } = require('./stt/error-sanitizer');
+const { pcmToWav } = require('./stt/audio');
 const { logger } = require('./logger');
 
 // ─── i18n (offline, bundled locales — same files the renderer uses) ───────
@@ -81,6 +82,7 @@ let settingsWindow = null;
 let tray = null;
 const configPath = path.join(canonicalUserDataPath, 'config.json');
 const modelsDir = path.join(canonicalUserDataPath, 'models');
+const recordingsDir = path.join(canonicalUserDataPath, 'recordings');
 
 // App log: writes to %APPDATA%\VoiceToClipboard\app.log — writable in BOTH dev
 // and packaged (asar) runs (the old __dirname target silently fails when
@@ -88,6 +90,32 @@ const modelsDir = path.join(canonicalUserDataPath, 'models');
 function logApp(msg, level = 'INFO') {
     // Centralized in logger.js (always sanitized; never logs secrets).
     logger[level === 'INFO' ? 'info' : level === 'WARN' ? 'warn' : 'error'](msg);
+}
+
+async function saveRecordingAudio(request) {
+    if (!request) return;
+    try {
+        await fs.promises.mkdir(recordingsDir, { recursive: true });
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${String(now.getMilliseconds()).padStart(3, '0')}`;
+        if (request.pcm) {
+            const pcmData = new Float32Array(request.pcm);
+            const wavBuffer = pcmToWav(pcmData, request.sampleRate || 16000);
+            const filePath = path.join(recordingsDir, `recording_${timestamp}.wav`);
+            await fs.promises.writeFile(filePath, wavBuffer);
+            logApp(`[main] Saved voice recording WAV: ${filePath} (${wavBuffer.length} bytes)`);
+        } else if (request.arrayBuffer) {
+            const isWebm = request.mimeType && request.mimeType.includes('webm');
+            const ext = isWebm ? 'webm' : 'audio';
+            const filePath = path.join(recordingsDir, `recording_${timestamp}.${ext}`);
+            const buf = Buffer.from(request.arrayBuffer);
+            await fs.promises.writeFile(filePath, buf);
+            logApp(`[main] Saved voice recording ${ext.toUpperCase()}: ${filePath} (${buf.length} bytes)`);
+        }
+    } catch (e) {
+        logApp(`[main] Failed to save recording audio: ${e.message || e}`, 'WARN');
+    }
 }
 const legacyUserDataPaths = [
     path.join(app.getPath('appData'), 'voicetoclipboard')
@@ -236,7 +264,8 @@ async function getSettingsSnapshot() {
         widgetStyle: (config.widgetStyle === 'ocean' || config.widgetStyle === 'aurora') ? config.widgetStyle : 'crimson',
         systemRamGB: systemRamGB(),
         recommendedTier: recommendedTierForRam(systemRamGB()),
-        playFinishSound: config.playFinishSound !== false
+        playFinishSound: config.playFinishSound !== false,
+        recordingsPath: recordingsDir
     };
 }
 
@@ -1172,6 +1201,7 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
     if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
     const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
     if (audioBytes && audioBytes > 62914560) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
+    await saveRecordingAudio(request);
     const config = loadConfig();
     const started = Date.now();
     if (request?.engine === 'local') {
@@ -1212,5 +1242,11 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
         logApp(`[main] transcribe THREW | engine: gemini | ${message.slice(0, 400)}`);
         return { success: false, code: 'TRANSCRIPTION_ERROR', error: message };
     }
+});
+
+ipcMain.handle('open-recordings-folder', async () => {
+    await fs.promises.mkdir(recordingsDir, { recursive: true });
+    await shell.openPath(recordingsDir);
+    return { success: true, path: recordingsDir };
 });
 

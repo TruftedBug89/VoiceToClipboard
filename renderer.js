@@ -1208,6 +1208,8 @@ async function refreshSettingsUi(snapshot = null) {
     if (uiLanguageSelect) uiLanguageSelect.value = sttConfig.uiLanguage || 'en';
     const cachePath = document.getElementById('model-cache-path');
     if (cachePath && sttConfig.modelCachePath) cachePath.textContent = `${t('models.cachePath')} (${sttConfig.modelCachePath})`;
+    const recPathDisplay = document.getElementById('recordings-path-display');
+    if (recPathDisplay && sttConfig.recordingsPath) recPathDisplay.textContent = sttConfig.recordingsPath;
     const apiStatus = await window.api.getApiKeyStatus();
 
     await loadHotkey();
@@ -1332,6 +1334,14 @@ if (closeModalBtn) closeModalBtn.addEventListener('click', closeSettings);
 if (cancelBtn) cancelBtn.addEventListener('click', cancelRecording);
 if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
 if (closeBtn) closeBtn.addEventListener('click', () => window.close());
+const openRecordingsBtn = document.getElementById('open-recordings-btn');
+if (openRecordingsBtn) {
+    openRecordingsBtn.addEventListener('click', async () => {
+        if (window.api && window.api.openRecordingsFolder) {
+            await window.api.openRecordingsFolder();
+        }
+    });
+}
 
 let activeDownloadKey = null;
 let downloadSpinnerEl = null;

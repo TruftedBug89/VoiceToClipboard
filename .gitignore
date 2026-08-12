@@ -75,3 +75,7 @@ scripts/_inject*.txt
 scripts/_marker.txt
 dist_build*/
 extract-*/
+recordings/
+*.wav
+*.webm
+plan.md

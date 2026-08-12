@@ -156,5 +156,8 @@
       "aurora": "极光"
     },
     "widgetStyleTooltip": "为小组件和本窗口重新配色。"
-  }
+  },
+  "recordings.label": "语音录音",
+  "recordings.note": "所有语音消息均自动作为音频文件保存在您的 PC 上，并永久保留。",
+  "recordings.openFolder": "📁 打开录音文件夹"
 }

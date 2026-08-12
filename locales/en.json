@@ -156,5 +156,8 @@
       "aurora": "Aurora"
     },
     "widgetStyleTooltip": "Recolor the widget and this window."
-  }
+  },
+  "recordings.label": "Voice Recordings",
+  "recordings.note": "All voice messages are automatically saved as audio files on your PC and kept forever.",
+  "recordings.openFolder": "📁 Open Recordings Folder"
 }
