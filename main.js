@@ -348,6 +348,16 @@ function secureWebContents(webContents) {
     });
 }
 
+// Reassert the recording widget's always-on-top after events that can let
+// other windows cover it (opening/closing settings, finishing a drag). It is
+// a no-op when the user disabled always-on-top in the tray menu. Called only
+// from those discrete events — never from broadcasts or polling.
+function ensureWidgetAlwaysOnTop() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (loadConfig().alwaysOnTop === false) return;
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+}
+
 function createWindow() {
     const config = loadConfig();
     let windowX = config.windowX;
@@ -384,6 +394,7 @@ function createWindow() {
     });
 
     secureWebContents(mainWindow.webContents);
+    mainWindow.on('closed', () => { mainWindow = null; });
     mainWindow.loadFile('index.html');
 
     // Click-through transparent areas; renderer re-enables over interactive spots
@@ -408,8 +419,11 @@ function createWindow() {
         savePosTimer = setTimeout(() => {
             const [x, y] = mainWindow.getPosition();
             saveConfig({ windowX: x, windowY: y });
+            ensureWidgetAlwaysOnTop();
         }, 400);
     });
+
+    ensureWidgetAlwaysOnTop();
 }
 
 function createSettingsWindow() {
@@ -447,6 +461,7 @@ function createSettingsWindow() {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('settings-window-closed');
         }
+        ensureWidgetAlwaysOnTop();
     });
 }
 
@@ -456,6 +471,7 @@ function showSettingsWindow() {
         settingsWindow.show();
         settingsWindow.focus();
     }
+    ensureWidgetAlwaysOnTop();
 }
 
 process.on('uncaughtException', (err) => {
@@ -474,7 +490,7 @@ function trayMenuForState(alwaysOnTop) {
         {
             label: L('tray.toggle'),
             click: () => {
-                if (mainWindow) mainWindow.webContents.send('toggle-recording');
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
             }
         },
         {
@@ -492,7 +508,7 @@ function trayMenuForState(alwaysOnTop) {
             checked: alwaysOnTop,
             click: item => {
                 saveConfig({ alwaysOnTop: item.checked });
-                if (mainWindow) mainWindow.setAlwaysOnTop(item.checked);
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(item.checked);
                 if (tray) tray.setContextMenu(trayMenuForState(item.checked));
                 broadcastSettingsChanged();
             }
@@ -520,7 +536,7 @@ function createTray() {
     tray.setContextMenu(trayMenuForState(loadConfig().alwaysOnTop !== false));
 
     const toggleWindow = () => {
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
             if (mainWindow.isVisible()) {
                 mainWindow.focus();
             } else {
@@ -1092,7 +1108,7 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
     });
 
     if (!success) return { success: false };
-    if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(alwaysOnTop);
     if (stt.sttEngine !== 'local' || effectiveEcoMode) await sttService.unloadAll();
     if (tray) tray.setContextMenu(trayMenuForState(alwaysOnTop));
     await broadcastSettingsChanged();
@@ -1213,11 +1229,12 @@ ipcMain.on('drag-move', () => {
 
 ipcMain.on('drag-end', () => {
     dragState = null;
+    ensureWidgetAlwaysOnTop();
 });
 
 // Toggle click-through for transparent areas
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
-    if (!mainWindow) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
 
@@ -1251,9 +1268,11 @@ const widgetHoverPoll = setInterval(() => {
         lastWidgetHoverState = inside;
         lastWidgetCursorX = relX;
         lastWidgetCursorY = relY;
-        mainWindow.webContents.send('widget-hover', inside
-            ? { inside: true, x: relX, y: relY }
-            : { inside: false });
+        if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('widget-hover', inside
+                ? { inside: true, x: relX, y: relY }
+                : { inside: false });
+        }
     }
 }, 200);
 

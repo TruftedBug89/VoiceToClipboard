@@ -484,6 +484,12 @@
             color: #ff8f9d;
         }
 
+        .btn-remove:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         /* Settings section grouping */
         .settings-section {
             margin: 4px 0 14px;
@@ -938,6 +944,8 @@
         .modal-header-sub { font-size: 9.5px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.05em; }
         .ui-lang-label { font-size: 12px; flex: 1; }
         .select-styled { padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); }
+        #mic-select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+        #mic-test-btn { flex-shrink: 0; }
         .setting-note { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
         .setting-subnote { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
         .hotkey-input-field { flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15); }
@@ -1000,6 +1008,9 @@
         .app-version-badge:hover { color: var(--text-main); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.1); }
         .check-green { color: #10b981; font-weight: bold; }
         .text-gold { color: #ffd76a; }
+        .recordings-heading { font-size: 12px; font-weight: 600; }
+        .btn-compact { padding: 4px 8px; font-size: 11px; }
+        .recordings-path-display { font-size: 9.5px; font-family: monospace; color: var(--text-dim); margin-top: 4px; word-break: break-all; opacity: 0.8; }
 
         .advanced-settings-group {
             margin-top: 10px;

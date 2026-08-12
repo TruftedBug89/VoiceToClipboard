@@ -3,7 +3,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
-const { getModel } = require('./model-registry');
+const { getModel, MODEL_REGISTRY } = require('./model-registry');
 
 const MANIFEST_NAME = 'installation.json';
 
@@ -44,6 +44,9 @@ function findModelRoot(directory, expectedFiles) {
 }
 
 function downloadFile(url, destination, onProgress, redirectCount = 0) {
+    if (!url.startsWith('https:') && !url.startsWith('http:')) {
+        return Promise.reject(new Error('Model download URL must be http(s).'));
+    }
     if (redirectCount >= 5) {
         return Promise.reject(new Error('Too many redirects during model download.'));
     }
@@ -87,14 +90,49 @@ function downloadFile(url, destination, onProgress, redirectCount = 0) {
             output.on('finish', () => output.close(() => resolve()));
             response.pipe(output);
         });
-        request.setTimeout(120000, () => {
+        request.setTimeout(25000, () => {
             request.destroy(new Error('Model download timed out.'));
         });
         request.on('error', cleanupAndReject);
     });
 }
 
-async function extractArchive(archivePath, destination, archiveType = 'tar') {
+// Probe the remote size of a file (HEAD, following redirects). Used to give
+// the mirror fallback an accurate per-file progress total.
+function headRemoteSize(url, redirectCount = 0) {
+    if (redirectCount >= 5) {
+        return Promise.reject(new Error('Too many redirects during model mirror probe.'));
+    }
+    return new Promise((resolve, reject) => {
+        const httpModule = url.startsWith('http:') ? require('http') : https;
+        const request = httpModule.request(url, { method: 'HEAD' }, response => {
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                response.resume();
+                const targetUrl = new URL(response.headers.location, url).toString();
+                headRemoteSize(targetUrl, redirectCount + 1).then(resolve, reject);
+                return;
+            }
+            response.resume();
+            if (response.statusCode !== 200) {
+                reject(new Error(`Model mirror probe failed with HTTP ${response.statusCode}.`));
+                return;
+            }
+            resolve(Number(response.headers['content-length']) || 0);
+        });
+        request.setTimeout(30000, () => request.destroy(new Error('Model mirror probe timed out.')));
+        request.on('error', reject);
+        request.end();
+    });
+}
+
+async function extractArchive(archivePath, destination, archiveType = 'tar', expectedFiles = null) {
+    // Only extract what the model actually loads. Whisper-style archives bundle
+    // fp32 copies of every weight (~1 GB of files we never use); skipping them
+    // makes extraction ~3× faster and keeps the installed size honest.
+    const filter = expectedFiles && expectedFiles.length ? (entryPath, entry) => {
+        if (entry && entry.type === 'Directory') return true;
+        return expectedFiles.includes(String(entryPath || '').split('/').pop());
+    } : undefined;
     if (archiveType === 'zip') {
         const yauzl = require('yauzl');
         await new Promise((resolve, reject) => {
@@ -137,7 +175,7 @@ async function extractArchive(archivePath, destination, archiveType = 'tar') {
         const bz2 = require('unbzip2-stream');
         await new Promise((resolve, reject) => {
             const source = fs.createReadStream(archivePath);
-            const unpack = new tar.Unpack({ cwd: destination, strict: true });
+            const unpack = new tar.Unpack({ cwd: destination, strict: true, filter });
             source.on('error', reject);
             unpack.on('error', reject);
             unpack.on('finish', resolve);
@@ -145,7 +183,7 @@ async function extractArchive(archivePath, destination, archiveType = 'tar') {
         });
         return;
     }
-    await tar.x({ file: archivePath, cwd: destination, strict: true });
+    await tar.x({ file: archivePath, cwd: destination, strict: true, filter });
 }
 
 async function hashFile(filePath) {
@@ -186,6 +224,17 @@ class ModelCache {
                 await fsp.rm(backupPath, { recursive: true, force: true });
             } else {
                 await fsp.rename(backupPath, finalPath);
+            }
+        }
+
+        // Purge installs whose content no longer matches the current registry
+        // generation (same key, old archive layout). Prevents stale
+        // "installed" states that can never be transcribed and frees disk.
+        for (const key of Object.keys(MODEL_REGISTRY)) {
+            if (await this.isInstalled(key)) continue;
+            const staleDir = this.getPath(key);
+            if (await pathExists(staleDir)) {
+                await fsp.rm(staleDir, { recursive: true, force: true }).catch(() => {});
             }
         }
     }
@@ -238,14 +287,25 @@ class ModelCache {
         await fsp.mkdir(extractedDir, { recursive: true });
         try {
             onProgress?.({ status: 'initiate', file: model.archiveName });
-            await downloadFile(model.downloadUrl, archivePath, data => onProgress?.({
-                status: 'progress',
-                file: model.archiveName,
-                loaded: data.loaded,
-                total: data.total || model.downloadBytes || 0
-            }));
-            onProgress?.({ status: 'extracting', file: model.archiveName });
-            await extractArchive(archivePath, extractedDir, model.archiveType);
+            let mirrorMode = false;
+            try {
+                await downloadFile(model.downloadUrl, archivePath, data => onProgress?.({
+                    status: 'progress',
+                    file: model.archiveName,
+                    loaded: data.loaded,
+                    total: data.total || model.downloadBytes || 0
+                }));
+                onProgress?.({ status: 'extracting', file: model.archiveName });
+                await extractArchive(archivePath, extractedDir, model.archiveType, model.expectedFiles);
+            } catch (error) {
+                // GitHub release downloads are flaky on some networks (TLS
+                // resets). Fall back to per-file downloads from the HF mirror
+                // when one is registered for this model.
+                if (!model.mirrorBase) throw error;
+                if (await pathExists(archivePath)) await fsp.rm(archivePath, { force: true });
+                mirrorMode = true;
+                await this._downloadMirror(model, extractedDir, onProgress);
+            }
             const installedRoot = findModelRoot(extractedDir, model.expectedFiles);
             if (!installedRoot) throw new Error('Downloaded model is missing required files.');
 
@@ -289,6 +349,30 @@ class ModelCache {
         }
     }
 
+    // Per-file fallback download from a Hugging Face mirror repo. Used when
+    // the GitHub release archive cannot be downloaded (flaky networks).
+    async _downloadMirror(model, destDir, onProgress) {
+        const base = model.mirrorBase.replace(/\/+$/, '');
+        const sizes = {};
+        let totalBytes = 0;
+        for (const file of model.expectedFiles) {
+            const url = `${base}/${encodeURIComponent(file)}`;
+            const size = await headRemoteSize(url);
+            sizes[file] = size;
+            totalBytes += size;
+        }
+        for (const file of model.expectedFiles) {
+            const url = `${base}/${encodeURIComponent(file)}`;
+            const dest = path.join(destDir, file);
+            await downloadFile(url, dest, data => onProgress?.({
+                status: 'progress',
+                file,
+                loaded: data.loaded,
+                total: data.total || sizes[file] || totalBytes || model.downloadBytes || 0
+            }));
+        }
+    }
+
     async remove(modelKey) {
         if (this.locks.has(modelKey)) await this.locks.get(modelKey).catch(() => {});
         await fsp.rm(this.getPath(modelKey), { recursive: true, force: true });
@@ -301,7 +385,7 @@ class ModelCache {
         const entries = await fsp.readdir(this.modelsDir).catch(() => []);
         for (const entry of entries) {
             if (entry.includes('.download-') || entry.includes('.backup-')) continue;
-            if (!/^[a-z0-9-]+$/.test(entry)) continue;
+            if (!/^[a-z0-9-]+$/i.test(entry)) continue;
             if (valid.has(entry)) continue;
             const target = path.join(this.modelsDir, entry);
             const stat = await fsp.stat(target).catch(() => null);

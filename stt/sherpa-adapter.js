@@ -1,8 +1,8 @@
-const os = require('os');
 const path = require('path');
 const sherpa = require('sherpa-onnx-node');
 const { getModel } = require('./model-registry');
 const { validatePcm } = require('./audio');
+const { numThreadsFor } = require('./threading');
 
 function getRequiredPath(root, fileName) {
     return path.join(root, fileName);
@@ -65,7 +65,7 @@ class SherpaAdapter {
                     tokens: getRequiredPath(modelPath, 'tokens.txt'),
                     modelType: 'nemo_transducer'
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -78,7 +78,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -93,7 +93,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -108,7 +108,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -121,7 +121,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -134,7 +134,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -152,11 +152,16 @@ class SherpaAdapter {
                         encoder: getRequiredPath(modelPath, encFile),
                         decoder: getRequiredPath(modelPath, decFile),
                         language: 'auto',
-                        task: 'transcribe'
+                        task: 'transcribe',
+                        tailPaddings: 1000
                     },
                     tokens: getRequiredPath(modelPath, tokFile)
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                // Whisper/large batch models decode the whole log-mel window at once.
+                // Cap the analysis window so a multi-minute clip is chunked to ~30 s
+                // segments — far faster wall-clock on CPU with no RAM penalty.
+                maxModelSec: 30,
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };
@@ -177,7 +182,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
             };

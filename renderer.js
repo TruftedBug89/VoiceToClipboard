@@ -53,7 +53,7 @@ function applyI18n(lang) {
     // Models note has an embedded styled span — rebuild innerHTML.
     const recoNote = document.getElementById('model-reco-note');
     if (recoNote) {
-        const reco = '<span style="color: #ffd76a;">' + t('models.recommended') + '</span>';
+        const reco = '<span class="text-gold">' + t('models.recommended') + '</span>';
         recoNote.innerHTML = t('models.note', { reco, ram: systemRamGB ? `(${systemRamGB} GB)` : '' });
     }
     if (typeof applyModelRecommendation === 'function') applyModelRecommendation(null);
@@ -210,8 +210,8 @@ function renderModelCard() {
     modelCard.style.display = 'block';
     modelCardName.textContent = model.name;
     const backendLabels = {
-        omnilingual: 'Omnilingual',
-        parakeet: 'Parakeet',
+        moonshine: 'Moonshine',
+        whisper: 'Whisper',
         'nemo-ctc': 'FastConformer CTC',
         'nemo-transducer': 'FastConformer Transducer',
         'sense-voice': 'SenseVoice',
@@ -242,6 +242,16 @@ function renderModelCardAction(model) {
         note.style.cssText = 'font-size: 10px; color: var(--text-dim); line-height: 1.4;';
         note.textContent = model.unavailableReason || t('model.compatPending');
         modelCardAction.append(note);
+        return;
+    }
+if (activeDownloadKey === model.key) {
+        const dlBtn = document.createElement('button');
+        dlBtn.type = 'button';
+        dlBtn.className = 'btn-save';
+        dlBtn.disabled = true;
+        dlBtn.textContent = t('model.downloading');
+        dlBtn.style.cssText = 'padding: 7px 12px; font-size: 11px; opacity: 0.55; cursor: not-allowed;';
+        modelCardAction.append(dlBtn);
         return;
     }
     if (model.installed) {
@@ -1585,6 +1595,9 @@ async function refreshSettingsUi(snapshot = null) {
     await renderHistoryList(historySearchInput ? historySearchInput.value : '');
 
     removeKeyBtn.style.display = (apiStatus.source === 'config' || (apiStatus.count || 0) > 0) ? 'inline-block' : 'none';
+    const envKeyConfigured = apiStatus.source === 'env';
+    removeKeyBtn.disabled = envKeyConfigured;
+    removeKeyBtn.title = envKeyConfigured ? 'Set via GEMINI_API_KEY environment variable — not stored in the app.' : '';
     const nKeys = apiStatus.count || 0;
     if (apiStatus.source === 'env' && nKeys <= 1) {
         apiKeyNote.innerHTML = 'Key set via <code>GEMINI_API_KEY</code> environment var.';
@@ -1596,7 +1609,7 @@ async function refreshSettingsUi(snapshot = null) {
 
     const appVersionDisplay = document.getElementById('app-version-display');
     if (appVersionDisplay) {
-        const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.0';
+        const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.1';
         appVersionDisplay.textContent = `v${ver}`;
     }
 
@@ -1709,19 +1722,35 @@ async function startModelDownload(modelKey, triggerBtn) {
     removeDownloadSpinner();
     if (activeDownloadKey) return;
     activeDownloadKey = modelKey;
+    const downloadStartedAt = Date.now();
 
     modelDownloadProgress.style.display = 'block';
-    modelDownloadStatus.textContent = t('model.downloadStarting');
+    modelDownloadStatus.textContent = t('model.downloading');
     modelDownloadPct.textContent = '0%';
     modelDownloadBar.style.width = '0%';
+    modelDownloadBar.classList.add('extracting');
+    addDownloadSpinner();
     if (triggerBtn) triggerBtn.disabled = true;
     modelCardStatus.textContent = '⬇ ' + t('model.downloading');
     modelCardStatus.className = 'status-pill download-needed';
+    renderModelCardAction(modelForSelection());
 
-    const downloadStats = {};
+    let downloadStats = {};
     const progressListener = (data) => {
         if (!data) return;
-        if (data.status === 'progress' && data.file && data.loaded && data.total) {
+        if (data.status === 'initiate') {
+            // New phase (start, or GitHub→mirror fallback): reset byte counters
+            // so stale archive stats never skew the bar, and show indeterminate
+            // feedback until the first byte actually arrives.
+            downloadStats = {};
+            modelDownloadBar.classList.add('extracting');
+            addDownloadSpinner();
+            modelDownloadBar.style.width = '100%';
+            modelDownloadPct.textContent = '0%';
+            modelDownloadStatus.textContent = t('model.downloading');
+            return;
+        }
+        if (data.status === 'progress' && data.file && typeof data.loaded === 'number' && data.total) {
             downloadStats[data.file] = { loaded: data.loaded, total: data.total };
             let totalLoaded = 0;
             let totalSize = 0;
@@ -1731,9 +1760,23 @@ async function startModelDownload(modelKey, triggerBtn) {
             }
             if (totalSize > 0) {
                 const pct = Math.min(100, Math.round((totalLoaded / totalSize) * 100));
+                modelDownloadBar.classList.remove('extracting');
+                removeDownloadSpinner();
                 modelDownloadBar.style.width = `${pct}%`;
                 modelDownloadPct.textContent = `${pct}%`;
-                modelDownloadStatus.textContent = t('model.downloading2', { a: (totalLoaded / 1048576).toFixed(1), b: (totalSize / 1048576).toFixed(1) });
+                let statusText = t('model.downloading2', { a: (totalLoaded / 1048576).toFixed(1), b: (totalSize / 1048576).toFixed(1) });
+                const elapsedSec = (Date.now() - downloadStartedAt) / 1000;
+                const speedMBps = elapsedSec > 1 ? (totalLoaded / 1048576) / elapsedSec : 0;
+                if (speedMBps > 0) {
+                    statusText += t('model.speed', { s: speedMBps.toFixed(1) });
+                    const remainingSec = speedMBps > 0 ? ((totalSize - totalLoaded) / 1048576) / speedMBps : 0;
+                    if (remainingSec >= 90) {
+                        statusText += t('model.etaMin', { m: Math.max(1, Math.round(remainingSec / 60)) });
+                    } else if (remainingSec >= 5) {
+                        statusText += t('model.etaSec', { s: Math.round(remainingSec) });
+                    }
+                }
+                modelDownloadStatus.textContent = statusText;
             }
         } else if (data.status === 'extracting') {
             // Extraction has no byte counter — show an indeterminate spinner
@@ -1789,6 +1832,8 @@ async function startModelDownload(modelKey, triggerBtn) {
             setTimeout(closeSettings, 1200);
         }
     } else {
+        removeDownloadSpinner();
+        modelDownloadBar.classList.remove('extracting');
         modelDownloadStatus.textContent = t('model.downloadFailed', { err: friendlyDownloadError(res.error) });
         modelDownloadBar.style.width = '0%';
         modelDownloadPct.textContent = '—';
