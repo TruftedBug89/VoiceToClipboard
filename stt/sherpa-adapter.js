@@ -53,21 +53,7 @@ class SherpaAdapter {
         const registryModel = getModel(modelKey);
 
         let config;
-        if (registryModel.backend === 'moonshine') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    moonshine: {
-                        encoder: getRequiredPath(modelPath, 'encoder_model.ort'),
-                        mergedDecoder: getRequiredPath(modelPath, 'decoder_model_merged.ort')
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'parakeet') {
+        if (registryModel.backend === 'parakeet') {
             config = {
                 featConfig: { sampleRate: 16000, featureDim: 80 },
                 modelConfig: {
@@ -178,9 +164,13 @@ class SherpaAdapter {
         const samples = validatePcm(pcm, sampleRate);
         const loaded = await this.load(modelKey);
         const stream = loaded.recognizer.createStream();
-        stream.acceptWaveform({ sampleRate, samples });
-        const result = await loaded.recognizer.decodeAsync(stream);
-        return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
+        try {
+            stream.acceptWaveform({ sampleRate, samples });
+            const result = await loaded.recognizer.decodeAsync(stream);
+            return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
+        } finally {
+            freeNativeMemory(stream);
+        }
     }
 }
 

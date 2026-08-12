@@ -168,7 +168,7 @@ test('redacts API keys and authorization values from errors', () => {
     const message = sanitizeErrorMessage(new Error(`request failed?key=${googleKey} authorization: Bearer top-secret`));
     assert.equal(message.includes(googleKey), false);
     assert.equal(message.includes('top-secret'), false);
-    assert.match(message, /\[REDACTED\]/);
+    assert.equal(message, 'request failed?key=[REDACTED] authorization: Bearer [REDACTED]');
 });
 
 test('keeps model cache paths inside the configured cache directory', async () => {

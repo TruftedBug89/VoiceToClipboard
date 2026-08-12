@@ -43,34 +43,54 @@ function findModelRoot(directory, expectedFiles) {
     return null;
 }
 
-function downloadFile(url, destination, onProgress) {
+function downloadFile(url, destination, onProgress, redirectCount = 0) {
+    if (redirectCount >= 5) {
+        return Promise.reject(new Error('Too many redirects during model download.'));
+    }
     return new Promise((resolve, reject) => {
-        const request = https.get(url, response => {
+        const httpModule = url.startsWith('http:') ? require('http') : https;
+        let output = null;
+
+        const cleanupAndReject = (err) => {
+            if (output) {
+                try { output.destroy(); } catch (e) {}
+            }
+            reject(err);
+        };
+
+        const request = httpModule.get(url, response => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 response.resume();
-                downloadFile(response.headers.location, destination, onProgress).then(resolve, reject);
+                try {
+                    const targetUrl = new URL(response.headers.location, url).toString();
+                    downloadFile(targetUrl, destination, onProgress, redirectCount + 1).then(resolve, cleanupAndReject);
+                } catch (e) {
+                    cleanupAndReject(e);
+                }
                 return;
             }
             if (response.statusCode !== 200) {
                 response.resume();
-                reject(new Error(`Model download failed with HTTP ${response.statusCode}.`));
+                cleanupAndReject(new Error(`Model download failed with HTTP ${response.statusCode}.`));
                 return;
             }
 
             const total = Number(response.headers['content-length']) || 0;
             let loaded = 0;
-            const output = fs.createWriteStream(destination);
+            output = fs.createWriteStream(destination);
             response.on('data', chunk => {
                 loaded += chunk.length;
                 onProgress?.({ loaded, total });
             });
-            output.on('error', reject);
-            response.on('error', reject);
-            output.on('finish', () => output.close(resolve));
+            output.on('error', cleanupAndReject);
+            response.on('error', cleanupAndReject);
+            output.on('finish', () => output.close(() => resolve()));
             response.pipe(output);
         });
-        request.setTimeout(120000, () => request.destroy(new Error('Model download timed out.')));
-        request.on('error', reject);
+        request.setTimeout(120000, () => {
+            request.destroy(new Error('Model download timed out.'));
+        });
+        request.on('error', cleanupAndReject);
     });
 }
 

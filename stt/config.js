@@ -97,7 +97,7 @@ function validateSttConfig(input = {}) {
     const localTier = VALID_TIERS.has(input.localTier)
         ? input.localTier
         : recommendedTierForRam(systemRamGB());
-    const validGeminiModels = new Set(['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']);
+    const validGeminiModels = new Set(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']);
     return {
         sttEngine: input.sttEngine === 'gemini' ? 'gemini' : 'local',
         localTier,

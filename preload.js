@@ -2,6 +2,9 @@
 // Exposes a minimal, typed IPC surface as window.api — the renderer can no longer
 // require('electron') or reach arbitrary Node/Electron internals.
 const { contextBridge, ipcRenderer } = require('electron');
+const en = require('./locales/en.json');
+const es = require('./locales/es.json');
+const zh = require('./locales/zh.json');
 
 // Main-renderer push channels the frontend is allowed to subscribe to.
 const LISTEN_CHANNELS = new Set([
@@ -16,21 +19,38 @@ const LISTEN_CHANNELS = new Set([
     'sync-settings',
 ]);
 
+const listenerMap = new Map();
+
 function on(channel, callback) {
     if (!LISTEN_CHANNELS.has(channel) || typeof callback !== 'function') return () => {};
+    let channelMap = listenerMap.get(channel);
+    if (!channelMap) {
+        channelMap = new Map();
+        listenerMap.set(channel, channelMap);
+    }
+    if (channelMap.has(callback)) {
+        ipcRenderer.removeListener(channel, channelMap.get(callback));
+    }
     const listener = (_event, ...args) => callback(...args);
+    channelMap.set(callback, listener);
     ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
+    return () => removeListener(channel, callback);
 }
 
 function removeListener(channel, callback) {
     if (!LISTEN_CHANNELS.has(channel) || typeof callback !== 'function') return;
-    // Remove every wrapped listener registered for this channel (used by
-    // download-progress teardown in the renderer).
-    ipcRenderer.removeAllListeners(channel);
+    const channelMap = listenerMap.get(channel);
+    if (!channelMap) return;
+    const listener = channelMap.get(callback);
+    if (listener) {
+        ipcRenderer.removeListener(channel, listener);
+        channelMap.delete(callback);
+    }
 }
 
 contextBridge.exposeInMainWorld('api', {
+    locales: { en, es, zh },
+
     // invoke (request/response)
     getApiKeyStatus: () => ipcRenderer.invoke('get-api-key-status'),
     getSttConfig: () => ipcRenderer.invoke('get-stt-config'),

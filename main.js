@@ -36,12 +36,8 @@ function L(key, vars) {
     if (vars) for (const k of Object.keys(vars)) v = v.split('{' + k + '}').join(String(vars[k]));
     return v;
 }
-let _configLoaded = false;
 function loadConfigSafe() {
-    try {
-        if (!fs.existsSync(configPath)) return {};
-        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) { return {}; }
+    return loadConfig();
 }
 
 // Gemini failover ladder (best → worst). Models that hit a daily rate limit
@@ -69,6 +65,7 @@ logger.init(canonicalUserDataPath);
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
+    return;
 } else {
     app.on('second-instance', () => {
         if (mainWindow) {
@@ -119,33 +116,94 @@ async function migrateLegacyUserData() {
     }
 }
 
+let cachedConfig = null;
+let writeQueue = Promise.resolve();
+let saveDebounceTimer = null;
+
+async function performWriteToDisk(configToWrite) {
+    try {
+        const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+        await fs.promises.writeFile(tempPath, JSON.stringify(configToWrite, null, 2), 'utf8');
+        await fs.promises.rename(tempPath, configPath);
+    } catch (e) {
+        console.error("Failed to save config asynchronously:", e.message || e);
+    }
+}
+
+function scheduleDiskWrite() {
+    if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(() => {
+        saveDebounceTimer = null;
+        const configSnapshot = { ...loadConfig() };
+        writeQueue = writeQueue.then(() => performWriteToDisk(configSnapshot)).catch(() => {});
+    }, 200);
+}
+
+function flushConfigImmediately() {
+    if (saveDebounceTimer) {
+        clearTimeout(saveDebounceTimer);
+        saveDebounceTimer = null;
+    }
+    if (cachedConfig) {
+        const configSnapshot = { ...loadConfig() };
+        writeQueue = writeQueue.then(() => performWriteToDisk(configSnapshot)).catch(() => {});
+    }
+}
+
 // Helper to load config
 function loadConfig() {
+    if (cachedConfig) return { ...cachedConfig };
     try {
-        if (fs.existsSync(configPath)) {
+        if (typeof configPath !== 'undefined' && fs.existsSync(configPath)) {
             const cfg = migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
             if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
             if (!['crimson','ocean','aurora'].includes(cfg.widgetStyle)) cfg.widgetStyle = 'crimson';
-            return cfg;
+            cachedConfig = cfg;
+            return { ...cachedConfig };
         }
     } catch (e) {
         console.error("Failed to load config:", e.message || e);
     }
     const cfg = migrateConfig({});
     if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
-    return cfg;
+    cachedConfig = cfg;
+    return { ...cachedConfig };
 }
 
 function saveConfig(data) {
     try {
-        const config = migrateConfig({ ...loadConfig(), ...data });
-        const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-        fs.writeFileSync(tempPath, JSON.stringify(config, null, 2), 'utf8');
-        fs.renameSync(tempPath, configPath);
+        const current = loadConfig();
+        cachedConfig = migrateConfig({ ...current, ...data });
+        scheduleDiskWrite();
         return true;
     } catch (e) {
         console.error("Failed to save config:", e.message || e);
         return false;
+    }
+}
+
+function resetWidgetPosition() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const primaryArea = screen.getPrimaryDisplay().workArea;
+    const [ww, wh] = mainWindow.getSize();
+    const x = Math.round(primaryArea.x + (primaryArea.width - ww) / 2);
+    const y = Math.round(primaryArea.y + (primaryArea.height - wh) / 2);
+    mainWindow.setPosition(x, y);
+    saveConfig({ windowX: x, windowY: y });
+}
+
+function ensureWidgetOnScreen() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const displays = screen.getAllDisplays();
+    const [wx, wy] = mainWindow.getPosition();
+    const [ww, wh] = mainWindow.getSize();
+    const intersects = displays.some(d => {
+        const wa = d.workArea;
+        return (wx + ww > wa.x + 20 && wx < wa.x + wa.width - 20 &&
+                wy + wh > wa.y + 20 && wy < wa.y + wa.height - 20);
+    });
+    if (!intersects) {
+        resetWidgetPosition();
     }
 }
 
@@ -224,12 +282,25 @@ function secureWebContents(webContents) {
 
 function createWindow() {
     const config = loadConfig();
+    let windowX = config.windowX;
+    let windowY = config.windowY;
+    const displays = screen.getAllDisplays();
+    const isValid = typeof windowX === 'number' && typeof windowY === 'number' && displays.some(d => {
+        const wa = d.workArea;
+        return (windowX + 232 > wa.x + 20 && windowX < wa.x + wa.width - 20 &&
+                windowY + 200 > wa.y + 20 && windowY < wa.y + wa.height - 20);
+    });
+    if (!isValid) {
+        const primaryArea = screen.getPrimaryDisplay().workArea;
+        windowX = Math.round(primaryArea.x + (primaryArea.width - 232) / 2);
+        windowY = Math.round(primaryArea.y + (primaryArea.height - 200) / 2);
+    }
 
     mainWindow = new BrowserWindow({
         width: 232,
         height: 200,
-        x: config.windowX,
-        y: config.windowY,
+        x: windowX,
+        y: windowY,
         transparent: true,
         frame: false,
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
@@ -251,8 +322,12 @@ function createWindow() {
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
     // Forward renderer console (incl. errors) to app.log
-    mainWindow.webContents.on('console-message', (event) => {
-        const msg = `[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`;
+    mainWindow.webContents.on('console-message', (event, level, message, lineNumber, sourceId) => {
+        const lvl = typeof level === 'number' || typeof level === 'string' ? level : (event && event.level);
+        const msgText = typeof message === 'string' ? message : (event && event.message);
+        const line = typeof lineNumber === 'number' || typeof lineNumber === 'string' ? lineNumber : (event && event.lineNumber);
+        const src = typeof sourceId === 'string' ? sourceId : (event && event.sourceId);
+        const msg = `[renderer:${lvl}] ${msgText} (${src}:${line})`;
         console.log(sanitizeErrorMessage(msg));
         logApp(msg);
     });
@@ -335,6 +410,10 @@ function trayMenuForState(alwaysOnTop) {
             }
         },
         {
+            label: L('tray.resetPosition'),
+            click: () => resetWidgetPosition()
+        },
+        {
             label: L('tray.settings'),
             click: () => showSettingsWindow()
         },
@@ -397,11 +476,6 @@ function applyHotkeyConfig(hk) {
 }
 
 uIOhook.on('keydown', (e) => {
-    if (mainWindow && mainWindow.webContents && mainWindow.webContents.isFocused()) {
-        // let the renderer handle its own keydown if focused and recording? 
-        // We moved recording to main process.
-    }
-    
     if (isRecordingHotkey) {
         if ([UiohookKey.Ctrl, UiohookKey.Alt, UiohookKey.Shift, UiohookKey.CtrlRight, UiohookKey.AltRight, UiohookKey.ShiftRight, UiohookKey.Meta].includes(e.keycode)) return;
         isRecordingHotkey = false;
@@ -536,6 +610,9 @@ app.whenReady().then(async () => {
     createWindow();
     createTray();
 
+    screen.on('display-removed', () => ensureWidgetOnScreen());
+    screen.on('display-metrics-changed', () => ensureWidgetOnScreen());
+
     const config = loadConfig();
     applyHotkeyConfig(config.customHotkey); // We use customHotkey instead of hotkey to avoid conflict with old format
 
@@ -547,6 +624,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('will-quit', () => {
+    flushConfigImmediately();
     clearInterval(foregroundPoll);
     clearInterval(widgetHoverPoll);
     uIOhook.stop();
@@ -591,8 +669,9 @@ let bubblePendingText = '';
 let pasteToast = null;
 
 // Remember the window the user was working in (ignores our own widget).
-// Poll only when it can matter — skip when the app is quitting or no window exists.
+// Poll only when it can matter — skip when spacePaste is disabled, app is quitting or no window exists.
 const foregroundPoll = setInterval(() => {
+    if (!loadConfig().spacePaste) return;
     if (!win32.available || !mainWindow || mainWindow.isDestroyed()) return;
     try {
         if (BrowserWindow.getFocusedWindow()) return; // our own window is focused
@@ -1034,19 +1113,22 @@ ipcMain.on('widget-raise', () => {
 // mouseleave is unreliable, which leaves the top pill visible and blocks the
 // idle transparency. Poll the OS cursor against the widget bounds instead.
 let lastWidgetHoverState = null;
+let lastWidgetCursorX = null;
+let lastWidgetCursorY = null;
 const widgetHoverPoll = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
     const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = mainWindow.getPosition();
     const [ww, wh] = mainWindow.getSize();
     const inside = cursor.x >= wx && cursor.x <= wx + ww && cursor.y >= wy && cursor.y <= wy + wh;
-    // Send every tick while inside so the renderer always knows the real cursor
-    // position (forwarded mouse events are unreliable under click-through) and
-    // can wake the pill immediately on hover.
-    if (inside !== lastWidgetHoverState || inside) {
+    const relX = inside ? cursor.x - wx : 0;
+    const relY = inside ? cursor.y - wy : 0;
+    if (inside !== lastWidgetHoverState || (inside && (relX !== lastWidgetCursorX || relY !== lastWidgetCursorY))) {
         lastWidgetHoverState = inside;
+        lastWidgetCursorX = relX;
+        lastWidgetCursorY = relY;
         mainWindow.webContents.send('widget-hover', inside
-            ? { inside: true, x: cursor.x - wx, y: cursor.y - wy }
+            ? { inside: true, x: relX, y: relY }
             : { inside: false });
     }
 }, 200);
@@ -1089,7 +1171,7 @@ ipcMain.handle('copy-diagnostics', async (event, extra) => {
 ipcMain.handle('transcribe-audio', async (event, request) => {
     if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
     const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
-    if (audioBytes && audioBytes > 33554432) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
+    if (audioBytes && audioBytes > 62914560) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
     const config = loadConfig();
     const started = Date.now();
     if (request?.engine === 'local') {
@@ -1121,10 +1203,12 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
             mimeType: request?.mimeType || 'audio/webm',
             uiLanguage: request.uiLanguage || uiLang()
         });
+        if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
         logApp(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
         return r;
     } catch (e) {
         const message = sanitizeErrorMessage(e);
+        lastErrorText = message;
         logApp(`[main] transcribe THREW | engine: gemini | ${message.slice(0, 400)}`);
         return { success: false, code: 'TRANSCRIPTION_ERROR', error: message };
     }

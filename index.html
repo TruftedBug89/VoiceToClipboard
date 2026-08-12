@@ -14,7 +14,7 @@
 <!-- Top Action Buttons (Settings, Stop/Cancel, Close) -->
 <div id="top-bar">
 <button class="icon-btn" data-i18n-title="topbar.settings" id="settings-btn" title="Settings (STT Engine / Keys)" type="button">⚙️</button>
-<button class="icon-btn" data-i18n-title="topbar.retranscribe" id="retranscribe-btn" title="Re-transcribe last audio" style="display:none;" type="button">↻</button>
+<button class="icon-btn hidden-element" data-i18n-title="topbar.retranscribe" id="retranscribe-btn" title="Re-transcribe last audio" type="button">↻</button>
 <button class="icon-btn" data-i18n-title="topbar.cancel" id="cancel-btn" title="Cancel Recording (Esc)" type="button">■</button>
 <button class="icon-btn" data-i18n-title="topbar.close" id="close-btn" title="Quit App" type="button">✕</button>
 </div>
@@ -50,13 +50,13 @@
 <!-- In-App Settings Modal -->
 <div aria-labelledby="settings-title" aria-modal="true" id="settings-modal" role="dialog">
 <div class="modal-header">
-<div style="display: flex; align-items: center; gap: 8px;">
-<div style="display: flex; flex-direction: column; line-height: 1.25;">
+<div class="flex-row gap-8">
+<div class="flex-col lh-125">
 <span data-i18n="settings.title" id="settings-title">Settings</span>
-<span style="font-size: 9.5px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.05em;">VoiceToClipboard</span>
+<span class="modal-header-sub">VoiceToClipboard</span>
 </div>
 </div>
-<div style="display: flex; align-items: center; gap: 6px;">
+<div class="flex-row gap-6">
 <button aria-label="Close Settings" class="icon-btn window-ctl" id="close-modal-btn" title="Close Settings" type="button">✕</button>
 </div>
 </div>
@@ -65,15 +65,15 @@
             <div class="settings-section">
             <div class="settings-section-title"><span data-i18n="settings.language">Language</span></div>
             <div class="input-group">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <label for="ui-language-select" style="font-size: 12px; flex: 1;" data-i18n="lang.label">UI Language</label>
-                    <select id="ui-language-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
+                <div class="flex-row gap-8">
+                    <label for="ui-language-select" class="ui-lang-label" data-i18n="lang.label">UI Language</label>
+                    <select id="ui-language-select" class="select-styled">
                         <option value="en" data-i18n="lang.en">English</option>
                         <option value="es" data-i18n="lang.es">Español</option>
                         <option value="zh" data-i18n="lang.zh">中文</option>
                     </select>
                 </div>
-                <div style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;" data-i18n="lang.note">Interface language and speech hint. Applies instantly, offline.</div>
+                <div class="setting-note" data-i18n="lang.note">Interface language and speech hint. Applies instantly, offline.</div>
             </div>
             </div>
 <div class="settings-section">
@@ -81,11 +81,11 @@
 <!-- Global Recording Hotkey -->
 <div class="input-group">
 <label data-i18n="hotkey.label" for="hotkey-input">Global Recording Hotkey</label>
-<div style="display: flex; gap: 8px; align-items: center;">
-<input id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly="" style="flex: 1; cursor: pointer; font-family: monospace; font-size: 11px; text-align: center; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.15);" type="text"/>
-<button class="btn-secondary" data-i18n="hotkey.change" id="record-hotkey-btn" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Change Key</button>
+<div class="flex-row gap-8">
+<input id="hotkey-input" placeholder="CommandOrControl+Alt+V" readonly="" class="hotkey-input-field" type="text"/>
+<button class="btn-secondary record-hotkey-btn" data-i18n="hotkey.change" id="record-hotkey-btn">Change Key</button>
 </div>
-<div data-i18n="hotkey.note" id="hotkey-note" style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Click input or Change Key, then press key combination.</div>
+<div data-i18n="hotkey.note" id="hotkey-note" class="hotkey-note-text">Click input or Change Key, then press key combination.</div>
 </div>
 <!-- Always on Top Toggle -->
 <div class="input-group">
@@ -106,7 +106,7 @@
 <span class="slider"></span>
 </label>
 </div>
-<div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;" data-i18n="finishSound.note">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
+<div class="setting-subnote" data-i18n="finishSound.note">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
 </div>
 </div>
 <div class="settings-section">
@@ -120,17 +120,17 @@
 </div>
 </div>
 <!-- Local Model Selector -->
-<div class="input-group" id="local-model-group" style="display: none;">
+<div class="input-group hidden-element" id="local-model-group">
 <label data-i18n="models.label" for="local-tier-select">Offline Local Models</label>
 <div class="model-dropdown" id="model-dropdown">
 <button aria-expanded="false" aria-haspopup="listbox" class="model-dropdown-btn" id="model-dropdown-btn" type="button">
 <span class="model-dropdown-current" data-i18n="models.loading" id="model-dropdown-current">Loading models…</span>
-<span class="model-dropdown-chip" data-i18n="models.recommended" id="model-dropdown-chip" style="display: none;">⭐ Recommended</span>
+<span class="model-dropdown-chip hidden-element" data-i18n="models.recommended" id="model-dropdown-chip">⭐ Recommended</span>
 <span class="model-dropdown-chev" id="model-dropdown-chev">▾</span>
 </button>
-<div class="model-dropdown-panel" id="model-dropdown-panel" role="listbox" style="display: none;"></div>
+<div class="model-dropdown-panel hidden-element" id="model-dropdown-panel" role="listbox"></div>
 </div>
-<select aria-hidden="true" id="local-tier-select" style="display: none;">
+<select aria-hidden="true" id="local-tier-select" class="hidden-element">
 <option data-i18n="models.tier.tiny" value="tiny">Tiny</option>
 <option data-i18n="models.tier.mini" value="mini">Mini</option>
 <option data-i18n="models.tier.zh-light" value="zh-light">Chinese + English (Light)</option>
@@ -138,32 +138,32 @@
 <option data-i18n="models.tier.big" value="big">Big</option>
 <option data-i18n="models.tier.zh-big" value="zh-big">Chinese + English (Big)</option>
 </select>
-<div id="model-reco-note" style="font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4;">Every model auto-detects the language — no language setting, ever. <span style="color: #ffd76a;">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>. <span data-i18n="models.qualityNote">RAM is used only while transcribing when Power-Saving Mode is on.</span></div>
-<div id="model-card" style="display: none;">
-<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
-<div style="min-width: 0;">
+<div id="model-reco-note" class="model-reco-note-text">Every model auto-detects the language — no language setting, ever. <span class="text-gold">⭐ Recommended</span> = best match for your PC's RAM <span id="model-reco-ram"></span>. <span data-i18n="models.qualityNote">RAM is used only while transcribing when Power-Saving Mode is on.</span></div>
+<div id="model-card" class="hidden-element">
+<div class="flex-between-start gap-8">
+<div class="min-w-0">
 <strong id="model-card-name"></strong>
-<div id="model-card-meta" style="font-size: 10px; color: var(--text-dim); margin-top: 2px;"></div>
+<div id="model-card-meta" class="model-card-meta-text"></div>
 </div>
 <span class="status-pill" id="model-card-status"></span>
 </div>
-<div id="model-card-desc" style="font-size: 10.5px; color: var(--text-dim); line-height: 1.45; margin-top: 6px;"></div>
-<div id="model-card-license" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.75; margin-top: 4px;"></div>
-<div id="model-card-action" style="margin-top: 9px;"></div>
-<div id="model-download-progress" style="display: none; margin-top: 9px;">
-<div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 3px;">
+<div id="model-card-desc" class="model-card-desc-text"></div>
+<div id="model-card-license" class="model-card-license-text"></div>
+<div id="model-card-action" class="model-card-action-box"></div>
+<div id="model-download-progress" class="hidden-element model-download-progress-box">
+<div class="flex-between text-dim-10 mb-3">
 <span data-i18n="model.downloading" id="model-download-status">Downloading…</span>
 <span id="model-download-pct">0%</span>
 </div>
-<div class="progress-bar-bg" style="margin-top: 0;">
+<div class="progress-bar-bg mt-0">
 <div class="progress-bar-fill" id="model-download-bar"></div>
 </div>
 </div>
 </div>
-<div data-i18n="models.cachePath" id="model-cache-path" style="font-size: 9.5px; color: var(--text-dim); opacity: 0.8; margin-top: 6px;">Model cache location is shown after startup.</div>
+<div data-i18n="models.cachePath" id="model-cache-path" class="model-cache-path-text">Model cache location is shown after startup.</div>
 </div>
 <!-- Local AI Memory Mode Toggle -->
-<div class="input-group" id="eco-mode-group" style="display: none;">
+<div class="input-group hidden-element" id="eco-mode-group">
 <div class="switch-row">
 <label class="switch-label" data-i18n="eco.label" for="eco-mode-checkbox">Power-Saving Mode</label>
 <label class="toggle-switch">
@@ -171,14 +171,14 @@
 <span class="slider"></span>
 </label>
 </div>
-<div style="font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35;" data-i18n="eco.note">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
+<div class="setting-subnote" data-i18n="eco.note">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
 </div>
 <!-- Gemini API Keys Input -->
 <div class="input-group" id="gemini-key-group">
 <label data-i18n="gemini.keys" for="api-key-input">Gemini API Keys </label>
-<textarea autocomplete="off" id="api-key-input" placeholder="Paste API keys, one per line..." rows="3" spellcheck="false" style="width: 100%; resize: none; padding: 6px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 12px; -webkit-text-security: disc; box-sizing: border-box;" data-i18n-placeholder="gemini.placeholder"></textarea>
+<textarea autocomplete="off" id="api-key-input" class="api-key-textarea" placeholder="Paste API keys, one per line..." rows="3" spellcheck="false" data-i18n-placeholder="gemini.placeholder"></textarea>
 <div id="api-key-note"></div>
-<div style="margin-top: 6px; font-size: 11px; opacity: .65;" data-i18n="gemini.note">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
+<div class="gemini-note-text" data-i18n="gemini.note">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
 </div>
 </div>
 <div class="settings-section">
@@ -192,10 +192,10 @@
 <span class="slider"></span>
 </label>
 </div>
-<div id="auto-stop-options" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
-<div style="display: flex; align-items: center; gap: 6px;">
-<span style="font-size: 11px; color: var(--text-dim);" data-i18n="autostop.stopAfter">Stop after</span>
-<select id="auto-stop-seconds" style="flex: 1; padding: 5px 8px;">
+<div id="auto-stop-options" class="hidden-element auto-stop-options-box">
+<div class="flex-row gap-6">
+<span class="text-dim-11" data-i18n="autostop.stopAfter">Stop after</span>
+<select id="auto-stop-seconds" class="auto-stop-select">
 <option value="1.5" data-i18n="autostop.seconds.1.5">1.5 sec</option>
 <option value="2.0" data-i18n="autostop.seconds.2.0">2.0 sec</option>
 <option value="3.0" data-i18n="autostop.seconds.3.0">3.0 sec</option>
@@ -203,40 +203,40 @@
 <option value="4.0" data-i18n="autostop.seconds.4.0">4.0 sec</option>
 <option value="5.0" data-i18n="autostop.seconds.5.0">5.0 sec</option>
 </select>
-<span style="font-size: 11px; color: var(--text-dim);" data-i18n="autostop.silence">silence</span>
+<span class="text-dim-11" data-i18n="autostop.silence">silence</span>
 </div>
 <!-- Live Silence Threshold Limiter -->
-<div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px; margin-top: 2px;">
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-<span style="font-size: 10.5px; font-weight: 600; color: var(--text-main);">Silence Sensitivity Threshold</span>
-<span id="threshold-value-display" style="font-size: 11px; font-weight: bold; color: var(--primary);">12</span>
+<div class="threshold-container">
+<div class="flex-between-center mb-4">
+<span class="threshold-title" data-i18n="autostop.threshold">Silence Sensitivity Threshold</span>
+<span id="threshold-value-display" class="threshold-display">12</span>
 </div>
-<div style="display: flex; align-items: center; gap: 8px;">
-<input id="silence-threshold-slider" max="100" min="2" step="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);" type="range" value="12"/>
-<button class="btn-secondary" data-i18n="autostop.reset" id="reset-threshold-btn" style="padding: 4px 8px; font-size: 10px; white-space: nowrap;" title="Restore the default threshold (12)" type="button">↺ Reset</button>
+<div class="flex-row gap-8">
+<input id="silence-threshold-slider" class="threshold-slider" max="100" min="2" step="1" type="range" value="12"/>
+<button class="btn-secondary reset-threshold-btn" data-i18n="autostop.reset" id="reset-threshold-btn" title="Restore the default threshold (12)" type="button">↺ Reset</button>
 </div>
 <!-- Calibration controls -->
-<div style="display: flex; align-items: center; gap: 6px; margin-top: 7px;">
-<button class="btn-secondary" data-i18n="autostop.calibrate" id="auto-calibrate-btn" style="padding: 5px 10px; font-size: 10px; white-space: nowrap; flex: 1;" title="Measure the background noise for a few seconds, then set the threshold automatically" type="button">⚡ Auto-Calibrate</button>
-<span style="font-size: 9.5px; color: var(--text-dim); white-space: nowrap;">sec</span>
-<select id="calibrate-duration-select" style="padding: 4px 6px; font-size: 10px;" title="How many seconds to measure the background noise during calibration">
+<div class="flex-row gap-6 mt-7">
+<button class="btn-secondary auto-calibrate-btn" data-i18n="autostop.calibrate" id="auto-calibrate-btn" title="Measure the background noise for a few seconds, then set the threshold automatically" type="button">⚡ Auto-Calibrate</button>
+<span class="sec-label">sec</span>
+<select id="calibrate-duration-select" class="calibrate-duration-select" title="How many seconds to measure the background noise during calibration">
 <option value="3">3</option>
 <option selected="" value="5">5</option>
 <option value="10">10</option>
 </select>
 </div>
-<div data-i18n="autostop.calibrate.feedback" id="calibrate-feedback" style="font-size: 9.5px; color: var(--text-dim); margin-top: 4px; min-height: 12px;">Auto-calibration measures your background noise for a few seconds and sets the threshold so silence never triggers a stop.</div>
+<div data-i18n="autostop.calibrate.feedback" id="calibrate-feedback" class="calibrate-feedback-text">Auto-calibration measures your background noise for a few seconds and sets the threshold so silence never triggers a stop.</div>
 <!-- Live Mic Volume Level Meter (visible only while calibrating) -->
-<div id="noise-meter-wrap" style="display: none; margin-top: 8px;">
-<div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: var(--text-dim); margin-bottom: 3px;">
+<div id="noise-meter-wrap" class="hidden-element noise-meter-wrap-box">
+<div class="flex-between-center text-dim-95 mb-3">
 <span data-i18n="meter.live">Live Mic Level</span>
-<span data-i18n="meter.silent" id="noise-meter-status" style="font-weight: 600;">(Silent)</span>
+<span data-i18n="meter.silent" id="noise-meter-status" class="noise-meter-status-text">(Silent)</span>
 </div>
-<div style="position: relative; width: 100%; height: 14px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 30%, rgba(245, 158, 11, 0.3) 60%, rgba(239, 68, 68, 0.3) 100%); border-radius: 5px; overflow: hidden;">
-<div id="noise-meter-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%); transition: width 0.05s ease-out; border-radius: 5px;"></div>
-<div id="noise-threshold-marker" style="position: absolute; top: -2px; bottom: -2px; left: 12%; width: 2px; background: #ffffff; box-shadow: 0 0 5px #ffffff; z-index: 2;" title="Silence Threshold Limit"></div>
+<div class="noise-meter-bg">
+<div id="noise-meter-bar" class="noise-meter-bar-fill"></div>
+<div id="noise-threshold-marker" class="noise-threshold-marker-line" title="Silence Threshold Limit"></div>
 </div>
-<div style="display: flex; justify-content: space-between; font-size: 8.5px; color: var(--text-dim); margin-top: 2px;">
+<div class="flex-between text-dim-85 mt-2">
 <span data-i18n="meter.quiet">quiet</span>
 <span data-i18n="meter.speech">speech →</span>
 </div>
@@ -255,16 +255,16 @@
 <span class="slider"></span>
 </label>
 </div>
-<div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
-<label data-i18n="spacepaste.style" for="paste-style-select" style="font-size: 12px; flex: 1;">Paste style</label>
-<select id="paste-style-select" style="padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main);">
+<div class="flex-row gap-8 mt-6">
+<label data-i18n="spacepaste.style" for="paste-style-select" class="paste-style-label">Paste style</label>
+<select id="paste-style-select" class="select-styled">
 <option value="bubble" data-i18n="spacepaste.styleBubble">Bubble (press a key)</option>
 <option value="toast" data-i18n="spacepaste.styleToast">Windows notification (click)</option>
 </select>
 </div>
-<div id="paste-key-row" style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
-<label data-i18n="spacepaste.key" for="paste-key-input" style="font-size: 12px; flex: 1;">Paste key</label>
-<input autocomplete="off" id="paste-key-input" placeholder="Press a key…" readonly="" style="width: 110px; padding: 4px 6px; font-size: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; color: var(--text-main); text-align: center; cursor: pointer;" type="text"/ data-i18n-placeholder="spacepaste.keyPlaceholder">
+<div id="paste-key-row" class="flex-row gap-8 mt-6">
+<label data-i18n="spacepaste.key" for="paste-key-input" class="paste-style-label">Paste key</label>
+<input autocomplete="off" id="paste-key-input" class="paste-key-input-field" placeholder="Press a key…" readonly="" type="text" data-i18n-placeholder="spacepaste.keyPlaceholder" />
 </div>
 </div>
 </div>
@@ -279,26 +279,26 @@
 <span class="slider"></span>
 </label>
 </div>
-<div id="idle-fade-options" style="display: none; align-items: center; gap: 8px; margin-top: 6px;">
-<span style="font-size: 11px; color: var(--text-dim);" data-i18n="appearance.idleOpacity">Idle Opacity:</span>
-<input id="idle-opacity-slider" max="90" min="10" step="5" style="flex: 1; cursor: pointer; accent-color: var(--primary);" type="range" value="60"/>
-<span id="idle-opacity-val" style="font-size: 11px; font-weight: bold; color: var(--text-main);">60%</span>
+<div id="idle-fade-options" class="hidden-element idle-fade-options-box">
+<span class="text-dim-11" data-i18n="appearance.idleOpacity">Idle Opacity:</span>
+<input id="idle-opacity-slider" class="idle-opacity-slider" max="90" min="10" step="5" type="range" value="60"/>
+<span id="idle-opacity-val" class="idle-opacity-val">60%</span>
 </div>
 </div>
 <!-- Widget Style (theme) picker -->
 <div class="input-group">
-<label class="switch-label" data-i18n="appearance.widgetStyle" style="display: block; margin-bottom: 8px;">Widget Style</label>
+<label class="switch-label widget-style-label" data-i18n="appearance.widgetStyle">Widget Style</label>
 <div class="style-picker" id="style-picker" role="radiogroup" data-i18n-aria-label="appearance.widgetStyle" data-i18n-title="appearance.widgetStyleTooltip" aria-label="Widget Style" title="Pick a widget style">
 <button class="style-swatch active" data-style="crimson" role="radio" aria-checked="true" tabindex="0" type="button">
-<span class="style-swatch-dot" style="background: linear-gradient(135deg, #e63946, #ff4d4d);"></span>
+<span class="style-swatch-dot swatch-crimson"></span>
 <span class="style-swatch-label" data-i18n="appearance.style.crimson">Crimson</span>
 </button>
 <button class="style-swatch" data-style="ocean" role="radio" aria-checked="false" tabindex="-1" type="button">
-<span class="style-swatch-dot" style="background: linear-gradient(135deg, #2dd4bf, #38bdf8);"></span>
+<span class="style-swatch-dot swatch-ocean"></span>
 <span class="style-swatch-label" data-i18n="appearance.style.ocean">Ocean</span>
 </button>
 <button class="style-swatch" data-style="aurora" role="radio" aria-checked="false" tabindex="-1" type="button">
-<span class="style-swatch-dot" style="background: linear-gradient(135deg, #a855f7, #818cf8);"></span>
+<span class="style-swatch-dot swatch-aurora"></span>
 <span class="style-swatch-label" data-i18n="appearance.style.aurora">Aurora</span>
 </button>
 </div>
@@ -306,10 +306,10 @@
 </div>
 </div>
 <!-- Modal Actions Footer -->
-<div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
-<div style="font-size: 10.5px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;">
-<span style="color: #10b981; font-weight: bold;">✓</span> Auto-saved
-            </div>
+<div class="modal-actions modal-actions-footer">
+<div class="autosave-status">
+<span class="check-green">✓</span> <span data-i18n="footer.autosaved">Auto-saved</span>
+</div>
 <button class="btn-remove" data-i18n="footer.removeKey" id="remove-key-btn">Remove Key</button>
 </div>
 </div>

@@ -2,21 +2,31 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main, master ]
   pull_request:
-    branches: [main]
+    branches: [ main, master ]
 
 jobs:
   test:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 20
           cache: 'npm'
-      - run: npm ci --ignore-scripts
-      - run: npm run check
-      - run: npm run check:i18n
-        if: ${{ always() }}
-      - run: npm test
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax Check
+        run: npm run check
+
+      - name: i18n Parity Check
+        run: npm run check:i18n
+
+      - name: Run Tests
+        run: npm test

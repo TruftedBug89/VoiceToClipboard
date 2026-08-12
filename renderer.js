@@ -2,11 +2,7 @@
 // See preload.js for the full bridge surface.
 
 // ─── i18n (offline, bundled locales) ───────────────────────────────────────
-const LOCALES = {
-    en: require('./locales/en.json'),
-    es: require('./locales/es.json'),
-    zh: require('./locales/zh.json')
-};
+const LOCALES = window.api && window.api.locales ? window.api.locales : { en: {}, es: {}, zh: {} };
 let uiLang = 'en';
 let locale = LOCALES.en;
 
@@ -225,13 +221,13 @@ function renderModelCard() {
     modelCardDesc.textContent = model.description;
     modelCardLicense.textContent = `License: ${model.license}`;
     if (model.verified === false) {
-        modelCardStatus.textContent = '⚠️ Pending';
+        modelCardStatus.textContent = t('model.pending');
         modelCardStatus.className = 'status-pill download-needed';
     } else if (model.installed) {
-        modelCardStatus.textContent = '✓ Installed';
+        modelCardStatus.textContent = t('model.installed');
         modelCardStatus.className = 'status-pill ready';
     } else {
-        modelCardStatus.textContent = '⬇ Available';
+        modelCardStatus.textContent = '⬇ ' + t('model.available');
         modelCardStatus.className = 'status-pill download-needed';
     }
     renderModelCardAction(model);
@@ -243,7 +239,7 @@ function renderModelCardAction(model) {
     if (!model.verified) {
         const note = document.createElement('div');
         note.style.cssText = 'font-size: 10px; color: var(--text-dim); line-height: 1.4;';
-        note.textContent = model.unavailableReason || 'Compatibility pending for this runtime.';
+        note.textContent = model.unavailableReason || t('model.compatPending');
         modelCardAction.append(note);
         return;
     }
@@ -252,11 +248,11 @@ function renderModelCardAction(model) {
         row.style.cssText = 'display: flex; gap: 6px; align-items: center;';
         const ready = document.createElement('span');
         ready.style.cssText = 'flex: 1; font-size: 10px; color: #10b981; font-weight: 600;';
-        ready.textContent = 'Ready to use locally';
+        ready.textContent = t('model.ready');
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'btn-secondary';
-        removeBtn.textContent = '🗑 Remove';
+        removeBtn.textContent = t('model.remove');
         removeBtn.style.cssText = 'padding: 5px 10px; font-size: 10px; white-space: nowrap;';
         removeBtn.addEventListener('click', async () => {
             await window.api.removeLocalModel(model.key);
@@ -692,11 +688,11 @@ document.addEventListener('mouseleave', () => {
 // Main-process cursor polling is the source of truth for hover/leave. The
 // payload carries the real OS cursor position (window-relative) so the pill
 // wakes instantly even when forwarded mouse events are missed.
-window.api.on('gemini-fallback', (e, model) => {
+window.api.on('gemini-fallback', (model) => {
         setStatus('busy', `Rate limit — switched to ${model}`);
     });
 
-window.api.on('widget-hover', (event, payload) => {
+window.api.on('widget-hover', (payload) => {
     const inside = typeof payload === 'boolean' ? payload : !!(payload && payload.inside);
     const entered = inside && !cursorInsideWindow;
     cursorInsideWindow = inside;
@@ -725,7 +721,7 @@ window.api.on('widget-hover', (event, payload) => {
 });
 
 // Global Hotkey / IPC handlers
-window.api.on('settings-changed', (event, snapshot) => {
+window.api.on('settings-changed', (snapshot) => {
     currentSttConfig = snapshot;
     applyAppearanceSnapshot(snapshot);
     // Live language switch: re-render the whole UI (widget + settings window).
@@ -922,7 +918,7 @@ if (resetThresholdBtn) {
         if (silenceThresholdSlider) silenceThresholdSlider.value = val;
         if (thresholdValueDisplay) thresholdValueDisplay.textContent = val;
         if (currentSttConfig) currentSttConfig.silenceThreshold = val;
-        if (calibrateFeedback) calibrateFeedback.textContent = 'Threshold reset to the default (12).';
+        if (calibrateFeedback) calibrateFeedback.textContent = t('autostop.thresholdReset');
         updateMeterUI(smoothedSpeechVolume, val);
         autoSaveSettings();
     });
@@ -1139,12 +1135,12 @@ function gapWarn(noiseP50, noiseP90, newThresh) {
     const mid = Math.round(noiseP50);
     const peak = Math.round(noiseP90);
     if (peak < 12) {
-        return `Calibrated: background noise ~${mid} (very quiet room) → threshold ${newThresh}. Speak normally — if stops cut you off, raise it a bit.`;
+        return t('autostop.calibrate.quiet', { mid, newThresh });
     }
     if (peak > 70) {
-        return `Calibrated: background noise ~${mid} (loud room!) → threshold ${newThresh}. You may want to move closer to the mic or reduce the noise.`;
+        return t('autostop.calibrate.loud', { mid, newThresh });
     }
-    return `Calibrated: background noise ~${mid} (peak ~${peak}) → threshold ${newThresh}.`;
+    return t('autostop.calibrate.normal', { mid, peak, newThresh });
 }
 
 if (autoCalibrateBtn) {
@@ -1368,7 +1364,7 @@ async function startModelDownload(modelKey, triggerBtn) {
     modelCardStatus.className = 'status-pill download-needed';
 
     const downloadStats = {};
-    const progressListener = (event, data) => {
+    const progressListener = (data) => {
         if (!data) return;
         if (data.status === 'progress' && data.file && data.loaded && data.total) {
             downloadStats[data.file] = { loaded: data.loaded, total: data.total };
@@ -1933,6 +1929,7 @@ async function startRecording() {
         mediaRecorder.start();
         isStartingRecording = false;
         isRecording = true;
+        refreshRetranscribeBtn();
         recordStartTime = Date.now();
         document.body.classList.add('is-recording');
 
@@ -1965,6 +1962,7 @@ function stopRecordingCore(cancel) {
         mediaRecorder.stop();
     }
     isRecording = false;
+    refreshRetranscribeBtn();
     document.body.classList.remove('is-recording');
     smoothedSpeechVolume = 0;
     speechFramesCount = 0;
@@ -2055,6 +2053,10 @@ async function retranscribeLast() {
         const cfg = await window.api.getSttConfig();
         currentSttConfig = cfg;
         if (cfg.sttEngine === 'local') {
+            if (!audio.pcm && audio.blob) {
+                audio.pcm = await audioBlobTo16kHzFloat32(audio.blob);
+                lastAudio.pcm = audio.pcm;
+            }
             result = await window.api.transcribeAudio({
                 engine: 'local',
                 modelKey: cfg.localModelKey,
@@ -2111,7 +2113,6 @@ if (retranscribeBtn) {
         retranscribeBtn.style.display = 'none';
         await retranscribeLast();
     });
-    setInterval(refreshRetranscribeBtn, 700);
 }
 
 if (retryBtn) {
