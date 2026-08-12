@@ -138,6 +138,47 @@ class SherpaAdapter {
                 provider: 'cpu',
                 debug: 0
             };
+        } else if (registryModel.backend === 'whisper') {
+            const fs = require('fs');
+            const enc = fs.existsSync(path.join(modelPath, 'encoder.int8.onnx')) ? 'encoder.int8.onnx' : 'encoder.onnx';
+            const dec = fs.existsSync(path.join(modelPath, 'decoder.int8.onnx')) ? 'decoder.int8.onnx' : 'decoder.onnx';
+            const tok = fs.existsSync(path.join(modelPath, 'tokens.txt')) ? 'tokens.txt' : 'tokens.txt';
+            config = {
+                featConfig: { sampleRate: 16000, featureDim: 80 },
+                modelConfig: {
+                    whisper: {
+                        encoder: getRequiredPath(modelPath, enc),
+                        decoder: getRequiredPath(modelPath, dec),
+                        language: 'auto',
+                        task: 'transcribe'
+                    },
+                    tokens: getRequiredPath(modelPath, tok)
+                },
+                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                provider: 'cpu',
+                debug: 0
+            };
+        } else if (registryModel.backend === 'moonshine') {
+            const fs = require('fs');
+            const pre = getRequiredPath(modelPath, 'preprocess.onnx');
+            const enc = fs.existsSync(path.join(modelPath, 'encode.int8.onnx')) ? 'encode.int8.onnx' : 'encode.onnx';
+            const unc = fs.existsSync(path.join(modelPath, 'uncached_decode.int8.onnx')) ? 'uncached_decode.int8.onnx' : 'uncached_decode.onnx';
+            const cas = fs.existsSync(path.join(modelPath, 'cached_decode.int8.onnx')) ? 'cached_decode.int8.onnx' : 'cached_decode.onnx';
+            config = {
+                featConfig: { sampleRate: 16000, featureDim: 80 },
+                modelConfig: {
+                    moonshine: {
+                        preprocessor: pre,
+                        encoder: getRequiredPath(modelPath, enc),
+                        uncachedDecoder: getRequiredPath(modelPath, unc),
+                        cachedDecoder: getRequiredPath(modelPath, cas)
+                    },
+                    tokens: getRequiredPath(modelPath, 'tokens.txt')
+                },
+                numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
+                provider: 'cpu',
+                debug: 0
+            };
         } else {
             throw new Error('Unsupported Sherpa model backend.');
         }

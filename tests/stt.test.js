@@ -158,9 +158,9 @@ test('registry contains the six verified multilingual models', () => {
         'big-multilingual', 'mini-multilingual', 'omni-multilingual',
         'tiny-multilingual', 'zh-en-big', 'zh-en-light'
     ]);
-    assert.equal(getModel('omni-multilingual').backend, 'omnilingual');
-    assert.equal(getModel('big-multilingual').backend, 'parakeet');
-    assert.equal(getModel('tiny-multilingual').backend, 'nemo-ctc');
+    assert.equal(getModel('omni-multilingual').backend, 'whisper');
+    assert.equal(getModel('big-multilingual').backend, 'whisper');
+    assert.equal(getModel('tiny-multilingual').backend, 'moonshine');
     assert.equal(getModel('mini-multilingual').backend, 'nemo-transducer');
     assert.equal(getModel('zh-en-light').backend, 'sense-voice');
     assert.equal(getModel('zh-en-big').backend, 'fire-red-asr-ctc');
@@ -210,7 +210,7 @@ test('recovers interrupted model swaps and removes stale downloads', async () =>
     const stalePath = path.join(modelsDir, 'big-multilingual.download-test');
     fs.mkdirSync(backupPath, { recursive: true });
     fs.mkdirSync(stalePath, { recursive: true });
-    for (const file of ['model.int8.onnx', 'tokens.txt']) fs.writeFileSync(path.join(backupPath, file), 'model');
+    for (const file of getModel('omni-multilingual').expectedFiles) fs.writeFileSync(path.join(backupPath, file), 'model');
 
     await cache.prepare();
 

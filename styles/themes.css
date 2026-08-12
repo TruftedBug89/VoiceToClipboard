@@ -51,48 +51,52 @@
 /* Crimson — Pulse Orb */
 :root[data-widget-style="crimson"] #mic-button {
     border-radius: 50%;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, background 0.35s ease;
 }
 
 /* Ocean — Tide Bar (Capsule/Pill shape & smooth sway glide) */
 :root[data-widget-style="ocean"] #mic-button {
     border-radius: var(--mic-radius);
-    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-radius 0.4s ease;
 }
 :root[data-widget-style="ocean"] #mic-button.recording {
-    animation: ocean-tide-sway 2.4s ease-in-out infinite;
+    animation: ocean-tide-sway 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 @keyframes ocean-tide-sway {
     0%, 100% {
-        transform: translateX(0) scale(1);
-        box-shadow: 0 0 16px color-mix(in srgb, var(--primary) 55%, transparent), 0 8px 25px rgba(0,0,0,0.5);
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 50%, transparent), 0 8px 24px rgba(0,0,0,0.45);
     }
     50% {
-        transform: translateX(4px) scale(1.03);
-        box-shadow: 0 0 32px color-mix(in srgb, var(--primary) 85%, transparent), 0 8px 25px rgba(0,0,0,0.5);
+        transform: translateY(-2px) scale(1.025);
+        box-shadow: 0 0 34px color-mix(in srgb, var(--primary) 80%, transparent), 0 12px 30px rgba(0,0,0,0.55);
     }
 }
 
 /* Aurora — Liquid Blob (Organic morphing blob border-radius & fluid morph) */
 :root[data-widget-style="aurora"] #mic-button {
     border-radius: var(--mic-radius);
-    animation: aurora-blob-morph 6s ease-in-out infinite alternate;
+    animation: aurora-blob-morph 9s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
 }
 :root[data-widget-style="aurora"] #mic-button.recording {
-    animation: aurora-blob-morph 3s ease-in-out infinite alternate, mic-live 1.8s ease-in-out infinite;
+    animation: aurora-blob-morph 4.5s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, mic-live 2.2s ease-in-out infinite;
 }
 @keyframes aurora-blob-morph {
-    0%   { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
-    33%  { border-radius: 58% 42% 40% 60% / 55% 35% 65% 45%; }
-    66%  { border-radius: 35% 65% 60% 40% / 65% 55% 45% 35%; }
-    100% { border-radius: 60% 40% 30% 70% / 40% 60% 40% 60%; }
+    0%   { border-radius: 44% 56% 68% 32% / 46% 44% 56% 54%; transform: rotate(0deg) scale(1); }
+    25%  { border-radius: 54% 46% 42% 58% / 58% 38% 62% 42%; transform: rotate(2deg) scale(1.01); }
+    50%  { border-radius: 38% 62% 58% 42% / 62% 52% 48% 38%; transform: rotate(-1deg) scale(0.99); }
+    75%  { border-radius: 58% 42% 34% 66% / 42% 58% 42% 58%; transform: rotate(1.5deg) scale(1.015); }
+    100% { border-radius: 46% 54% 64% 36% / 54% 46% 54% 46%; transform: rotate(0deg) scale(1); }
 }
 
 /* Terminal — Neon Terminal (Sharp panel with scanline sweep & CRT glow) */
 :root[data-widget-style="terminal"] #mic-button {
     border-radius: var(--mic-radius);
     border-width: 1.5px;
-    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 8px color-mix(in srgb, var(--primary) 20%, transparent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
     overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
 }
 :root[data-widget-style="terminal"] #mic-button::after {
     content: '';
@@ -101,13 +105,14 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--primary) 25%, transparent) 50%, transparent 100%);
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--primary) 22%, transparent) 50%, transparent 100%);
     pointer-events: none;
-    animation: terminal-scanline 3s linear infinite;
+    animation: terminal-scanline 3.5s linear infinite;
 }
 @keyframes terminal-scanline {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(200%); }
+    0% { transform: translateY(0); opacity: 0.3; }
+    50% { opacity: 0.85; }
+    100% { transform: translateY(220%); opacity: 0.3; }
 }
 :root[data-widget-style="terminal"] #status-badge {
     font-family: 'Consolas', 'Courier New', monospace;
