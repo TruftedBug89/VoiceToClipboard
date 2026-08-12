@@ -2026,24 +2026,44 @@ function drawVisualizer() {
     const col = getStyleColors(currentWidgetStyle);
 
     if (currentWidgetStyle === 'ocean') {
-        // Mode: Ocean — Scrolling Tide Waveform
-        const wavePoints = 40;
+        // Mode: Ocean — Polished Dual-Layer Tide Waveform
+        const wavePoints = 44;
         const width = canvas.width;
-        const baseLine = centerY + 36;
-        const breath = isRecordingNow ? 1 : 0.5 + 0.5 * Math.sin(elapsed * 1.5);
+        const baseLine = centerY + 32;
+        const breath = isRecordingNow ? 1 : 0.5 + 0.5 * Math.sin(elapsed * 1.8);
 
+        // Secondary background wave layer
         canvasCtx.beginPath();
-        canvasCtx.moveTo(0, baseLine);
+        for (let i = 0; i <= wavePoints; i++) {
+            const x = (i / wavePoints) * width;
+            const ampBack = (isRecordingNow && dataArray && bufferLength > 0)
+                ? (dataArray[Math.min(bufferLength - 1, Math.floor((i / wavePoints) * (bufferLength / 2)))] / 255) * 16
+                : Math.sin(elapsed * 1.5 + i * 0.2) * 3 * breath;
+            const yBack = baseLine + 4 - Math.sin(elapsed * 2 + (i / wavePoints) * Math.PI * 3) * (4 + ampBack);
+            if (i === 0) canvasCtx.moveTo(x, yBack);
+            else canvasCtx.lineTo(x, yBack);
+        }
+        canvasCtx.lineTo(width, canvas.height);
+        canvasCtx.lineTo(0, canvas.height);
+        canvasCtx.closePath();
+        const backGrad = canvasCtx.createLinearGradient(0, baseLine - 10, 0, canvas.height);
+        backGrad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.25 : 0.12})`);
+        backGrad.addColorStop(1, 'transparent');
+        canvasCtx.fillStyle = backGrad;
+        canvasCtx.fill();
+
+        // Primary crest wave layer
+        canvasCtx.beginPath();
         for (let i = 0; i <= wavePoints; i++) {
             const x = (i / wavePoints) * width;
             let amp = 0;
             if (isRecordingNow && dataArray && bufferLength > 0) {
                 const bin = Math.min(bufferLength - 1, Math.floor((i / wavePoints) * (bufferLength / 2)));
-                amp = (dataArray[bin] / 255) * 24;
+                amp = (dataArray[bin] / 255) * 26;
             } else {
-                amp = Math.sin(elapsed * 2.5 + i * 0.3) * 4 * breath;
+                amp = Math.sin(elapsed * 2.5 + i * 0.35) * 4.5 * breath;
             }
-            const y = baseLine - Math.sin(elapsed * 3 + (i / wavePoints) * Math.PI * 4) * (6 + amp);
+            const y = baseLine - Math.sin(elapsed * 3.2 + (i / wavePoints) * Math.PI * 4) * (5 + amp);
             if (i === 0) canvasCtx.moveTo(x, y);
             else canvasCtx.lineTo(x, y);
         }
@@ -2052,16 +2072,16 @@ function drawVisualizer() {
         canvasCtx.closePath();
 
         const grad = canvasCtx.createLinearGradient(0, baseLine - 20, 0, canvas.height);
-        const alpha = isRecordingNow ? 0.45 : 0.25;
+        const alpha = isRecordingNow ? 0.5 : 0.28;
         grad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`);
         grad.addColorStop(1, `rgba(${col.r}, ${col.g}, ${col.b}, 0)`);
         canvasCtx.fillStyle = grad;
         canvasCtx.fill();
 
-        canvasCtx.lineWidth = isRecordingNow ? 2.5 : 1.5;
-        canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.9 : 0.5})`;
-        canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.6)`;
-        canvasCtx.shadowBlur = isRecordingNow ? 8 : 2;
+        canvasCtx.lineWidth = isRecordingNow ? 2.5 : 1.6;
+        canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.95 : 0.6})`;
+        canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.75)`;
+        canvasCtx.shadowBlur = isRecordingNow ? 10 : 3;
         canvasCtx.stroke();
         canvasCtx.shadowBlur = 0;
 

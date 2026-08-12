@@ -62,6 +62,13 @@
 :root[data-widget-style="ocean"] #mic-button.recording {
     animation: ocean-tide-sway 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
+:root[data-widget-style="ocean"] #mic-aura,
+:root[data-widget-style="ocean"] .sonar-ring,
+:root[data-widget-style="ocean"] .spin-ring,
+:root[data-widget-style="ocean"] .burst-ring,
+:root[data-widget-style="ocean"] .burst-ring::after {
+    border-radius: 28px;
+}
 @keyframes ocean-tide-sway {
     0%, 100% {
         transform: translateY(0) scale(1);
@@ -97,6 +104,24 @@
     box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
     overflow: hidden;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+:root[data-widget-style="terminal"] #mic-aura {
+    border-radius: 12px;
+    background: rgba(0, 255, 102, 0.18);
+    filter: blur(6px);
+}
+:root[data-widget-style="terminal"] .sonar-ring,
+:root[data-widget-style="terminal"] .burst-ring,
+:root[data-widget-style="terminal"] .burst-ring::after {
+    border-radius: 10px;
+}
+:root[data-widget-style="terminal"] .spin-ring {
+    border-radius: 12px;
+    -webkit-mask: none;
+    mask: none;
+    border: 1.5px dashed rgba(0, 255, 102, 0.7);
+    background: transparent;
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.4);
 }
 :root[data-widget-style="terminal"] #mic-button::after {
     content: '';
