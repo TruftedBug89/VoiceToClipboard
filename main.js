@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen, Notification, shell, dialog } = require('electron');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
@@ -92,31 +92,61 @@ function logApp(msg, level = 'INFO') {
     logger[level === 'INFO' ? 'info' : level === 'WARN' ? 'warn' : 'error'](msg);
 }
 
+const historyPath = path.join(canonicalUserDataPath, 'history.json');
+
+async function loadHistory() {
+    try {
+        if (fs.existsSync(historyPath)) {
+            const data = await fs.promises.readFile(historyPath, 'utf8');
+            const arr = JSON.parse(data);
+            if (Array.isArray(arr)) return arr;
+        }
+    } catch (e) {
+        logApp(`[main] Failed to load history: ${e.message || e}`, 'WARN');
+    }
+    return [];
+}
+
+async function saveHistory(historyArray) {
+    try {
+        const limit = loadConfig().historyLimit || 50;
+        const bounded = Array.isArray(historyArray) ? historyArray.slice(0, limit) : [];
+        const tempPath = `${historyPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+        await fs.promises.writeFile(tempPath, JSON.stringify(bounded, null, 2), 'utf8');
+        await fs.promises.rename(tempPath, historyPath);
+    } catch (e) {
+        logApp(`[main] Failed to save history: ${e.message || e}`, 'WARN');
+    }
+}
+
 async function saveRecordingAudio(request) {
-    if (!request) return;
+    if (!request) return null;
     const config = loadConfig();
-    if (!config.saveRecordings) return;
+    if (!config.saveRecordings) return null;
     try {
         await fs.promises.mkdir(recordingsDir, { recursive: true });
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${String(now.getMilliseconds()).padStart(3, '0')}`;
+        let filePath = null;
         if (request.pcm) {
             const pcmData = new Float32Array(request.pcm);
             const wavBuffer = pcmToWav(pcmData, request.sampleRate || 16000);
-            const filePath = path.join(recordingsDir, `recording_${timestamp}.wav`);
+            filePath = path.join(recordingsDir, `recording_${timestamp}.wav`);
             await fs.promises.writeFile(filePath, wavBuffer);
             logApp(`[main] Saved voice recording WAV: ${filePath} (${wavBuffer.length} bytes)`);
         } else if (request.arrayBuffer) {
             const isWebm = request.mimeType && request.mimeType.includes('webm');
             const ext = isWebm ? 'webm' : 'audio';
-            const filePath = path.join(recordingsDir, `recording_${timestamp}.${ext}`);
+            filePath = path.join(recordingsDir, `recording_${timestamp}.${ext}`);
             const buf = Buffer.from(request.arrayBuffer);
             await fs.promises.writeFile(filePath, buf);
             logApp(`[main] Saved voice recording ${ext.toUpperCase()}: ${filePath} (${buf.length} bytes)`);
         }
+        return filePath;
     } catch (e) {
         logApp(`[main] Failed to save recording audio: ${e.message || e}`, 'WARN');
+        return null;
     }
 }
 const legacyUserDataPaths = [
@@ -253,8 +283,10 @@ async function getSettingsSnapshot() {
         modelCachePath: modelsDir,
         autoStopEnabled: !!config.autoStopEnabled,
         autoStopSeconds: typeof config.autoStopSeconds === 'number' ? Math.max(1.5, Math.min(5, config.autoStopSeconds)) : 3.5,
-        spacePaste: config.spacePaste === true,
-        pasteStyle: config.pasteStyle === 'toast' ? 'toast' : 'bubble',
+        outputMode: config.outputMode || 'clipboard',
+        autotypeMethod: config.autotypeMethod || 'unicode',
+        spacePaste: config.outputMode ? config.outputMode !== 'clipboard' : (config.spacePaste === true),
+        pasteStyle: config.outputMode === 'toast' || config.pasteStyle === 'toast' ? 'toast' : 'bubble',
         pasteKey: typeof config.pasteKey === 'string' && config.pasteKey.length <= 12 ? config.pasteKey : ' ',
         silenceThreshold: typeof config.silenceThreshold === 'number' ? Math.max(2, Math.min(100, config.silenceThreshold)) : 12,
         ecoMode: config.ecoMode !== false,
@@ -268,7 +300,11 @@ async function getSettingsSnapshot() {
         recommendedTier: recommendedTierForRam(systemRamGB()),
         playFinishSound: config.playFinishSound !== false,
         saveRecordings: config.saveRecordings === true,
-        recordingsPath: recordingsDir
+        recordingsPath: recordingsDir,
+        micDeviceId: config.micDeviceId || '',
+        micDeviceLabel: config.micDeviceLabel || '',
+        historyEnabled: config.historyEnabled === true,
+        historyLimit: typeof config.historyLimit === 'number' ? Math.max(10, Math.min(500, Math.round(config.historyLimit))) : 50
     };
 }
 
@@ -785,11 +821,9 @@ function maybeShowPasteToast(text) {
 
 function maybeShowPasteBubble(text) {
     if (!win32.available) return;
-    if (loadConfig().spacePaste !== true) return;
     if (!lastExternalHwnd || !win32.isWindow(lastExternalHwnd)) return;
     const clean = String(text || '').trim();
     if (!clean) return;
-    if (loadConfig().pasteStyle === 'toast') { maybeShowPasteToast(clean); return; }
     bubbleText = clean;
     bubbleTarget = lastExternalHwnd;
     bubblePendingText = clean;
@@ -807,6 +841,60 @@ function maybeShowPasteBubble(text) {
     bubbleWindow.focus();
     if (bubbleTimer) clearTimeout(bubbleTimer);
     bubbleTimer = setTimeout(closePasteBubble, 3000);
+}
+
+let lastDeliveryTyped = false;
+
+function deliverTranscriptionOutput(text) {
+    lastDeliveryTyped = false;
+    const clean = String(text || '').trim();
+    if (!clean) return { success: true, delivered: 'none', typed: false };
+
+    const config = loadConfig();
+    const mode = config.outputMode || 'clipboard';
+
+    if (mode === 'autotype') {
+        const target = lastExternalHwnd;
+        let typed = false;
+        if (win32.available && target && win32.isWindow(target)) {
+            if (config.autotypeMethod === 'paste') {
+                pasteToTarget(target, clean);
+                typed = true;
+            } else {
+                win32.setForegroundWindow(target);
+                const ok = win32.typeUnicodeText(clean);
+                if (ok) {
+                    clipboard.writeText(clean);
+                    typed = true;
+                }
+            }
+        }
+
+        if (typed) {
+            lastDeliveryTyped = true;
+            return { success: true, delivered: 'autotype', typed: true };
+        }
+
+        logApp('[main] autotype failed or target window invalid; falling back to paste bubble', 'WARN');
+        clipboard.writeText(clean);
+        maybeShowPasteBubble(clean);
+        return { success: true, delivered: 'bubble', typed: false, fallback: true };
+    }
+
+    if (mode === 'toast') {
+        clipboard.writeText(clean);
+        maybeShowPasteToast(clean);
+        return { success: true, delivered: 'toast', typed: false };
+    }
+
+    if (mode === 'bubble') {
+        clipboard.writeText(clean);
+        maybeShowPasteBubble(clean);
+        return { success: true, delivered: 'bubble', typed: false };
+    }
+
+    clipboard.writeText(clean);
+    return { success: true, delivered: 'clipboard', typed: false };
 }
 
 ipcMain.on('bubble-paste', () => {
@@ -837,13 +925,13 @@ if (process.env.VTC_SHOW_BUBBLE === '1') {
 // Startup diagnostic — helps debug from app.log (userData dir, works packaged).
 {
     const c = loadConfig();
-    logApp(`[main] diag-v4 | engine: ${c.sttEngine} | localTier: ${c.localTier || '?'} | model: ${c.localModelKey || '?'} | threshold: ${c.silenceThreshold} | autoStop: ${c.autoStopEnabled} (${c.autoStopSeconds}s) | spacePaste: ${JSON.stringify(c.spacePaste)} | pasteStyle: ${c.pasteStyle || 'bubble'} | pasteKey: ${JSON.stringify(c.pasteKey)} | uiLang: ${uiLang()} | win32: ${typeof win32 !== 'undefined' && win32.available ? 'yes' : 'no'} | cfg exists: ${fs.existsSync(configPath)}`);
+    logApp(`[main] diag-v4 | engine: ${c.sttEngine} | localTier: ${c.localTier || '?'} | model: ${c.localModelKey || '?'} | threshold: ${c.silenceThreshold} | autoStop: ${c.autoStopEnabled} (${c.autoStopSeconds}s) | outputMode: ${c.outputMode || 'clipboard'} | autotypeMethod: ${c.autotypeMethod || 'unicode'} | pasteKey: ${JSON.stringify(c.pasteKey)} | uiLang: ${uiLang()} | win32: ${typeof win32 !== 'undefined' && win32.available ? 'yes' : 'no'} | cfg exists: ${fs.existsSync(configPath)}`);
 }
 
 
 const sttService = new SttService({
     modelsDir,
-    copyText: text => { clipboard.writeText(text); maybeShowPasteBubble(text); },
+    copyText: text => { deliverTranscriptionOutput(text); },
     geminiTranscriber: async ({ arrayBuffer, mimeType = 'audio/webm' }) => {
         const keys = getApiKeys();
         if (keys.length === 0) return { success: false, code: 'NO_API_KEY', error: 'GEMINI_API_KEY is not configured.' };
@@ -902,7 +990,7 @@ const sttService = new SttService({
                             contents: [
                                 { inlineData: { data: buffer.toString('base64'), mimeType } },
                                 (uiLang() === 'es'
-                                    ? 'Transcripción estricta de voz a texto. Devuelve SOLO las palabras exactas del audio, palabra por palabra, manteniendo los préstamos de otros idiomas (por ejemplo, palabras en inglés dentro de una frase en español) tal cual. Nunca añadas, corrijas, expliques ni respondas. Si no hay voz, no devuelvas nada.'
+                                    ? 'Transcripción estricta de voz a texto. Devuelve SOLO las palabras exactas del audio, palabra por palabra, manteniendo los préstamos de otros idiomas (por ejemplo, palabras en español dentro de una frase en inglés) tal cual. Nunca añadas, corrijas, expliques ni respondas. Si no hay voz, no devuelvas nada.'
                                     : uiLang() === 'zh'
                                         ? '严格的语音转文字。只输出音频中说出的话，逐字逐句，保持中英文混说（例如中文句子里的英文单词）原样不变。不要添加、删除、解释或回应任何内容。如果没有语音，则不输出任何内容。'
                                         : 'Strict speech-to-text. Output ONLY the exact words spoken in the audio, verbatim, preserving code-switched words from other languages exactly as spoken. Never add, remove, explain, or respond. If there is no speech, output nothing.')
@@ -924,9 +1012,8 @@ const sttService = new SttService({
                                 mainWindow.webContents.send('gemini-fallback', model);
                             }
                         }
-                        clipboard.writeText(transcript);
-                        maybeShowPasteBubble(transcript);
-                        return { success: true, text: transcript, model };
+                        const del = deliverTranscriptionOutput(transcript);
+                        return { success: true, text: transcript, model, typed: del.typed === true };
                     } catch (error) {
                         lastError = error;
                         console.warn(`Gemini API attempt failed (${model}):`, sanitizeErrorMessage(error));
@@ -996,6 +1083,10 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
             : (typeof existing.pasteKey === 'string' && existing.pasteKey.length <= 12 ? existing.pasteKey : ' '),
         playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false,
         saveRecordings: settings.saveRecordings !== undefined ? !!settings.saveRecordings : existing.saveRecordings === true,
+        micDeviceId: typeof settings.micDeviceId === 'string' ? settings.micDeviceId : existing.micDeviceId || '',
+        micDeviceLabel: typeof settings.micDeviceLabel === 'string' ? settings.micDeviceLabel : existing.micDeviceLabel || '',
+        historyEnabled: settings.historyEnabled !== undefined ? !!settings.historyEnabled : existing.historyEnabled !== false,
+        historyLimit: typeof settings.historyLimit === 'number' && settings.historyLimit > 0 ? settings.historyLimit : (existing.historyLimit || 50),
         uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(app.getLocale())),
         widgetStyle: WIDGET_STYLES.includes(settings.widgetStyle) ? settings.widgetStyle : (WIDGET_STYLES.includes(existing.widgetStyle) ? existing.widgetStyle : 'crimson')
     });
@@ -1201,11 +1292,35 @@ ipcMain.handle('copy-diagnostics', async (event, extra) => {
     }
 });
 
+async function appendTranscriptionToHistory(r, request, started, recordingFile) {
+    if (!r || !r.success || !r.text) return;
+    const config = loadConfig();
+    if (config.historyEnabled === false) return;
+    try {
+        const history = await loadHistory();
+        const item = {
+            id: 'hist_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+            text: r.text,
+            ts: Date.now(),
+            engine: request?.engine === 'local' ? 'local' : 'gemini',
+            model: r.model || request?.modelKey || config.localModelKey || config.geminiModel || 'gemini-2.5-flash',
+            lang: request?.uiLanguage || uiLang(),
+            chars: (r.text || '').length,
+            durationMs: Date.now() - started,
+            recordingFile: recordingFile || null
+        };
+        history.unshift(item);
+        await saveHistory(history);
+    } catch (e) {
+        logApp(`[main] Failed to append history: ${e.message || e}`, 'WARN');
+    }
+}
+
 ipcMain.handle('transcribe-audio', async (event, request) => {
     if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
     const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
     if (audioBytes && audioBytes > 62914560) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
-    await saveRecordingAudio(request);
+    const savedRecordingPath = await saveRecordingAudio(request);
     const config = loadConfig();
     const started = Date.now();
     if (request?.engine === 'local') {
@@ -1220,6 +1335,10 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
                 uiLanguage: request.uiLanguage || uiLang()
             });
             if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
+            else {
+                r.typed = lastDeliveryTyped;
+                await appendTranscriptionToHistory(r, request, started, savedRecordingPath);
+            }
             logApp(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
             return r;
         } catch (e) {
@@ -1238,6 +1357,10 @@ ipcMain.handle('transcribe-audio', async (event, request) => {
             uiLanguage: request.uiLanguage || uiLang()
         });
         if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
+        else {
+            r.typed = lastDeliveryTyped;
+            await appendTranscriptionToHistory(r, request, started, savedRecordingPath);
+        }
         logApp(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
         return r;
     } catch (e) {
@@ -1252,5 +1375,77 @@ ipcMain.handle('open-recordings-folder', async () => {
     await fs.promises.mkdir(recordingsDir, { recursive: true });
     await shell.openPath(recordingsDir);
     return { success: true, path: recordingsDir };
+});
+
+ipcMain.handle('history-list', async (_e, query = '') => {
+    const history = await loadHistory();
+    if (typeof query === 'string' && query.trim()) {
+        const q = query.trim().toLowerCase();
+        return history.filter(item =>
+            (item.text && item.text.toLowerCase().includes(q)) ||
+            (item.engine && item.engine.toLowerCase().includes(q)) ||
+            (item.model && item.model.toLowerCase().includes(q))
+        );
+    }
+    return history;
+});
+
+ipcMain.handle('history-delete', async (_e, id) => {
+    if (!id) return { success: false };
+    const history = await loadHistory();
+    const filtered = history.filter(item => item.id !== id);
+    await saveHistory(filtered);
+    return { success: true };
+});
+
+ipcMain.handle('history-clear', async () => {
+    await saveHistory([]);
+    return { success: true };
+});
+
+ipcMain.handle('history-export', async (event, format = 'json') => {
+    const history = await loadHistory();
+    const win = BrowserWindow.fromWebContents(event.sender) || settingsWindow || mainWindow;
+    const ext = format === 'csv' ? 'csv' : format === 'txt' ? 'txt' : 'json';
+    const filterName = format === 'csv' ? 'CSV Files' : format === 'txt' ? 'Text Files' : 'JSON Files';
+    const result = await dialog.showSaveDialog(win, {
+        title: L('history.export'),
+        defaultPath: `vtc_history_${Date.now()}.${ext}`,
+        filters: [{ name: filterName, extensions: [ext] }, { name: 'All Files', extensions: ['*'] }]
+    });
+    if (result.canceled || !result.filePath) return { success: false, canceled: true };
+    let content = '';
+    if (format === 'json') {
+        content = JSON.stringify(history, null, 2);
+    } else if (format === 'txt') {
+        content = history.map(i => `[${new Date(i.ts).toLocaleString()}] (${i.engine}/${i.model})\n${i.text}\n`).join('\n---\n\n');
+    } else if (format === 'csv') {
+        const escapeCsv = str => `"${String(str || '').replace(/"/g, '""')}"`;
+        const header = 'id,timestamp,engine,model,lang,chars,durationMs,text\n';
+        const rows = history.map(i => [
+            escapeCsv(i.id),
+            escapeCsv(new Date(i.ts).toISOString()),
+            escapeCsv(i.engine),
+            escapeCsv(i.model),
+            escapeCsv(i.lang),
+            i.chars || 0,
+            i.durationMs || 0,
+            escapeCsv(i.text)
+        ].join(',')).join('\n');
+        content = header + rows;
+    }
+    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    return { success: true, filePath: result.filePath };
+});
+
+ipcMain.handle('paste-text', async (_e, text) => {
+    if (typeof text === 'string' && text) {
+        clipboard.writeText(text);
+        if (win32.available && lastExternalHwnd && win32.isWindow(lastExternalHwnd)) {
+            win32.setForegroundWindow(lastExternalHwnd);
+            setTimeout(() => win32.sendCtrlV(), 80);
+        }
+    }
+    return { success: true };
 });
 

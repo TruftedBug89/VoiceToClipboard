@@ -37,9 +37,37 @@ test('validateSttConfig accepts gemini engine + valid model, terminal widgetStyl
 test('migrateConfig fills defaults and preserves the api key out of band', () => {
     const m = migrateConfig({});
     assert.ok(m && typeof m === 'object');
+    assert.equal(m.configVersion, 6);
     assert.equal(m.localLanguage, 'auto');
     assert.equal(m.saveRecordings, false);
+    assert.equal(m.micDeviceId, '');
+    assert.equal(m.micDeviceLabel, '');
+    assert.equal(m.historyEnabled, false);
+    assert.equal(m.historyLimit, 50);
+    assert.equal(m.outputMode, 'clipboard');
+    assert.equal(m.autotypeMethod, 'unicode');
 
-    const m2 = migrateConfig({ saveRecordings: true });
+    const m2 = migrateConfig({ saveRecordings: true, micDeviceId: 'mic-123', micDeviceLabel: 'USB Mic', historyEnabled: true, historyLimit: 25, spacePaste: true, pasteStyle: 'toast' });
     assert.equal(m2.saveRecordings, true);
+    assert.equal(m2.micDeviceId, 'mic-123');
+    assert.equal(m2.micDeviceLabel, 'USB Mic');
+    assert.equal(m2.historyEnabled, true);
+    assert.equal(m2.historyLimit, 25);
+    assert.equal(m2.outputMode, 'toast');
 });
+
+test('validateSttConfig includes mic, history, outputMode, and autotypeMethod settings', () => {
+    const v = validateSttConfig({ micDeviceId: 'dev-1', micDeviceLabel: 'My Mic', historyEnabled: true, historyLimit: 600, outputMode: 'autotype', autotypeMethod: 'paste' });
+    assert.equal(v.micDeviceId, 'dev-1');
+    assert.equal(v.micDeviceLabel, 'My Mic');
+    assert.equal(v.historyEnabled, true);
+    assert.equal(v.historyLimit, 500); // clamped to 500
+    assert.equal(v.outputMode, 'autotype');
+    assert.equal(v.autotypeMethod, 'paste');
+});
+
+test('win32 module exports typeUnicodeText function', () => {
+    const win32 = require('../win32');
+    assert.equal(typeof win32.typeUnicodeText, 'function');
+});
+

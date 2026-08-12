@@ -29,7 +29,7 @@ test('migrates legacy per-language config to the multilingual registry', () => {
         autoStopSeconds: 4,
         alwaysOnTop: false
     });
-    assert.equal(migrated.configVersion, 5);
+    assert.equal(migrated.configVersion, 6);
     assert.equal(migrated.localTier, 'light');
     assert.equal(migrated.localModelKey, 'omni-multilingual');
     assert.equal(migrated.localLanguage, 'auto');
@@ -45,7 +45,7 @@ test('migrates legacy Whisper configuration without deleting unrelated settings'
         autoStopSeconds: 4,
         alwaysOnTop: false
     });
-    assert.equal(migrated.configVersion, 5);
+    assert.equal(migrated.configVersion, 6);
     assert.equal(migrated.localModelKey, 'big-multilingual');
     assert.equal(migrated.localTier, 'big');
     assert.equal(migrated.autoStopSeconds, 4);
@@ -60,7 +60,7 @@ test('keeps zh-en tiers and re-derives model keys on v4 migration', () => {
         localModelKey: 'big-multilingual',
         sttEngine: 'local'
     });
-    assert.equal(migrated.configVersion, 5);
+    assert.equal(migrated.configVersion, 6);
     assert.equal(migrated.localTier, 'zh-big');
     assert.equal(migrated.localModelKey, 'zh-en-big');
     assert.equal(migrated.localLanguage, 'auto');
@@ -85,6 +85,12 @@ test('normalizes invalid STT settings to a safe multilingual selection', () => {
         ecoMode: true,
         playFinishSound: true,
         saveRecordings: false,
+        outputMode: 'clipboard',
+        autotypeMethod: 'unicode',
+        micDeviceId: '',
+        micDeviceLabel: '',
+        historyEnabled: false,
+        historyLimit: 50,
         widgetStyle: 'crimson'
     });
     // On a 32 GB machine the same invalid tier resolves to Big (tier above default).
@@ -97,6 +103,12 @@ test('normalizes invalid STT settings to a safe multilingual selection', () => {
         ecoMode: true,
         playFinishSound: true,
         saveRecordings: false,
+        outputMode: 'clipboard',
+        autotypeMethod: 'unicode',
+        micDeviceId: '',
+        micDeviceLabel: '',
+        historyEnabled: false,
+        historyLimit: 50,
         widgetStyle: 'crimson'
     });
 });
@@ -111,6 +123,12 @@ test('preserves any valid tier through validation', () => {
         ecoMode: true,
         playFinishSound: true,
         saveRecordings: false,
+        outputMode: 'clipboard',
+        autotypeMethod: 'unicode',
+        micDeviceId: '',
+        micDeviceLabel: '',
+        historyEnabled: false,
+        historyLimit: 50,
         widgetStyle: 'crimson'
     });
 });

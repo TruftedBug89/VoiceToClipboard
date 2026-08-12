@@ -67,6 +67,15 @@ contextBridge.exposeInMainWorld('api', {
     copyDiagnostics: (extra) => ipcRenderer.invoke('copy-diagnostics', extra),
     openRecordingsFolder: () => ipcRenderer.invoke('open-recordings-folder'),
 
+    // history API
+    history: {
+        list: (query) => ipcRenderer.invoke('history-list', query),
+        delete: (id) => ipcRenderer.invoke('history-delete', id),
+        clear: () => ipcRenderer.invoke('history-clear'),
+        export: (format) => ipcRenderer.invoke('history-export', format),
+    },
+    pasteText: (text) => ipcRenderer.invoke('paste-text', text),
+
     // send (fire-and-forget)
     rendererLog: (msg) => ipcRenderer.send('renderer-log', msg),
     showSettingsWindow: () => ipcRenderer.send('show-settings-window'),

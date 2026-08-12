@@ -1,6 +1,38 @@
-const CONFIG_VERSION = 5;
+const CONFIG_VERSION = 6;
 const VALID_TIERS = new Set(['tiny', 'mini', 'zh-light', 'light', 'big', 'zh-big']);
 const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
+const VALID_OUTPUT_MODES = new Set(['clipboard', 'bubble', 'toast', 'autotype']);
+const VALID_AUTOTYPE_METHODS = new Set(['unicode', 'paste']);
+
+function resolveOutputMode(input = {}) {
+    if (VALID_OUTPUT_MODES.has(input.outputMode)) {
+        return input.outputMode;
+    }
+    if (input.spacePaste === false) {
+        return 'clipboard';
+    }
+    if (input.pasteStyle === 'toast') {
+        return 'toast';
+    }
+    if (input.spacePaste === true || input.pasteStyle === 'bubble') {
+        return 'bubble';
+    }
+    return 'clipboard';
+}
+
+function resolveAutotypeMethod(input = {}) {
+    if (VALID_AUTOTYPE_METHODS.has(input.autotypeMethod)) {
+        return input.autotypeMethod;
+    }
+    return 'unicode';
+}
+
+function clampHistoryLimit(val) {
+    if (typeof val === 'number' && !isNaN(val)) {
+        return Math.max(10, Math.min(500, Math.round(val)));
+    }
+    return 50;
+}
 
 // System RAM (GB) — used to recommend the best model for the user's PC.
 // os.totalmem() is the reliable cross-process source (Electron's
@@ -91,7 +123,13 @@ function migrateConfig(input = {}) {
         localLanguage,
         localModelKey: deriveLocalModelKey(localTier),
         playFinishSound: config.playFinishSound !== false,
-        saveRecordings: typeof config.saveRecordings === 'boolean' ? config.saveRecordings : false
+        saveRecordings: typeof config.saveRecordings === 'boolean' ? config.saveRecordings : false,
+        outputMode: resolveOutputMode(config),
+        autotypeMethod: resolveAutotypeMethod(config),
+        micDeviceId: typeof config.micDeviceId === 'string' ? config.micDeviceId : '',
+        micDeviceLabel: typeof config.micDeviceLabel === 'string' ? config.micDeviceLabel : '',
+        historyEnabled: typeof config.historyEnabled === 'boolean' ? config.historyEnabled : false,
+        historyLimit: clampHistoryLimit(config.historyLimit)
     };
 }
 
@@ -110,6 +148,12 @@ function validateSttConfig(input = {}) {
         ecoMode: input.ecoMode !== false,
         playFinishSound: input.playFinishSound !== false,
         saveRecordings: typeof input.saveRecordings === 'boolean' ? input.saveRecordings : false,
+        outputMode: resolveOutputMode(input),
+        autotypeMethod: resolveAutotypeMethod(input),
+        micDeviceId: typeof input.micDeviceId === 'string' ? input.micDeviceId : '',
+        micDeviceLabel: typeof input.micDeviceLabel === 'string' ? input.micDeviceLabel : '',
+        historyEnabled: typeof input.historyEnabled === 'boolean' ? input.historyEnabled : false,
+        historyLimit: clampHistoryLimit(input.historyLimit),
         widgetStyle
     };
 }

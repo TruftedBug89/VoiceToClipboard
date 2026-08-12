@@ -20,6 +20,7 @@ function t(key, vars, fallback) {
 function tr(msg) {
     if (typeof msg !== 'string') return msg;
     if (msg === '✓ COPIED') return t('status.COPIED');
+    if (msg === '✓ TYPED') return t('status.TYPED');
     const norm = msg.trim().replace(/\s+/g, '_');
     const m = locale['status.' + norm];
     if (m !== undefined) return m;
@@ -857,11 +858,29 @@ if (idleOpacitySlider) {
 }
 
 let pasteKeyVal = ' ';
-const pasteStyleEl = document.getElementById('paste-style-select');
-if (pasteStyleEl) {
-    pasteStyleEl.addEventListener('change', () => {
-        const row = document.getElementById('paste-key-row');
-        if (row) row.style.display = pasteStyleEl.value === 'toast' ? 'none' : 'flex';
+
+function updateOutputModeVisibility() {
+    const outputModeSelect = document.getElementById('output-mode-select');
+    const pasteKeyRow = document.getElementById('paste-key-row');
+    const autotypeMethodRow = document.getElementById('autotype-method-row');
+    const autotypeNote = document.getElementById('autotype-note');
+    const val = outputModeSelect ? outputModeSelect.value : 'clipboard';
+
+    if (pasteKeyRow) pasteKeyRow.style.display = val === 'bubble' ? 'flex' : 'none';
+    if (autotypeMethodRow) autotypeMethodRow.style.display = val === 'autotype' ? 'flex' : 'none';
+    if (autotypeNote) autotypeNote.style.display = val === 'autotype' ? 'block' : 'none';
+}
+
+const outputModeSelectEl = document.getElementById('output-mode-select');
+if (outputModeSelectEl) {
+    outputModeSelectEl.addEventListener('change', () => {
+        updateOutputModeVisibility();
+        autoSaveSettings();
+    });
+}
+const autotypeMethodSelectEl = document.getElementById('autotype-method-select');
+if (autotypeMethodSelectEl) {
+    autotypeMethodSelectEl.addEventListener('change', () => {
         autoSaveSettings();
     });
 }
@@ -953,6 +972,26 @@ const NOISE_MARGIN = 8;
 const MIN_VAD_THRESHOLD = 6;
 const SPEECH_ARM_FRAMES = 3;
 
+let micDeviceId = '';
+let micDeviceLabel = '';
+
+async function getMicStream() {
+    if (micDeviceId) {
+        try {
+            return await navigator.mediaDevices.getUserMedia({
+                audio: { deviceId: { exact: micDeviceId } }
+            });
+        } catch (err) {
+            if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+                console.warn('[render] Selected mic unavailable, falling back to default:', err);
+                return await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+            throw err;
+        }
+    }
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
+}
+
 // Preview mic context for settings live meter
 let settingsPreviewStream = null;
 let settingsPreviewAudioCtx = null;
@@ -1000,7 +1039,7 @@ function updateMeterUI(vol, threshold) {
 async function startSettingsMicPreview() {
     if (isRecording || settingsPreviewStream) return;
     try {
-        settingsPreviewStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        settingsPreviewStream = await getMicStream();
         settingsPreviewAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
         settingsPreviewAnalyser = settingsPreviewAudioCtx.createAnalyser();
         settingsPreviewAnalyser.fftSize = 64;
@@ -1058,7 +1097,7 @@ async function autoCalibrateNoiseFloor() {
     // The live volume meter only appears while the test is running.
     if (noiseMeterWrap) noiseMeterWrap.style.display = 'block';
 
-    const tempStream = settingsPreviewStream || await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+    const tempStream = settingsPreviewStream || await getMicStream().catch(() => null);
     if (!tempStream) {
         if (calibrateFeedback) calibrateFeedback.textContent = 'Microphone access is unavailable — check your mic permissions.';
         autoCalibrateBtn.textContent = origText;
@@ -1202,6 +1241,266 @@ function startHotkeyRecording() {
 if (hotkeyInput) hotkeyInput.addEventListener('click', startHotkeyRecording);
 if (recordHotkeyBtn) recordHotkeyBtn.addEventListener('click', startHotkeyRecording);
 
+const micSelect = document.getElementById('mic-select');
+const micTestBtn = document.getElementById('mic-test-btn');
+const micTestMeterWrap = document.getElementById('mic-test-meter-wrap');
+const micTestMeterBar = document.getElementById('mic-test-meter-bar');
+const micTestMeterStatus = document.getElementById('mic-test-meter-status');
+
+let isTestingMic = false;
+let testMicStream = null;
+let testMicAudioCtx = null;
+let testMicAnalyser = null;
+let testMicFrameId = null;
+
+async function populateMicDevices() {
+    if (!micSelect) return;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+        const currentVal = micDeviceId || micSelect.value || '';
+        micSelect.replaceChildren();
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = t('mic.default');
+        micSelect.appendChild(defaultOpt);
+
+        let foundCurrent = false;
+        audioInputs.forEach((dev, idx) => {
+            const opt = document.createElement('option');
+            opt.value = dev.deviceId;
+            opt.textContent = dev.label || `Microphone ${idx + 1}`;
+            if (dev.deviceId === currentVal) foundCurrent = true;
+            micSelect.appendChild(opt);
+        });
+
+        if (foundCurrent) {
+            micSelect.value = currentVal;
+        } else if (currentVal && micDeviceLabel) {
+            const unpluggedOpt = document.createElement('option');
+            unpluggedOpt.value = currentVal;
+            unpluggedOpt.textContent = `${micDeviceLabel} (Disconnected)`;
+            micSelect.appendChild(unpluggedOpt);
+            micSelect.value = currentVal;
+        } else {
+            micSelect.value = '';
+        }
+    } catch (e) {
+        console.warn('[render] Failed to enumerate audio devices:', e);
+    }
+}
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => {
+        populateMicDevices();
+    });
+}
+
+if (micSelect) {
+    micSelect.addEventListener('change', () => {
+        micDeviceId = micSelect.value;
+        const selectedOpt = micSelect.options[micSelect.selectedIndex];
+        micDeviceLabel = micDeviceId ? (selectedOpt ? selectedOpt.textContent.replace(' (Disconnected)', '') : '') : '';
+        autoSaveSettings();
+        if (isTestingMic) {
+            stopMicTest();
+            startMicTest();
+        }
+    });
+}
+
+async function startMicTest() {
+    if (isTestingMic || isRecording) return;
+    try {
+        testMicStream = await getMicStream();
+        testMicAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        testMicAnalyser = testMicAudioCtx.createAnalyser();
+        testMicAnalyser.fftSize = 64;
+        const src = testMicAudioCtx.createMediaStreamSource(testMicStream);
+        src.connect(testMicAnalyser);
+        isTestingMic = true;
+
+        if (micTestBtn) micTestBtn.textContent = t('mic.stopTest');
+        if (micTestMeterWrap) micTestMeterWrap.style.display = 'block';
+
+        function renderTestMeter() {
+            if (!isTestingMic || !testMicAnalyser || !settingsModal.classList.contains('active')) {
+                stopMicTest();
+                return;
+            }
+            const data = new Uint8Array(testMicAnalyser.frequencyBinCount);
+            testMicAnalyser.getByteFrequencyData(data);
+            const vol = calculateSpeechVolume(data);
+            const pct = Math.min(100, Math.max(0, Math.round((vol / METER_MAX) * 100)));
+            if (micTestMeterBar) micTestMeterBar.style.width = `${pct}%`;
+            if (micTestMeterStatus) {
+                if (vol > 15) {
+                    micTestMeterStatus.textContent = `${t('meter.speech')} ${Math.round(vol)}`;
+                    micTestMeterStatus.style.color = '#10b981';
+                } else {
+                    micTestMeterStatus.textContent = `${t('meter.silent')} ${Math.round(vol)}`;
+                    micTestMeterStatus.style.color = 'var(--text-dim)';
+                }
+            }
+            testMicFrameId = requestAnimationFrame(renderTestMeter);
+        }
+        renderTestMeter();
+    } catch (err) {
+        console.warn('[render] Mic test failed:', err);
+        stopMicTest();
+    }
+}
+
+function stopMicTest() {
+    if (testMicFrameId) {
+        cancelAnimationFrame(testMicFrameId);
+        testMicFrameId = null;
+    }
+    if (testMicStream) {
+        testMicStream.getTracks().forEach(tr => tr.stop());
+        testMicStream = null;
+    }
+    if (testMicAudioCtx) {
+        try { testMicAudioCtx.close(); } catch (e) {}
+        testMicAudioCtx = null;
+    }
+    testMicAnalyser = null;
+    isTestingMic = false;
+    if (micTestBtn) micTestBtn.textContent = t('mic.test');
+    if (micTestMeterWrap) micTestMeterWrap.style.display = 'none';
+}
+
+if (micTestBtn) {
+    micTestBtn.addEventListener('click', () => {
+        if (isTestingMic) stopMicTest();
+        else startMicTest();
+    });
+}
+
+const historyEnabledCheckbox = document.getElementById('history-enabled-checkbox');
+const historyControlsGroup = document.getElementById('history-controls-group');
+const historySearchInput = document.getElementById('history-search-input');
+const historyExportBtn = document.getElementById('history-export-btn');
+const historyExportFormat = document.getElementById('history-export-format');
+const historyClearBtn = document.getElementById('history-clear-btn');
+const historyListContainer = document.getElementById('history-list-container');
+
+async function renderHistoryList(query = '') {
+    if (!historyListContainer) return;
+    try {
+        const items = await window.api.history.list(query);
+        historyListContainer.replaceChildren();
+
+        if (!items || items.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'history-empty-msg';
+            emptyEl.textContent = t('history.empty');
+            historyListContainer.appendChild(emptyEl);
+            return;
+        }
+
+        items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'history-card';
+
+            const header = document.createElement('div');
+            header.className = 'history-card-header';
+
+            const engineBadge = document.createElement('span');
+            engineBadge.className = `history-engine-badge ${item.engine === 'gemini' ? 'gemini' : 'local'}`;
+            engineBadge.textContent = item.engine === 'gemini' ? 'Gemini' : 'Offline';
+
+            const metaText = document.createElement('span');
+            metaText.className = 'history-card-meta';
+            const dateStr = item.ts ? new Date(item.ts).toLocaleString() : '';
+            const modelStr = item.model || '';
+            const charsStr = item.chars ? `${item.chars} chars` : '';
+            const durStr = item.durationMs ? `${(item.durationMs / 1000).toFixed(1)}s` : '';
+            metaText.textContent = [dateStr, modelStr, charsStr, durStr].filter(Boolean).join(' · ');
+
+            header.append(engineBadge, metaText);
+
+            const textEl = document.createElement('div');
+            textEl.className = 'history-card-text';
+            textEl.textContent = item.text || '';
+
+            const actions = document.createElement('div');
+            actions.className = 'history-card-actions';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'btn-secondary history-act-btn';
+            copyBtn.textContent = t('history.copy');
+            copyBtn.addEventListener('click', async () => {
+                await navigator.clipboard.writeText(item.text || '');
+                copyBtn.textContent = t('history.copied');
+                setTimeout(() => { copyBtn.textContent = t('history.copy'); }, 1500);
+            });
+
+            const pasteBtn = document.createElement('button');
+            pasteBtn.type = 'button';
+            pasteBtn.className = 'btn-secondary history-act-btn';
+            pasteBtn.textContent = t('history.paste');
+            pasteBtn.addEventListener('click', async () => {
+                if (window.api && window.api.pasteText) {
+                    await window.api.pasteText(item.text || '');
+                } else {
+                    await navigator.clipboard.writeText(item.text || '');
+                }
+            });
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'btn-remove history-act-btn';
+            deleteBtn.style.display = 'inline-block';
+            deleteBtn.textContent = t('history.delete');
+            deleteBtn.addEventListener('click', async () => {
+                await window.api.history.delete(item.id);
+                renderHistoryList(historySearchInput ? historySearchInput.value : '');
+            });
+
+            actions.append(copyBtn, pasteBtn, deleteBtn);
+            card.append(header, textEl, actions);
+            historyListContainer.appendChild(card);
+        });
+    } catch (e) {
+        console.warn('[render] Error loading history:', e);
+    }
+}
+
+if (historySearchInput) {
+    historySearchInput.addEventListener('input', () => {
+        renderHistoryList(historySearchInput.value);
+    });
+}
+
+if (historyEnabledCheckbox) {
+    historyEnabledCheckbox.addEventListener('change', () => {
+        if (historyControlsGroup) {
+            historyControlsGroup.style.display = historyEnabledCheckbox.checked ? 'block' : 'none';
+        }
+        autoSaveSettings();
+    });
+}
+
+if (historyClearBtn) {
+    historyClearBtn.addEventListener('click', async () => {
+        if (confirm(t('history.confirmClear'))) {
+            await window.api.history.clear();
+            renderHistoryList(historySearchInput ? historySearchInput.value : '');
+        }
+    });
+}
+
+if (historyExportBtn) {
+    historyExportBtn.addEventListener('click', async () => {
+        const fmt = historyExportFormat ? historyExportFormat.value : 'json';
+        await window.api.history.export(fmt);
+    });
+}
+
 async function refreshSettingsUi(snapshot = null) {
     const sttConfig = snapshot || await window.api.getSttConfig();
     applyAppearanceSnapshot(sttConfig);
@@ -1224,19 +1523,27 @@ async function refreshSettingsUi(snapshot = null) {
     if (finishSoundCheckbox) finishSoundCheckbox.checked = sttConfig.playFinishSound !== false;
 
     autoStopCheckbox.checked = !!sttConfig.autoStopEnabled;
-    const spacePasteCheckbox = document.getElementById('space-paste-checkbox');
-    if (spacePasteCheckbox) spacePasteCheckbox.checked = sttConfig.spacePaste === true;
+    const outputModeSelect = document.getElementById('output-mode-select');
+    if (outputModeSelect) {
+        let mode = sttConfig.outputMode;
+        if (!mode) {
+            if (sttConfig.spacePaste === false) mode = 'clipboard';
+            else if (sttConfig.pasteStyle === 'toast') mode = 'toast';
+            else if (sttConfig.spacePaste === true || sttConfig.pasteStyle === 'bubble') mode = 'bubble';
+            else mode = 'clipboard';
+        }
+        outputModeSelect.value = mode;
+    }
+    const autotypeMethodSelect = document.getElementById('autotype-method-select');
+    if (autotypeMethodSelect) {
+        autotypeMethodSelect.value = sttConfig.autotypeMethod || 'unicode';
+    }
+    updateOutputModeVisibility();
     const pasteKeyInput = document.getElementById('paste-key-input');
     if (pasteKeyInput) {
         const rawKey = (typeof sttConfig.pasteKey === 'string' && sttConfig.pasteKey) ? sttConfig.pasteKey : ' ';
         pasteKeyVal = rawKey;
         pasteKeyInput.value = rawKey === ' ' ? 'SPACE' : rawKey.toUpperCase();
-    }
-    const pasteStyleSelect = document.getElementById('paste-style-select');
-    if (pasteStyleSelect) {
-        pasteStyleSelect.value = sttConfig.pasteStyle === 'toast' ? 'toast' : 'bubble';
-        const pasteKeyRow = document.getElementById('paste-key-row');
-        if (pasteKeyRow) pasteKeyRow.style.display = sttConfig.pasteStyle === 'toast' ? 'none' : 'flex';
     }
     autoStopSecondsSelect.value = (sttConfig.autoStopSeconds || 3.5).toFixed(1);
     autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
@@ -1267,6 +1574,16 @@ async function refreshSettingsUi(snapshot = null) {
     }
 
     apiKeyInput.value = '';
+    micDeviceId = sttConfig.micDeviceId || '';
+    micDeviceLabel = sttConfig.micDeviceLabel || '';
+    await populateMicDevices();
+
+    if (historyEnabledCheckbox) {
+        historyEnabledCheckbox.checked = sttConfig.historyEnabled !== false;
+        if (historyControlsGroup) historyControlsGroup.style.display = sttConfig.historyEnabled !== false ? 'block' : 'none';
+    }
+    await renderHistoryList(historySearchInput ? historySearchInput.value : '');
+
     removeKeyBtn.style.display = (apiStatus.source === 'config' || (apiStatus.count || 0) > 0) ? 'inline-block' : 'none';
     const nKeys = apiStatus.count || 0;
     if (apiStatus.source === 'env' && nKeys <= 1) {
@@ -1342,6 +1659,7 @@ if (saveRecordingsCheckbox) {
 
 function closeSettings() {
     stopSettingsMicPreview();
+    stopMicTest();
     if (isSettingsWindow) {
         window.api.closeSettingsWindow();
         return;
@@ -1502,6 +1820,11 @@ function autoSaveSettings() {
                 await checkApiKeyStatus();
             }
 
+            const outputModeSelect = document.getElementById('output-mode-select');
+            const autotypeMethodSelect = document.getElementById('autotype-method-select');
+            const outputModeVal = outputModeSelect ? outputModeSelect.value : (currentSttConfig?.outputMode || 'clipboard');
+            const autotypeMethodVal = autotypeMethodSelect ? autotypeMethodSelect.value : (currentSttConfig?.autotypeMethod || 'unicode');
+
             const saved = await window.api.saveSttConfig({
                 sttEngine: engine,
                 uiLanguage: uiLanguageSelect ? uiLanguageSelect.value : uiLang,
@@ -1515,20 +1838,23 @@ function autoSaveSettings() {
                 idleFadeEnabled,
                 idleOpacity,
                 playFinishSound,
-                spacePaste: document.getElementById('space-paste-checkbox')
-                    ? document.getElementById('space-paste-checkbox').checked
-                    : false,
-                pasteStyle: document.getElementById('paste-style-select')
-                    ? document.getElementById('paste-style-select').value
-                    : 'bubble',
+                outputMode: outputModeVal,
+                autotypeMethod: autotypeMethodVal,
+                spacePaste: outputModeVal !== 'clipboard',
+                pasteStyle: outputModeVal === 'toast' ? 'toast' : 'bubble',
                 pasteKey: pasteKeyVal,
                 widgetStyle: currentWidgetStyle,
-                saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
+                saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false,
+                micDeviceId: micSelect ? micSelect.value : micDeviceId,
+                micDeviceLabel,
+                historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : true
             });
             if (!saved.success) return;
 
             currentSttConfig = {
                 sttEngine: engine,
+                outputMode: outputModeVal,
+                autotypeMethod: autotypeMethodVal,
                 localTier,
                 localLanguage: 'auto',
                 localModelKey: getSelectedModelKey(),
@@ -1950,7 +2276,7 @@ async function startRecording() {
 
         playBeep(880, 0.08);
 
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await getMicStream();
 
         // Setup Visualizer Node
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2063,7 +2389,7 @@ async function startRecording() {
                     micBtn.classList.add('show-check');
                     setTimeout(() => micBtn.classList.remove('show-check'), 1200);
                     log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
-            setStatus('done', '✓ COPIED');
+                    setStatus('done', result.typed ? '✓ TYPED' : '✓ COPIED');
                     setTimeout(hideStatus, 1600);
                     if (!currentSttConfig || currentSttConfig.playFinishSound !== false) playFinishChime();
                 } else {
@@ -2248,7 +2574,7 @@ async function retranscribeLast() {
         micBtn.classList.add('show-check');
         setTimeout(() => micBtn.classList.remove('show-check'), 1200);
         log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
-        setStatus('done', '✓ COPIED');
+        setStatus('done', result?.typed ? '✓ TYPED' : '✓ COPIED');
         setTimeout(hideStatus, 1600);
     } else {
         const code = result?.code || 'ERROR';
