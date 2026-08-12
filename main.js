@@ -4,7 +4,7 @@ const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { SttService } = require('./stt');
-const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam } = require('./stt/config');
+const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam, WIDGET_STYLES } = require('./stt/config');
 const { getModelKey } = require('./stt/model-registry');
 const win32 = require('./win32');
 const { sanitizeErrorMessage } = require('./stt/error-sanitizer');
@@ -94,6 +94,8 @@ function logApp(msg, level = 'INFO') {
 
 async function saveRecordingAudio(request) {
     if (!request) return;
+    const config = loadConfig();
+    if (!config.saveRecordings) return;
     try {
         await fs.promises.mkdir(recordingsDir, { recursive: true });
         const now = new Date();
@@ -185,7 +187,7 @@ function loadConfig() {
         if (typeof configPath !== 'undefined' && fs.existsSync(configPath)) {
             const cfg = migrateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
             if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(app.getLocale());
-            if (!['crimson','ocean','aurora'].includes(cfg.widgetStyle)) cfg.widgetStyle = 'crimson';
+            if (!WIDGET_STYLES.includes(cfg.widgetStyle)) cfg.widgetStyle = 'crimson';
             cachedConfig = cfg;
             return { ...cachedConfig };
         }
@@ -261,10 +263,11 @@ async function getSettingsSnapshot() {
         idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
         geminiModel: config.geminiModel || 'gemini-2.5-flash',
         uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage] ? config.uiLanguage : mapUiLanguage(app.getLocale()),
-        widgetStyle: (config.widgetStyle === 'ocean' || config.widgetStyle === 'aurora') ? config.widgetStyle : 'crimson',
+        widgetStyle: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson',
         systemRamGB: systemRamGB(),
         recommendedTier: recommendedTierForRam(systemRamGB()),
         playFinishSound: config.playFinishSound !== false,
+        saveRecordings: config.saveRecordings === true,
         recordingsPath: recordingsDir
     };
 }
@@ -992,8 +995,9 @@ ipcMain.handle('save-stt-config', async (event, settings = {}) => {
             ? settings.pasteKey
             : (typeof existing.pasteKey === 'string' && existing.pasteKey.length <= 12 ? existing.pasteKey : ' '),
         playFinishSound: settings.playFinishSound !== undefined ? !!settings.playFinishSound : existing.playFinishSound !== false,
+        saveRecordings: settings.saveRecordings !== undefined ? !!settings.saveRecordings : existing.saveRecordings === true,
         uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(app.getLocale())),
-        widgetStyle: ['crimson','ocean','aurora'].includes(settings.widgetStyle) ? settings.widgetStyle : (['crimson','ocean','aurora'].includes(existing.widgetStyle) ? existing.widgetStyle : 'crimson')
+        widgetStyle: WIDGET_STYLES.includes(settings.widgetStyle) ? settings.widgetStyle : (WIDGET_STYLES.includes(existing.widgetStyle) ? existing.widgetStyle : 'crimson')
     });
 
     if (!success) return { success: false };

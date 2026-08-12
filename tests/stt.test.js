@@ -83,7 +83,9 @@ test('normalizes invalid STT settings to a safe multilingual selection', () => {
         localModelKey: 'mini-multilingual',
         geminiModel: 'gemini-2.5-flash',
         ecoMode: true,
-        playFinishSound: true
+        playFinishSound: true,
+        saveRecordings: false,
+        widgetStyle: 'crimson'
     });
     // On a 32 GB machine the same invalid tier resolves to Big (tier above default).
     assert.deepEqual(withRamGB(32, () => validateSttConfig({ sttEngine: 'other', localTier: 'huge' })), {
@@ -93,7 +95,9 @@ test('normalizes invalid STT settings to a safe multilingual selection', () => {
         localModelKey: 'big-multilingual',
         geminiModel: 'gemini-2.5-flash',
         ecoMode: true,
-        playFinishSound: true
+        playFinishSound: true,
+        saveRecordings: false,
+        widgetStyle: 'crimson'
     });
 });
 
@@ -105,7 +109,9 @@ test('preserves any valid tier through validation', () => {
         localModelKey: 'zh-en-light',
         geminiModel: 'gemini-2.5-flash',
         ecoMode: true,
-        playFinishSound: true
+        playFinishSound: true,
+        saveRecordings: false,
+        widgetStyle: 'crimson'
     });
 });
 

@@ -31,6 +31,7 @@
   "settings.autoStop": "Auto-parada",
   "settings.spacePaste": "Pegar con Espacio",
   "settings.appearance": "Apariencia",
+  "settings.advanced": "Ajustes avanzados",
   "lang.label": "Idioma de la interfaz",
   "lang.note": "Idioma de la interfaz y pista de voz. Se aplica al instante, sin conexión.",
   "lang.en": "English",
@@ -153,11 +154,14 @@
     "style": {
       "crimson": "Carmesí",
       "ocean": "Océano",
-      "aurora": "Aurora"
+      "aurora": "Aurora",
+      "terminal": "Terminal Neón"
     },
     "widgetStyleTooltip": "Cambia el color del widget y de esta ventana."
   },
   "recordings.label": "Grabaciones de voz",
   "recordings.note": "Todas las grabaciones de voz se guardan automáticamente como archivos de audio en su PC y se conservan para siempre.",
-  "recordings.openFolder": "📁 Abrir carpeta de grabaciones"
+  "recordings.openFolder": "📁 Abrir carpeta de grabaciones",
+  "recordings.toggleLabel": "Guardar grabaciones de audio localmente (desactivado por defecto)",
+  "recordings.toggleNote": "Desactivado por defecto. Cuando se activa, los archivos de audio de voz grabados se guardan localmente en su PC."
 }

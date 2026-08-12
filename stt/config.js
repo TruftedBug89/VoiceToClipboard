@@ -1,5 +1,6 @@
 const CONFIG_VERSION = 5;
 const VALID_TIERS = new Set(['tiny', 'mini', 'zh-light', 'light', 'big', 'zh-big']);
+const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
 
 // System RAM (GB) — used to recommend the best model for the user's PC.
 // os.totalmem() is the reliable cross-process source (Electron's
@@ -89,7 +90,8 @@ function migrateConfig(input = {}) {
         localTier,
         localLanguage,
         localModelKey: deriveLocalModelKey(localTier),
-        playFinishSound: config.playFinishSound !== false
+        playFinishSound: config.playFinishSound !== false,
+        saveRecordings: typeof config.saveRecordings === 'boolean' ? config.saveRecordings : false
     };
 }
 
@@ -98,6 +100,7 @@ function validateSttConfig(input = {}) {
         ? input.localTier
         : recommendedTierForRam(systemRamGB());
     const validGeminiModels = new Set(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']);
+    const widgetStyle = WIDGET_STYLES.includes(input.widgetStyle) ? input.widgetStyle : 'crimson';
     return {
         sttEngine: input.sttEngine === 'gemini' ? 'gemini' : 'local',
         localTier,
@@ -105,12 +108,15 @@ function validateSttConfig(input = {}) {
         localModelKey: deriveLocalModelKey(localTier),
         geminiModel: validGeminiModels.has(input.geminiModel) ? input.geminiModel : 'gemini-2.5-flash',
         ecoMode: input.ecoMode !== false,
-        playFinishSound: input.playFinishSound !== false
+        playFinishSound: input.playFinishSound !== false,
+        saveRecordings: typeof input.saveRecordings === 'boolean' ? input.saveRecordings : false,
+        widgetStyle
     };
 }
 
 module.exports = {
     CONFIG_VERSION,
+    WIDGET_STYLES,
     deriveLocalModelKey,
     migrateConfig,
     validateSttConfig,

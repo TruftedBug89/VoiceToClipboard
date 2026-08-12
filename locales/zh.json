@@ -31,6 +31,7 @@
   "settings.autoStop": "自动停止",
   "settings.spacePaste": "空格粘贴",
   "settings.appearance": "外观",
+  "settings.advanced": "高级设置",
   "lang.label": "界面语言",
   "lang.note": "界面语言与语音提示。即时生效，完全离线。",
   "lang.en": "English",
@@ -153,11 +154,14 @@
     "style": {
       "crimson": "绯红",
       "ocean": "海洋",
-      "aurora": "极光"
+      "aurora": "极光",
+      "terminal": "霓虹终端"
     },
     "widgetStyleTooltip": "为小组件和本窗口重新配色。"
   },
   "recordings.label": "语音录音",
   "recordings.note": "所有语音消息均自动作为音频文件保存在您的 PC 上，并永久保留。",
-  "recordings.openFolder": "📁 打开录音文件夹"
+  "recordings.openFolder": "📁 打开录音文件夹",
+  "recordings.toggleLabel": "在本地保存语音录音（默认禁用）",
+  "recordings.toggleNote": "默认禁用。启用后，录制的语音音频文件将保存在您的本地 PC 上。"
 }

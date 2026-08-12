@@ -780,18 +780,20 @@ function applyIdleFadeState(enabled, opacityPct) {
     document.body.classList.toggle('idle-fade-active', !!enabled);
 }
 
+const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
+
 function applyAppearanceSnapshot(snapshot) {
     if (!snapshot) return;
     const idleOpacity = typeof snapshot.idleOpacity === 'number' ? Math.round(snapshot.idleOpacity * 100) : 60;
     applyIdleFadeState(snapshot.idleFadeEnabled, idleOpacity);
-    if (typeof snapshot.widgetStyle === 'string') { currentWidgetStyle = (snapshot.widgetStyle === 'ocean' || snapshot.widgetStyle === 'aurora') ? snapshot.widgetStyle : 'crimson'; applyWidgetStyle(currentWidgetStyle); }
+    if (typeof snapshot.widgetStyle === 'string') { currentWidgetStyle = WIDGET_STYLES.includes(snapshot.widgetStyle) ? snapshot.widgetStyle : 'crimson'; applyWidgetStyle(currentWidgetStyle); }
 }
 
 
 // Widget Style (theme) — mirrored into autoSaveSettings and applied live.
 let currentWidgetStyle = 'crimson';
 function setWidgetStyle(style, { save = true } = {}) {
-    const s = (style === 'ocean' || style === 'aurora') ? style : 'crimson';
+    const s = WIDGET_STYLES.includes(style) ? style : 'crimson';
     currentWidgetStyle = s;
     applyWidgetStyle(s);
     if (save) autoSaveSettings();
@@ -817,7 +819,7 @@ function wireStylePicker() {
 
 // Theme: reflect the saved Widget Style onto <html data-widget-style="...">.
 function applyWidgetStyle(style) {
-    const s = (style === 'ocean' || style === 'aurora') ? style : 'crimson';
+    const s = WIDGET_STYLES.includes(style) ? style : 'crimson';
     document.documentElement.setAttribute('data-widget-style', s);
     const picker = document.getElementById('style-picker');
     if (picker) markActiveSwatch(picker, s);
@@ -1254,7 +1256,15 @@ async function refreshSettingsUi(snapshot = null) {
     if (idleFadeOptions) idleFadeOptions.style.display = idleFadeEnabled ? 'flex' : 'none';
     if (idleOpacitySlider) idleOpacitySlider.value = idleOpacity;
     if (idleOpacityVal) idleOpacityVal.textContent = `${idleOpacity}%`;
-    applyIdleFadeState(idleFadeEnabled, idleOpacity);
+    const saveRecordingsCheckbox = document.getElementById('save-recordings-checkbox');
+    const recordingsFolderDetails = document.getElementById('recordings-folder-details');
+    if (saveRecordingsCheckbox) {
+        const isSaveEnabled = !!sttConfig.saveRecordings;
+        saveRecordingsCheckbox.checked = isSaveEnabled;
+        if (recordingsFolderDetails) {
+            recordingsFolderDetails.style.display = isSaveEnabled ? 'block' : 'none';
+        }
+    }
 
     apiKeyInput.value = '';
     removeKeyBtn.style.display = (apiStatus.source === 'config' || (apiStatus.count || 0) > 0) ? 'inline-block' : 'none';
@@ -1318,6 +1328,17 @@ if (alwaysOnTopCheckbox) {
 apiKeyInput.addEventListener('change', () => {
     autoSaveSettings();
 });
+
+const saveRecordingsCheckbox = document.getElementById('save-recordings-checkbox');
+if (saveRecordingsCheckbox) {
+    saveRecordingsCheckbox.addEventListener('change', () => {
+        const recordingsFolderDetails = document.getElementById('recordings-folder-details');
+        if (recordingsFolderDetails) {
+            recordingsFolderDetails.style.display = saveRecordingsCheckbox.checked ? 'block' : 'none';
+        }
+        autoSaveSettings();
+    });
+}
 
 function closeSettings() {
     stopSettingsMicPreview();
@@ -1501,7 +1522,8 @@ function autoSaveSettings() {
                     ? document.getElementById('paste-style-select').value
                     : 'bubble',
                 pasteKey: pasteKeyVal,
-                widgetStyle: currentWidgetStyle
+                widgetStyle: currentWidgetStyle,
+                saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
             });
             if (!saved.success) return;
 
@@ -1516,7 +1538,8 @@ function autoSaveSettings() {
                 ecoMode,
                 alwaysOnTop,
                 idleFadeEnabled,
-                idleOpacity
+                idleOpacity,
+                saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
             };
         };
         settingsSaveQueue = settingsSaveQueue.then(save, save).catch(error => console.error('Settings save failed:', error));
@@ -1548,13 +1571,38 @@ initializeRenderer().catch(error => console.error('Renderer initialization faile
 // Draw circular audio waveform visualizer & check for VAD silence auto-stop
 const smoothValues = new Array(32).fill(0);
 
+const auroraParticles = Array.from({ length: 24 }, () => ({
+    x: (Math.random() - 0.5) * 80,
+    y: (Math.random() - 0.5) * 80,
+    radius: 2 + Math.random() * 4,
+    vx: (Math.random() - 0.5) * 0.4,
+    vy: -0.3 - Math.random() * 0.5,
+    alpha: 0.2 + Math.random() * 0.6,
+    phase: Math.random() * Math.PI * 2
+}));
+
+const terminalPeaks = new Array(14).fill(0);
+const terminalPeakDecay = new Array(14).fill(0);
+
+function getStyleColors(style) {
+    switch (style) {
+        case 'ocean':
+            return { r: 14, g: 165, b: 233, hex: '#0ea5e9', hover: '#38bdf8' };
+        case 'aurora':
+            return { r: 168, g: 85, b: 247, hex: '#a855f7', hover: '#c084fc' };
+        case 'terminal':
+            return { r: 0, g: 255, b: 102, hex: '#00ff66', hover: '#55ff99' };
+        case 'crimson':
+        default:
+            return { r: 230, g: 57, b: 70, hex: '#e63946', hover: '#ff4d4d' };
+    }
+}
+
 let visualizerStartTime = 0;
 
-// Always-running visualizer: a slow, clean rotating tick ring around the mic.
-// Idle = gentle breathing rotation. Recording = smooth audio-reactive ticks on
-// top of the same rotation, so it never looks like a static equalizer.
+// Always-running visualizer: style-aware audio-reactive visualizer routines.
 function drawVisualizer() {
-    // Settings window hides the mic canvas - no need for the ring loop there.
+    // Settings window hides the mic canvas - no need for the loop there.
     if (isSettingsWindow) return;
     try {
     if (!visualizerStartTime) visualizerStartTime = performance.now();
@@ -1563,7 +1611,6 @@ function drawVisualizer() {
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const baseRadius = 29;
 
     let dataArray = null;
     let bufferLength = 0;
@@ -1592,11 +1639,6 @@ function drawVisualizer() {
             vadBlockEntries++;
             if (vadBlockEntries === 1) log(`[render] VAD block entered | cfgKeys=${Object.keys(currentSttConfig).filter(k => k.startsWith('auto')).join(',')}`);
             try {
-            // Adaptive ambient floor: the quietest level seen recently. The
-            // effective threshold is the configured one capped by ambient +
-            // margin, so a threshold calibrated in a noisy room still detects
-            // speech once the room is quiet again — and silence stays honest
-            // when the room is louder than the configured value.
             if (noiseFloor === null) {
                 noiseFloor = Math.max(4, smoothedSpeechVolume);
             } else if (smoothedSpeechVolume < noiseFloor) {
@@ -1614,10 +1656,6 @@ function drawVisualizer() {
                 vadSpeechFrames++;
                 speechFramesCount++;
                 if (speechFramesCount >= SPEECH_ARM_FRAMES) hasSpoken = true;
-                // Isolated blips (keyboard clicks, pops) only eat their own
-                // duration from the silence budget instead of hard-resetting
-                // the whole 2s timer — the auto-stop stays reliable in
-                // semi-noisy rooms.
                 if (silenceAccumMs > 0) silenceAccumMs = Math.max(0, silenceAccumMs - frameDt);
                 if (silenceStartTime !== null) {
                     silenceStartTime = null;
@@ -1626,14 +1664,10 @@ function drawVisualizer() {
             } else {
                 vadSilenceFrames++;
                 speechFramesCount = 0;
-                // Dead-mic watchdog: if we never hear ANYTHING for a long time,
-                // log it once so app.log can tell a silent mic from real speech.
                 if (!hasSpoken && Date.now() - recordStartTime > 8000 && !vadDeadMicLogged) {
                     vadDeadMicLogged = true;
                     log(`[render] VAD watchdog: no speech armed after 8s (smoothed=${smoothedSpeechVolume.toFixed(1)}, thresh=${silenceThresh}, ctx=${audioCtx ? audioCtx.state : 'none'}) — mic may be muted or silent`);
                 }
-                // 2s grace after record start: don't arm the silence timer
-                // before the user has had a chance to start speaking.
                 if (hasSpoken && Date.now() - recordStartTime >= 2000) {
                     if (silenceStartTime === null) silenceStartTime = Date.now();
                     silenceAccumMs += frameDt;
@@ -1656,67 +1690,188 @@ function drawVisualizer() {
         }
     }
 
-    const bars = 32;
-    const step = (Math.PI * 2) / bars;
-
-    // Slow rotation - the whole ring drifts so the ticks always move.
-    const rot = elapsed * 0.35;
     const isRecordingNow = !!(analyser && isRecording);
-    // Gentle idle breath: amplitude oscillates slowly when not recording.
-    const breath = isRecordingNow ? 1 : 0.55 + 0.45 * Math.sin(elapsed * 1.6);
+    const col = getStyleColors(currentWidgetStyle);
 
-    canvasCtx.lineCap = 'round';
-
-    for (let i = 0; i < bars; i++) {
-        let barHeight, intensity;
-        if (isRecordingNow) {
-            const binIndex = Math.min(bufferLength - 1, Math.floor((i * bufferLength) / bars));
-            const target = dataArray[binIndex] || 0;
-            smoothValues[i] += (target - smoothValues[i]) * 0.3;
-            const val = smoothValues[i];
-            // Base height so quiet moments still show a moving ring, not flat silence.
-            barHeight = 6 + (val / 255) * 22;
-            intensity = val / 255;
-        } else {
-            // Idle: uniform ticks that gently breathe (wave travels around the ring).
-            const wave = 0.5 + 0.5 * Math.sin(elapsed * 1.6 - i * 0.55);
-            barHeight = 4 + wave * 5;
-            intensity = 0.35 + 0.25 * wave;
-        }
-
-        const angle = i * step + rot;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        const x1 = centerX + cos * baseRadius;
-        const y1 = centerY + sin * baseRadius;
-        const h2 = baseRadius + barHeight * breath;
-        const x2 = centerX + cos * h2;
-        const y2 = centerY + sin * h2;
-
-        const alpha = isRecordingNow ? (0.7 + intensity * 0.3) : (0.35 + intensity * 0.25);
-        canvasCtx.strokeStyle = `rgba(230, 57, 70, ${alpha})`;
-        canvasCtx.lineWidth = isRecordingNow ? (2 + intensity * 2) : 1.6;
-        if (isRecordingNow) {
-            canvasCtx.shadowColor = 'rgba(230, 57, 70, 0.55)';
-            canvasCtx.shadowBlur = 6 + intensity * 6;
-        } else {
-            canvasCtx.shadowColor = 'transparent';
-            canvasCtx.shadowBlur = 0;
-        }
+    if (currentWidgetStyle === 'ocean') {
+        // Mode: Ocean — Scrolling Tide Waveform
+        const wavePoints = 40;
+        const width = canvas.width;
+        const baseLine = centerY + 36;
+        const breath = isRecordingNow ? 1 : 0.5 + 0.5 * Math.sin(elapsed * 1.5);
 
         canvasCtx.beginPath();
-        canvasCtx.moveTo(x1, y1);
-        canvasCtx.lineTo(x2, y2);
+        canvasCtx.moveTo(0, baseLine);
+        for (let i = 0; i <= wavePoints; i++) {
+            const x = (i / wavePoints) * width;
+            let amp = 0;
+            if (isRecordingNow && dataArray && bufferLength > 0) {
+                const bin = Math.min(bufferLength - 1, Math.floor((i / wavePoints) * (bufferLength / 2)));
+                amp = (dataArray[bin] / 255) * 24;
+            } else {
+                amp = Math.sin(elapsed * 2.5 + i * 0.3) * 4 * breath;
+            }
+            const y = baseLine - Math.sin(elapsed * 3 + (i / wavePoints) * Math.PI * 4) * (6 + amp);
+            if (i === 0) canvasCtx.moveTo(x, y);
+            else canvasCtx.lineTo(x, y);
+        }
+        canvasCtx.lineTo(width, canvas.height);
+        canvasCtx.lineTo(0, canvas.height);
+        canvasCtx.closePath();
+
+        const grad = canvasCtx.createLinearGradient(0, baseLine - 20, 0, canvas.height);
+        const alpha = isRecordingNow ? 0.45 : 0.25;
+        grad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`);
+        grad.addColorStop(1, `rgba(${col.r}, ${col.g}, ${col.b}, 0)`);
+        canvasCtx.fillStyle = grad;
+        canvasCtx.fill();
+
+        canvasCtx.lineWidth = isRecordingNow ? 2.5 : 1.5;
+        canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.9 : 0.5})`;
+        canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.6)`;
+        canvasCtx.shadowBlur = isRecordingNow ? 8 : 2;
+        canvasCtx.stroke();
+        canvasCtx.shadowBlur = 0;
+
+    } else if (currentWidgetStyle === 'aurora') {
+        // Mode: Aurora — Floating Bloom Particle Field
+        const intensity = (isRecordingNow && dataArray) ? (smoothedSpeechVolume / 100) : 0.3;
+
+        auroraParticles.forEach((p) => {
+            p.y += p.vy * (1 + intensity * 1.5);
+            p.x += Math.sin(elapsed * 1.2 + p.phase) * 0.3;
+            if (p.y < -60 || p.x < -60 || p.x > 60) {
+                p.x = (Math.random() - 0.5) * 80;
+                p.y = 40 + Math.random() * 20;
+            }
+
+            const px = centerX + p.x;
+            const py = centerY + p.y;
+            const r = Math.max(1, p.radius * (1 + intensity * 0.8));
+            const alpha = Math.min(1, p.alpha * (0.6 + intensity * 0.8));
+
+            const pGrad = canvasCtx.createRadialGradient(px, py, 0, px, py, r * 2.5);
+            pGrad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`);
+            pGrad.addColorStop(0.5, `rgba(192, 132, 252, ${alpha * 0.5})`);
+            pGrad.addColorStop(1, 'transparent');
+
+            canvasCtx.fillStyle = pGrad;
+            canvasCtx.beginPath();
+            canvasCtx.arc(px, py, r * 2.5, 0, Math.PI * 2);
+            canvasCtx.fill();
+        });
+
+    } else if (currentWidgetStyle === 'terminal') {
+        // Mode: Terminal — Blocky Digital Equalizer Bars
+        const barCount = 14;
+        const barWidth = 6;
+        const barGap = 3;
+        const totalW = barCount * (barWidth + barGap) - barGap;
+        const startX = centerX - totalW / 2;
+        const blockHeight = 3;
+        const blockGap = 1.5;
+        const maxBlocks = 12;
+
+        for (let i = 0; i < barCount; i++) {
+            let level = 0;
+            if (isRecordingNow && dataArray && bufferLength > 0) {
+                const bin = Math.min(bufferLength - 1, Math.floor((i / barCount) * (bufferLength / 2)));
+                level = smoothValues[i] = (smoothValues[i] || 0) * 0.7 + (dataArray[bin] / 255) * 0.3;
+            } else {
+                const wave = 0.2 + 0.15 * Math.sin(elapsed * 3 + i * 0.4);
+                level = wave;
+            }
+
+            const activeBlocks = Math.round(level * maxBlocks);
+            const x = startX + i * (barWidth + barGap);
+
+            if (activeBlocks >= terminalPeaks[i]) {
+                terminalPeaks[i] = activeBlocks;
+                terminalPeakDecay[i] = elapsed;
+            } else if (elapsed - terminalPeakDecay[i] > 0.2) {
+                terminalPeaks[i] = Math.max(0, terminalPeaks[i] - 0.4);
+            }
+
+            for (let b = 0; b < maxBlocks; b++) {
+                const y = centerY + 46 - b * (blockHeight + blockGap);
+                const isActive = b < activeBlocks;
+                const isPeak = Math.floor(terminalPeaks[i]) === b && b > 0;
+
+                if (isActive || isPeak) {
+                    const alpha = isPeak ? 1.0 : (0.4 + (b / maxBlocks) * 0.6);
+                    canvasCtx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`;
+                    canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.8)`;
+                    canvasCtx.shadowBlur = isPeak ? 6 : 2;
+                } else {
+                    canvasCtx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, 0.08)`;
+                    canvasCtx.shadowBlur = 0;
+                }
+
+                canvasCtx.fillRect(x, y, barWidth, blockHeight);
+            }
+        }
+        canvasCtx.shadowBlur = 0;
+
+    } else {
+        // Mode: Crimson — Radiating Rings
+        const bars = 32;
+        const step = (Math.PI * 2) / bars;
+        const baseRadius = 29;
+        const rot = elapsed * 0.35;
+        const breath = isRecordingNow ? 1 : 0.55 + 0.45 * Math.sin(elapsed * 1.6);
+
+        canvasCtx.lineCap = 'round';
+
+        for (let i = 0; i < bars; i++) {
+            let barHeight, intensity;
+            if (isRecordingNow) {
+                const binIndex = Math.min(bufferLength - 1, Math.floor((i * bufferLength) / bars));
+                const target = dataArray[binIndex] || 0;
+                smoothValues[i] += (target - smoothValues[i]) * 0.3;
+                const val = smoothValues[i];
+                barHeight = 6 + (val / 255) * 22;
+                intensity = val / 255;
+            } else {
+                const wave = 0.5 + 0.5 * Math.sin(elapsed * 1.6 - i * 0.55);
+                barHeight = 4 + wave * 5;
+                intensity = 0.35 + 0.25 * wave;
+            }
+
+            const angle = i * step + rot;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            const x1 = centerX + cos * baseRadius;
+            const y1 = centerY + sin * baseRadius;
+            const h2 = baseRadius + barHeight * breath;
+            const x2 = centerX + cos * h2;
+            const y2 = centerY + sin * h2;
+
+            const alpha = isRecordingNow ? (0.7 + intensity * 0.3) : (0.35 + intensity * 0.25);
+            canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`;
+            canvasCtx.lineWidth = isRecordingNow ? (2 + intensity * 2) : 1.6;
+            if (isRecordingNow) {
+                canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.55)`;
+                canvasCtx.shadowBlur = 6 + intensity * 6;
+            } else {
+                canvasCtx.shadowColor = 'transparent';
+                canvasCtx.shadowBlur = 0;
+            }
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(x1, y1);
+            canvasCtx.lineTo(x2, y2);
+            canvasCtx.stroke();
+        }
+
+        canvasCtx.strokeStyle = isRecordingNow
+            ? `rgba(${col.r}, ${col.g}, ${col.b}, 0.3)`
+            : `rgba(${col.r}, ${col.g}, ${col.b}, 0.22)`;
+        canvasCtx.lineWidth = 1;
+        canvasCtx.beginPath();
+        canvasCtx.arc(centerX, centerY, baseRadius + 1, 0, Math.PI * 2);
         canvasCtx.stroke();
     }
-
-    // Thin guide ring, visible faintly so the circle reads as intentional.
-    canvasCtx.strokeStyle = isRecordingNow ? 'rgba(230, 57, 70, 0.3)' : 'rgba(230, 57, 70, 0.22)';
-    canvasCtx.lineWidth = 1;
-    canvasCtx.beginPath();
-    canvasCtx.arc(centerX, centerY, baseRadius + 1, 0, Math.PI * 2);
-    canvasCtx.stroke();
 
     } catch (vizErr) {
         if (!vizErrLogged) {

@@ -82,18 +82,18 @@
         /* Stop / Cancel button — smooth fade during recording */
         #cancel-btn {
             display: none;
-            background: rgba(230, 57, 70, 0.22);
-            border-color: rgba(230, 57, 70, 0.45);
+            background: color-mix(in srgb, var(--primary) 22%, transparent);
+            border-color: color-mix(in srgb, var(--primary) 45%, transparent);
             font-size: 13px;
-            color: rgba(255, 120, 130, 0.95);
+            color: var(--primary-hover);
             transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.2s ease, box-shadow 0.2s ease;
         }
 
         #cancel-btn:hover {
-            background: rgba(230, 57, 70, 0.5);
+            background: color-mix(in srgb, var(--primary) 50%, transparent);
             color: #ffffff;
-            border-color: rgba(230, 57, 70, 0.7);
-            box-shadow: 0 0 10px rgba(230, 57, 70, 0.4);
+            border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 40%, transparent);
             transform: scale(1.08);
         }
 
@@ -149,9 +149,9 @@
         #mic-button {
             position: relative;
             z-index: 2;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+            width: var(--mic-width, 60px);
+            height: var(--mic-height, 60px);
+            border-radius: var(--mic-radius, 50%);
             background: var(--bg-glass);
             border: 2px solid var(--border-glass);
             display: flex;
@@ -173,7 +173,7 @@
 
         /* Breathing glow + scale while live */
         #mic-button.recording {
-            background: linear-gradient(145deg, var(--primary), #c92a37);
+            background: linear-gradient(145deg, var(--primary), var(--primary-hover));
             border-color: var(--primary-hover);
             animation: mic-live 1.8s ease-in-out infinite;
         }
@@ -181,11 +181,11 @@
         @keyframes mic-live {
             0%, 100% {
                 transform: scale(1);
-                box-shadow: 0 0 16px rgba(230, 57, 70, 0.55), 0 0 3px rgba(255, 140, 150, 0.3), 0 8px 25px rgba(0,0,0,0.5);
+                box-shadow: 0 0 16px color-mix(in srgb, var(--primary) 55%, transparent), 0 0 3px color-mix(in srgb, var(--primary-hover) 30%, transparent), 0 8px 25px rgba(0,0,0,0.5);
             }
             50% {
                 transform: scale(1.05);
-                box-shadow: 0 0 38px rgba(230, 57, 70, 0.85), 0 0 8px rgba(255, 140, 150, 0.5), 0 8px 25px rgba(0,0,0,0.5);
+                box-shadow: 0 0 38px color-mix(in srgb, var(--primary) 85%, transparent), 0 0 8px color-mix(in srgb, var(--primary-hover) 50%, transparent), 0 8px 25px rgba(0,0,0,0.5);
             }
         }
 
@@ -196,10 +196,10 @@
 
         @keyframes idle-pulse {
             0%, 100% {
-                box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 0 rgba(230, 57, 70, 0);
+                box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 0 transparent;
             }
             50% {
-                box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 12px rgba(230, 57, 70, 0.15);
+                box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 12px color-mix(in srgb, var(--primary) 15%, transparent);
             }
         }
 
@@ -209,48 +209,49 @@
         }
 
         @keyframes mic-pop {
-            0%   { transform: scale(0.55); box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.9); }
-            60%  { transform: scale(1.2); box-shadow: 0 0 35px rgba(230, 57, 70, 0.85); }
+            0%   { transform: scale(0.55); box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 90%, transparent); }
+            60%  { transform: scale(1.2); box-shadow: 0 0 35px color-mix(in srgb, var(--primary) 85%, transparent); }
             80%  { transform: scale(0.97); }
             100% { transform: scale(1); }
         }
 
-        /* Soft red aura behind the button */
+        /* Soft aura behind the button */
         #mic-aura {
             position: absolute;
-            top: 45px;
-            left: 45px;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(230, 57, 70, 0.6) 0%, rgba(230, 57, 70, 0.25) 45%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.7);
+            width: calc(var(--mic-width, 60px) + 6px);
+            height: calc(var(--mic-height, 60px) + 6px);
+            border-radius: var(--mic-radius, 50%);
+            background: radial-gradient(circle, color-mix(in srgb, var(--primary) 60%, transparent) 0%, color-mix(in srgb, var(--primary) 25%, transparent) 45%, transparent 70%);
             filter: blur(8px);
             opacity: 0;
-            transform: scale(0.7);
             pointer-events: none;
             transition: opacity 0.4s ease, transform 0.4s ease;
         }
 
         #mic-container.recording #mic-aura {
             opacity: 1;
-            transform: scale(1);
+            transform: translate(-50%, -50%) scale(1);
             animation: aura-breathe 1.8s ease-in-out infinite;
         }
 
         @keyframes aura-breathe {
-            0%, 100% { transform: scale(0.95); opacity: 0.7; filter: blur(8px); }
-            50%      { transform: scale(1.4); opacity: 1; filter: blur(12px); }
+            0%, 100% { transform: translate(-50%, -50%) scale(0.95); opacity: 0.7; filter: blur(8px); }
+            50%      { transform: translate(-50%, -50%) scale(1.4); opacity: 1; filter: blur(12px); }
         }
 
         /* Sonar rings radiating while recording */
         .sonar-ring {
             position: absolute;
-            top: 45px;
-            left: 45px;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            border: 1.5px solid rgba(230, 57, 70, 0.85);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: var(--mic-width, 60px);
+            height: var(--mic-height, 60px);
+            border-radius: var(--mic-radius, 50%);
+            border: 1.5px solid color-mix(in srgb, var(--primary) 85%, transparent);
             opacity: 0;
             pointer-events: none;
         }
@@ -263,20 +264,21 @@
         #mic-container.recording .ring-3 { animation-delay: 1.3s; }
 
         @keyframes sonar {
-            0%   { transform: scale(0.95); opacity: 0.8; border-color: rgba(255, 140, 150, 0.9); }
-            50%  { opacity: 0.35; border-color: rgba(230, 57, 70, 0.5); }
-            100% { transform: scale(2.8); opacity: 0; border-color: rgba(230, 57, 70, 0); }
+            0%   { transform: translate(-50%, -50%) scale(0.95); opacity: 0.8; border-color: color-mix(in srgb, var(--primary-hover) 90%, transparent); }
+            50%  { opacity: 0.35; border-color: color-mix(in srgb, var(--primary) 50%, transparent); }
+            100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; border-color: transparent; }
         }
 
         /* Rotating conic indicator ring */
         .spin-ring {
             position: absolute;
-            top: 38px;
-            left: 38px;
-            width: 74px;
-            height: 74px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, transparent 0deg, rgba(230, 57, 70, 0.95) 90deg, transparent 200deg, transparent 360deg);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(var(--mic-width, 60px) + 14px);
+            height: calc(var(--mic-height, 60px) + 14px);
+            border-radius: var(--mic-radius, 50%);
+            background: conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, var(--primary) 95%, transparent) 90deg, transparent 200deg, transparent 360deg);
             -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
             mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
             opacity: 0;
@@ -290,7 +292,7 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         /* Mic -> Checkmark morph */
@@ -383,18 +385,18 @@
         @keyframes transcribing-pulse {
             0%, 100% {
                 transform: scale(1);
-                box-shadow: 0 0 12px rgba(230, 57, 70, 0.35), 0 8px 25px rgba(0,0,0,0.5);
+                box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 35%, transparent), 0 8px 25px rgba(0,0,0,0.5);
             }
             50% {
                 transform: scale(0.95);
-                box-shadow: 0 0 26px rgba(230, 57, 70, 0.7), 0 0 6px rgba(255, 140, 150, 0.3), 0 8px 25px rgba(0,0,0,0.5);
+                box-shadow: 0 0 26px color-mix(in srgb, var(--primary) 70%, transparent), 0 0 6px color-mix(in srgb, var(--primary-hover) 30%, transparent), 0 8px 25px rgba(0,0,0,0.5);
             }
         }
 
         #mic-container.transcribing .spin-ring {
             opacity: 1;
             animation: spin 1.1s linear infinite;
-            background: conic-gradient(from 0deg, transparent 0deg, #ff8a8a 80deg, #e63946 200deg, transparent 280deg);
+            background: conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, var(--primary-hover) 85%, transparent) 80deg, var(--primary) 200deg, transparent 280deg);
             -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
             mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
         }
@@ -402,11 +404,12 @@
         /* Shockwave burst on finish */
         .burst-ring {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: var(--mic-width, 60px);
+            height: var(--mic-height, 60px);
+            border-radius: var(--mic-radius, 50%);
             border: 2.5px solid rgba(255, 255, 255, 0.9);
             opacity: 0;
             pointer-events: none;
@@ -416,8 +419,8 @@
             content: '';
             position: absolute;
             inset: -6px;
-            border-radius: 50%;
-            border: 1.5px solid rgba(230, 57, 70, 0.8);
+            border-radius: var(--mic-radius, 50%);
+            border: 1.5px solid color-mix(in srgb, var(--primary) 80%, transparent);
         }
 
         #mic-button.burst .burst-ring {
@@ -425,7 +428,7 @@
         }
 
         @keyframes burst {
-            0%   { transform: scale(0.85); opacity: 1; }
+            0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 1; }
             40%  { opacity: 0.7; }
-            100% { transform: scale(3.2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0; }
         }

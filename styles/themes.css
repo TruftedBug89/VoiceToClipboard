@@ -1,6 +1,14 @@
-/* Widget Style themes (plan Phase 6).
-   The default style "crimson" uses the base :root custom properties defined in
-   base.css. Ocean and Aurora override them when <html data-widget-style="...">. */
+:root {
+    --mic-width: 60px;
+    --mic-height: 60px;
+    --mic-radius: 50%;
+}
+
+:root[data-widget-style="crimson"] {
+    --mic-width: 60px;
+    --mic-height: 60px;
+    --mic-radius: 50%;
+}
 
 :root[data-widget-style="ocean"] {
     --primary: #0ea5e9;
@@ -9,6 +17,9 @@
     --border-glass: rgba(125, 200, 255, 0.18);
     --text-main: #eaf6ff;
     --text-dim: #8fb8d6;
+    --mic-width: 78px;
+    --mic-height: 50px;
+    --mic-radius: 25px;
 }
 
 :root[data-widget-style="aurora"] {
@@ -18,6 +29,93 @@
     --border-glass: rgba(192, 132, 252, 0.18);
     --text-main: #f5edff;
     --text-dim: #bda6e0;
+    --mic-width: 66px;
+    --mic-height: 66px;
+    --mic-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+}
+
+:root[data-widget-style="terminal"] {
+    --primary: #00ff66;
+    --primary-hover: #55ff99;
+    --bg-glass: rgba(5, 20, 10, 0.92);
+    --border-glass: rgba(0, 255, 102, 0.35);
+    --text-main: #00ff66;
+    --text-dim: rgba(0, 255, 102, 0.7);
+    --mic-width: 64px;
+    --mic-height: 64px;
+    --mic-radius: 8px;
+}
+
+/* ─── Per-Style Structural & Motion Transformations ─── */
+
+/* Crimson — Pulse Orb */
+:root[data-widget-style="crimson"] #mic-button {
+    border-radius: 50%;
+}
+
+/* Ocean — Tide Bar (Capsule/Pill shape & smooth sway glide) */
+:root[data-widget-style="ocean"] #mic-button {
+    border-radius: var(--mic-radius);
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+:root[data-widget-style="ocean"] #mic-button.recording {
+    animation: ocean-tide-sway 2.4s ease-in-out infinite;
+}
+@keyframes ocean-tide-sway {
+    0%, 100% {
+        transform: translateX(0) scale(1);
+        box-shadow: 0 0 16px color-mix(in srgb, var(--primary) 55%, transparent), 0 8px 25px rgba(0,0,0,0.5);
+    }
+    50% {
+        transform: translateX(4px) scale(1.03);
+        box-shadow: 0 0 32px color-mix(in srgb, var(--primary) 85%, transparent), 0 8px 25px rgba(0,0,0,0.5);
+    }
+}
+
+/* Aurora — Liquid Blob (Organic morphing blob border-radius & fluid morph) */
+:root[data-widget-style="aurora"] #mic-button {
+    border-radius: var(--mic-radius);
+    animation: aurora-blob-morph 6s ease-in-out infinite alternate;
+}
+:root[data-widget-style="aurora"] #mic-button.recording {
+    animation: aurora-blob-morph 3s ease-in-out infinite alternate, mic-live 1.8s ease-in-out infinite;
+}
+@keyframes aurora-blob-morph {
+    0%   { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
+    33%  { border-radius: 58% 42% 40% 60% / 55% 35% 65% 45%; }
+    66%  { border-radius: 35% 65% 60% 40% / 65% 55% 45% 35%; }
+    100% { border-radius: 60% 40% 30% 70% / 40% 60% 40% 60%; }
+}
+
+/* Terminal — Neon Terminal (Sharp panel with scanline sweep & CRT glow) */
+:root[data-widget-style="terminal"] #mic-button {
+    border-radius: var(--mic-radius);
+    border-width: 1.5px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 8px color-mix(in srgb, var(--primary) 20%, transparent);
+    overflow: hidden;
+}
+:root[data-widget-style="terminal"] #mic-button::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--primary) 25%, transparent) 50%, transparent 100%);
+    pointer-events: none;
+    animation: terminal-scanline 3s linear infinite;
+}
+@keyframes terminal-scanline {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(200%); }
+}
+:root[data-widget-style="terminal"] #status-badge {
+    font-family: 'Consolas', 'Courier New', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+:root[data-widget-style="terminal"] .rec-dot {
+    border-radius: 2px;
 }
 
 /* ─── Widget Style picker (Settings) ─── */

@@ -180,15 +180,6 @@
 <div id="api-key-note"></div>
 <div class="gemini-note-text" data-i18n="gemini.note">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
 </div>
-<!-- Voice Recordings Folder Section -->
-<div class="input-group" id="recordings-group">
-<div class="flex-between-center">
-<label style="font-size: 12px; font-weight: 600;" data-i18n="recordings.label">Voice Recordings</label>
-<button class="btn-secondary" id="open-recordings-btn" style="padding: 4px 8px; font-size: 11px;" type="button" data-i18n="recordings.openFolder">📁 Open Recordings Folder</button>
-</div>
-<div class="setting-subnote" data-i18n="recordings.note">All voice messages are automatically saved as audio files on your PC and kept forever.</div>
-<div id="recordings-path-display" style="font-size: 9.5px; font-family: monospace; color: var(--text-dim); margin-top: 4px; word-break: break-all; opacity: 0.8;"></div>
-</div>
 </div>
 <div class="settings-section">
 <div class="settings-section-title"><span data-i18n="settings.autoStop">Auto-Stop</span></div>
@@ -310,9 +301,36 @@
 <span class="style-swatch-dot swatch-aurora"></span>
 <span class="style-swatch-label" data-i18n="appearance.style.aurora">Aurora</span>
 </button>
+<button class="style-swatch" data-style="terminal" role="radio" aria-checked="false" tabindex="-1" type="button">
+<span class="style-swatch-dot swatch-terminal"></span>
+<span class="style-swatch-label" data-i18n="appearance.style.terminal">Neon Terminal</span>
+</button>
 </div>
 </div>
 </div>
+<details class="advanced-settings-group">
+<summary class="advanced-settings-summary" data-i18n="settings.advanced">Advanced Settings</summary>
+<div class="settings-section advanced-section">
+<div class="input-group" id="save-recordings-group">
+<div class="switch-row">
+<label class="switch-label" data-i18n="recordings.toggleLabel" for="save-recordings-checkbox">💾 Save Audio Recordings Locally</label>
+<label class="toggle-switch">
+<input id="save-recordings-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div class="setting-subnote" data-i18n="recordings.toggleNote">Disabled by default. When enabled, recorded voice audio files are saved locally on your PC.</div>
+</div>
+<div class="input-group" id="recordings-folder-details">
+<div class="flex-between-center">
+<label style="font-size: 12px; font-weight: 600;" data-i18n="recordings.label">Voice Recordings</label>
+<button class="btn-secondary" id="open-recordings-btn" style="padding: 4px 8px; font-size: 11px;" type="button" data-i18n="recordings.openFolder">📁 Open Recordings Folder</button>
+</div>
+<div class="setting-subnote" data-i18n="recordings.note">All voice messages are automatically saved as audio files on your PC and kept forever.</div>
+<div id="recordings-path-display" style="font-size: 9.5px; font-family: monospace; color: var(--text-dim); margin-top: 4px; word-break: break-all; opacity: 0.8;"></div>
+</div>
+</div>
+</details>
 </div>
 <!-- Modal Actions Footer -->
 <div class="modal-actions modal-actions-footer">

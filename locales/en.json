@@ -31,6 +31,7 @@
   "settings.autoStop": "Auto-Stop",
   "settings.spacePaste": "Space-to-Paste",
   "settings.appearance": "Appearance",
+  "settings.advanced": "Advanced Settings",
   "lang.label": "UI Language",
   "lang.note": "Interface language and speech hint. Applies instantly, offline.",
   "lang.en": "English",
@@ -153,11 +154,14 @@
     "style": {
       "crimson": "Crimson",
       "ocean": "Ocean",
-      "aurora": "Aurora"
+      "aurora": "Aurora",
+      "terminal": "Neon Terminal"
     },
     "widgetStyleTooltip": "Recolor the widget and this window."
   },
   "recordings.label": "Voice Recordings",
   "recordings.note": "All voice messages are automatically saved as audio files on your PC and kept forever.",
-  "recordings.openFolder": "📁 Open Recordings Folder"
+  "recordings.openFolder": "📁 Open Recordings Folder",
+  "recordings.toggleLabel": "Save Audio Recordings Locally (Disabled by default)",
+  "recordings.toggleNote": "Disabled by default. When enabled, recorded voice audio files are saved locally on your PC."
 }

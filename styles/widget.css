@@ -41,7 +41,7 @@
             height: 6px;
             border-radius: 50%;
             background: var(--primary);
-            box-shadow: 0 0 6px rgba(230, 57, 70, 0.8);
+            box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 80%, transparent);
             animation: rec-blink 1.1s ease-in-out infinite;
             flex-shrink: 0;
         }
@@ -62,7 +62,7 @@
 
         #status-badge.err .rec-dot {
             animation: none;
-            box-shadow: 0 0 6px rgba(230, 57, 70, 0.8);
+            box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 80%, transparent);
         }
 
         #status-badge.dim .rec-dot {
