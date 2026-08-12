@@ -139,20 +139,22 @@ class SherpaAdapter {
                 debug: 0
             };
         } else if (registryModel.backend === 'whisper') {
-            const fs = require('fs');
-            const enc = fs.existsSync(path.join(modelPath, 'encoder.int8.onnx')) ? 'encoder.int8.onnx' : 'encoder.onnx';
-            const dec = fs.existsSync(path.join(modelPath, 'decoder.int8.onnx')) ? 'decoder.int8.onnx' : 'decoder.onnx';
-            const tok = fs.existsSync(path.join(modelPath, 'tokens.txt')) ? 'tokens.txt' : 'tokens.txt';
+            // Whisper model files use a model-specific prefix (e.g. small-encoder.int8.onnx,
+            // large-v3-turbo-decoder.int8.onnx). Find them from expectedFiles.
+            const ef = registryModel.expectedFiles;
+            const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
+            const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
+            const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
             config = {
                 featConfig: { sampleRate: 16000, featureDim: 80 },
                 modelConfig: {
                     whisper: {
-                        encoder: getRequiredPath(modelPath, enc),
-                        decoder: getRequiredPath(modelPath, dec),
+                        encoder: getRequiredPath(modelPath, encFile),
+                        decoder: getRequiredPath(modelPath, decFile),
                         language: 'auto',
                         task: 'transcribe'
                     },
-                    tokens: getRequiredPath(modelPath, tok)
+                    tokens: getRequiredPath(modelPath, tokFile)
                 },
                 numThreads: Math.max(1, Math.min(4, os.cpus().length - 1)),
                 provider: 'cpu',
