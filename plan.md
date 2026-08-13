@@ -1,249 +1,137 @@
-# VoiceToClipboard — Feature Plan (v4.x)
+# VoiceToClipboard — Visual Redesign, Feedback & Bug-Fix Plan
 
-> **Scope:** three new features, specced in detail and designed to feel native to the current app.
-> The earlier "Widget Style transformation" work is **already implemented** (styles now include
-> `crimson`/`ocean`/`aurora`/`terminal` in `WIDGET_STYLES`) and has been removed from this plan.
->
-> **The three features (chosen):**
-> 1. **Transcription History** — a local-only, searchable list of recent transcripts with one-tap re-copy.
-> 5. **Type-at-Cursor Output** — inject the transcript straight into the focused app, no manual paste.
-> 8. **Microphone Input-Device Picker** — choose which mic to record from (with a live level test).
+_Scope: keep the visual identity the user already likes (glass widget, crimson orb, sonar rings, themes). Add much stronger feedback for **transcribing / success / failure**, and eliminate the "little design issues" so every state and every theme feels fully unified. Also fix bugs found during the audit._
 
 ---
 
-## 0. Design language — keep it pristine, modern, and consistent
+## 1. App snapshot (what exists today)
 
-Everything below must look and behave like it shipped with the app. Non-negotiables:
-
-- **Visual system:** reuse the existing dark **glass** aesthetic — `--bg-glass`, `--border-glass`,
-  `--text-main`, `--text-dim`, `--primary`/`--primary-hover`, 12–16px radii, `backdrop-filter: blur`,
-  soft shadows (`0 6px 18px rgba(0,0,0,.45)`). **Never hardcode colors** — consume the theme tokens so
-  all four Widget Styles (crimson/ocean/aurora/terminal) recolor the new UI automatically.
-- **Settings layout:** each feature is a titled section in the Settings window, matching the current
-  `Recording` / `Speech Engine` / `Appearance` / `Voice Recordings` sections — same section header,
-  `.switch-label` rows, toggle switches, `select` styling, and muted `note` helper text.
-- **Motion:** short, springy transitions consistent with the widget (`cubic-bezier(0.34,1.56,0.64,1)`
-  for pops, `0.2–0.35s` ease for fades). **Respect `prefers-reduced-motion`** — the global reduce block
-  in `themes.css` already neutralizes animations; don't add motion that bypasses it.
-- **Security model (must not regress):** renderer stays `contextIsolation:true`, `nodeIntegration:false`.
-  Every new main↔renderer call goes through the **`preload.js` allowlist** (`window.api`); no `require`
-  or `ipcRenderer` in the renderer. Honor the strict CSP (no inline styles/scripts in `index.html`).
-- **i18n:** all new user-facing strings become keys in `locales/en.json`, `es.json`, `zh.json` and must
-  keep **parity** (`npm run check:i18n`). No hardcoded English in `renderer.js`/`index.html`.
-- **Privacy-first:** transcripts and recordings never leave the machine; history and audio are **opt-in**
-  and clearly labeled, matching the existing "Save Audio Recordings (Disabled by default)" pattern.
+- **Electron widget** (`index.html` + `renderer.js`, 2722 lines) — a click-through floating mic orb with a canvas visualizer, sonar/aura/spin rings, and a frameless Settings window.
+- **Styling** is split into 4 files loaded in order: `styles/base.css` (mic + FX), `styles/widget.css` (status badge), `styles/settings.css` (modal + controls), `styles/themes.css` (4 widget styles: Crimson/Ocean/Aurora/Terminal via `:root[data-widget-style]`).
+- **State machine (renderer):** idle → `starting` → `recording` → `transcribing` → `done`/`err` (or `cancelled`). Visuals are driven by classes on `#mic-button`, `#mic-container`, `#status-badge` and `body`.
+- **Feedback surfaces today:**
+  - `#status-badge` (dot + text) with modes `busy | done | dim | err`.
+  - `#mic-button` FX classes: `recording`, `transcribing`, `pop`, `burst`, `show-check`.
+  - Success chime (`playFinishChime`, E5→A5), gated by the "finish sound" setting.
+  - `#retry-btn` ("Transcribe Again") on retryable failures.
 
 ---
 
-## 1. Shared foundation (do first — all three features depend on it)
+## 2. Root problem: states & themes don't fully "merge into the style"
 
-### 1.1 Config schema (`stt/config.js`)
-Bump `CONFIG_VERSION` **5 → 6** and extend `migrateConfig` + `validateSttConfig` with new, defaulted keys:
+### 2.1 Semantic colors are hardcoded, not theme-aware
+Literal color audit (should be design tokens instead):
 
-| Key | Type | Default | Feature |
-|-----|------|---------|---------|
-| `historyEnabled` | boolean | `false` (opt-in) | History |
-| `historyLimit` | number | `50` (clamp 10–500) | History |
-| `outputMode` | `'clipboard' \| 'bubble' \| 'toast' \| 'autotype'` | migrate from current `pasteStyle` | Type-at-cursor |
-| `autotypeMethod` | `'unicode' \| 'paste'` | `'unicode'` | Type-at-cursor |
-| `micDeviceId` | string | `''` (= system default) | Mic picker |
-| `micDeviceLabel` | string | `''` (display only) | Mic picker |
+| File | crimson literals | green literals | amber literals |
+|---|---|---|---|
+| base.css | 2 | 4 | 0 |
+| widget.css | 0 | 2 | 0 |
+| **settings.css** | **27** | 10 | 6 |
+| themes.css | 3 | 0 | 0 |
 
-- **Migration:** map the old `pasteStyle` (`bubble`/`toast`) into the new `outputMode`; if space-to-paste
-  was disabled, `outputMode = 'clipboard'`. Keep `pasteStyle`/`pasteKey` working (bubble/toast still use them).
-- Validate/clamp every field in `validateSttConfig` exactly like the existing entries (unknown → default).
+Consequences:
+- The **Settings modal is hardwired crimson** (`rgba(230,57,70,…)` ×27). When the widget style is Ocean (blue), Aurora (purple) or Terminal (green), the widget changes but the settings panel, focus glows, toggles, save button and scrollbar **stay red** — the biggest "doesn't merge" issue.
+- **Error state == brand color.** `#status-badge.err` and `#retry-btn` reuse `--primary`. In non-Crimson themes an "error" shows up blue/purple/green, so failure reads as normal. Error has no dedicated semantic color.
+- **Two different greens** for success: `#4ade80` (mic glow, done dot) vs `#10b981` (status pill "ready"). No single success token.
 
-### 1.2 Settings snapshot + persistence (`main.js`)
-- Add the new keys to `getSettingsSnapshot()` so both windows receive them, and to the `save-stt-config`
-  merge (mirror the existing `pasteStyle`/`saveRecordings` merge style: use incoming value if defined,
-  else fall back to `existing`).
-- Add them to the redacted diagnostic log line (values only, never transcript text).
-
-### 1.3 Preload bridge (`preload.js`)
-Extend the `window.api` allowlist with the minimum surface (details per feature):
-`history.list/clear/delete/export`, `audio.listInputDevices` (or use `navigator.mediaDevices` directly in
-the renderer — see 4.2), and reuse the existing push channels (`settings-changed`) for live updates.
-
----
-
-## 2. Feature #1 — Transcription History
-
-**Goal:** never lose a transcript again. Keep the last *N* transcripts locally; let the user search, re-copy,
-re-paste, and clear them. Complements (does not depend on) the existing audio-recording save feature.
-
-### 2.1 Storage (main process)
-- Store at `userData/history.json` (sibling of the `recordings/` dir) as a bounded array, newest first:
-  ```json
-  { "version": 1, "items": [
-    { "id": "uuid", "text": "…", "ts": 1699999999999, "engine": "local|gemini",
-      "model": "omni-multilingual|gemini-2.5-flash", "lang": "auto", "chars": 42,
-      "durationMs": 5300, "recordingFile": "recording_2026-…​.wav|null" }
-  ]}
-  ```
-- **Append on success** inside the `transcribe-audio` success path (right where clipboard write happens),
-  **only when `historyEnabled`**. Trim to `historyLimit`. If `saveRecordings` is on, link `recordingFile`.
-- **Single-writer, async** writes (`fs.promises` + temp-file rename) to avoid clobbering — reuse the
-  atomic-write approach already used for config.
-- **Retention:** on `historyEnabled → false`, keep the file but stop appending; a **Clear history** button
-  deletes it. Deleting a linked recording is optional and off by default.
-
-### 2.2 IPC + preload
-Add handlers: `history-list` (return items, optional `{query, limit}`), `history-delete(id)`,
-`history-clear()`, `history-export()` (write `history.txt`/`.json` via a save dialog or into `recordings/`).
-Expose through `preload.js` as `window.api.history.{list,delete,clear,export}` (payload-first callbacks).
-
-### 2.3 UI / UX (Settings → new "History" section)
-- **Section header** "Transcription History" + muted note: *"Kept locally on this PC only. Opt-in."*
-- **Toggle:** "Save transcription history (last {n})" — same switch component as other toggles.
-- **List (glass cards):** each row = relative time (e.g. "2m ago"), a 1–2 line **truncated preview**
-  (`text-overflow: ellipsis`), the engine/model as a small dim chip, and hover actions:
-  **⧉ Copy**, **⤶ Paste** (routes through the chosen `outputMode`), **🗑 Delete**. Whole row click → copy,
-  with a brief "✓ Copied" flash reusing the widget's success color/animation.
-- **Search field** at top: instant client-side filter over `text` (debounced), highlight matches.
-- **Footer:** item count + **Clear all** (with an inline confirm, not a blocking dialog) + **Export**.
-- **Empty state:** friendly centered note ("No transcripts yet — record something!") matching `--text-dim`.
-- **Live update:** when a new transcript is copied, push `settings-changed` (or a dedicated
-  `history-updated`) so an open Settings window prepends the new card with a subtle slide-in.
-
-### 2.4 i18n keys (en/es/zh)
-`history.title`, `history.note`, `history.toggleLabel`, `history.search`, `history.copy`, `history.paste`,
-`history.delete`, `history.clear`, `history.clearConfirm`, `history.export`, `history.empty`, `history.copied`,
-`history.count` (`"{n} items"`), `history.time.justNow/minAgo/hAgo/…`.
-
-### 2.5 Edge cases
-- Never store empty/whitespace-only transcripts. Cap a single stored item's length (e.g. 20k chars).
-- Corrupt/oversized `history.json` → quarantine + start fresh (log sanitized). Concurrent writes serialized.
-- History text is **redaction-safe in logs** — never log transcript contents (only counts).
-
-### 2.6 Verify
-Enable → dictate 3 times → 3 cards appear newest-first; search filters; copy/paste/delete work; Clear empties;
-disable → no new cards, existing file preserved until Clear; relaunch → list persists; parity check passes.
-
----
-
-## 3. Feature #5 — Type-at-Cursor Output
-
-**Goal:** the transcript lands directly in the focused field — no bubble, no manual Space. This turns the
-existing paste machinery into a first-class **Output mode**, so users pick how results are delivered.
-
-### 3.1 Output mode model
-Replace the current binary `pasteStyle` UX with one **"Output" selector** (`outputMode`, see 1.1):
-- **Clipboard only** — copy, do nothing else (current default behavior without space-to-paste).
-- **Paste bubble** — existing bubble (press paste key). *(keeps `pasteKey`)*
-- **Windows notification** — existing toast.
-- **Type at cursor (new)** — inject the text into the previously-focused window automatically.
-
-### 3.2 Injection engine (`win32.js` + `main.js`)
-Extend `win32.js` (koffi/user32 — already loaded) with real keystroke injection. Two methods behind
-`autotypeMethod`:
-- **`unicode` (default, recommended):** send the transcript as Unicode keystrokes via **`SendInput`** with
-  `INPUT_KEYBOARD` + `KEYEVENTF_UNICODE` (down/up per UTF-16 code unit; handle surrogate pairs and `\n` →
-  VK_RETURN). **Preserves the user's clipboard** and works in fields that block Ctrl+V.
-- **`paste` (fallback):** the existing `clipboard.writeText` + `SetForegroundWindow(lastExternalHwnd)` +
-  `sendCtrlV()` path. Use when Unicode injection is unavailable or the target chokes on synthetic keys.
-
-Flow in the `transcribe-audio` success handler (main):
-1. Capture the foreground window **before** our widget takes focus (reuse `lastExternalHwnd` tracking used
-   by the paste bubble).
-2. On success with `outputMode === 'autotype'`: `SetForegroundWindow(target)` → small settle delay
-   (~40–80ms, tunable) → inject via the chosen method. Always also write the clipboard as a safety net
-   (unless `autotypeMethod==='unicode'` and we want to preserve clipboard — then copy only if injection fails).
-3. On any failure (no `win32`, `IsWindow(target)` false, injection error) → **fall back to the paste bubble**
-   so the user is never stuck, and surface a one-line status.
-
-### 3.3 UX / design
-- In the **Space-to-Paste / Output** section, replace the two-option style control with the 4-way selector
-  (reuse the existing `select` styling). Show **Paste key** only when mode = bubble; show **Injection method**
-  (Unicode / Paste) only when mode = autotype (progressive disclosure, matching how paste-key already hides).
-- Add a muted note under autotype: *"Types the transcript into the last active window. Preserves your
-  clipboard. If an app blocks it, switch to 'Paste' method."*
-- Keep the widget's existing "✓ COPIED" status; add a `status.TYPED` ("✓ TYPED") state so feedback is honest
-  about what happened.
-
-### 3.4 i18n keys
-`output.label`, `output.mode.clipboard`, `output.mode.bubble`, `output.mode.toast`, `output.mode.autotype`,
-`output.method.label`, `output.method.unicode`, `output.method.paste`, `output.autotypeNote`, `status.TYPED`.
-
-### 3.5 Edge cases / safety
-- Target window closed/changed between record and finish → `IsWindow` guard → bubble fallback.
-- Elevated/admin target windows may reject synthetic input (UIPC) → detect failure → bubble fallback + note.
-- Very long transcripts: chunk Unicode injection and yield to avoid flooding the input queue.
-- Password fields / sensitive targets: we can't detect these reliably — the muted note warns the user;
-  default remains non-autotype so nothing types unexpectedly.
-- Newlines/tabs mapped to real VK keys; emoji/CJK verified via surrogate-pair handling.
-
-### 3.6 Verify
-Set mode = Type at cursor → focus Notepad/VS Code/browser field → dictate → text appears at the caret,
-clipboard unchanged (unicode method); close target mid-flow → falls back to bubble; toggle to Paste method →
-still works; reduced-motion unaffected; parity check passes.
-
----
-
-## 4. Feature #8 — Microphone Input-Device Picker
-
-**Goal:** let users record from a specific mic (headset, interface, webcam) instead of only the OS default,
-with a quick live-level test so they can confirm the right device before dictating.
-
-### 4.1 Config + persistence
-- Persist `micDeviceId` (+ `micDeviceLabel` for display). Empty = follow system default.
-- On save, broadcast `settings-changed` so the widget's next recording uses the new device immediately.
-
-### 4.2 Renderer capture changes (`renderer.js`)
-- Replace the three `getUserMedia({ audio: true })` call sites with a shared helper
-  `getMicStream()` that builds constraints from config:
-  ```js
-  const id = currentMicDeviceId;
-  const audio = id ? { deviceId: { exact: id } } : true;
-  return navigator.mediaDevices.getUserMedia({ audio });
-  ```
-- **Robust fallback:** if `{exact:id}` throws `OverconstrainedError`/`NotFoundError` (device unplugged),
-  retry with `{ audio: true }`, show a one-line notice, and mark the saved device as "unavailable" in
-  Settings (don't silently pick a random mic without telling the user).
-- Enumerate devices with `navigator.mediaDevices.enumerateDevices()` filtered to `kind === 'audioinput'`.
-  Labels are only populated **after** mic permission is granted once — call `getUserMedia` first (the app
-  already does for the level meter), then enumerate, so real names show.
-- Listen to `navigator.mediaDevices.ondevicechange` to refresh the dropdown when devices are plugged/unplugged.
-
-### 4.3 UX / design (Settings → "Recording" section, near Auto-Stop)
-- **Label:** "Microphone" + a native-styled `select` listing "System default (recommended)" first, then each
-  input device by label. Persist selection on change (autosave, like other settings).
-- **Live level meter:** reuse the **existing Auto-Stop live mic meter** component so it looks identical —
-  a slim bar that fills with `calculateSpeechVolume`, using the selected device, so users see it react while
-  choosing. A tiny **"Test"** affordance starts/stops a short preview stream on the chosen device.
-- **Unavailable state:** if the saved device is gone, show it greyed with "(not connected)" and auto-fall
-  back to default until it returns.
-
-### 4.4 i18n keys
-`mic.label`, `mic.systemDefault`, `mic.test`, `mic.testing`, `mic.unavailable`, `mic.permissionNeeded`,
-`mic.changed` (`"Using {name}"`).
-
-### 4.5 Edge cases
-- No mic permission yet → device labels are blank; show "System default" + a "grant permission" hint,
-  populate real names after first capture.
-- Device removed mid-recording → the active MediaRecorder stream ends; surface `MIC_UNAVAILABLE` (existing
-  status) and fall back to default for the next recording.
-- Multiple identical device labels → append a short id suffix to disambiguate.
-
-### 4.6 Verify
-Plug in a second mic → it appears in the dropdown with its real name; select it → the live meter reacts to
-that mic; dictate → recording uses it; unplug it → dropdown updates, next recording falls back to default
-with a notice; selection persists across relaunch; parity check passes.
-
----
-
-## 5. Cross-cutting verification (run after each feature)
-```bash
-npm run check       # syntax OK
-npm run check:i18n  # en/es/zh parity (add keys to all three)
-npm test            # unit tests stay green (add config-migration tests for v6)
-npm start           # watch %APPDATA%\VoiceToClipboard\app.log for CSP / require / TypeError
+### 2.2 Fix: introduce a semantic token layer (in `base.css :root`, overridable per theme)
 ```
-Manual smoke: all four Widget Styles recolor the new UI; reduced-motion calms new animations; no inline-style
-CSP violations; renderer uses only `window.api` (no `require`); transcripts/recordings never logged.
+--success: #4ade80;  --success-soft: rgba(74,222,128,.15);
+--danger:  #ff5468;  --danger-soft:  rgba(255,84,104,.16);
+--warning: #f59e0b;  --warning-soft: rgba(245,158,11,.14);
+--focus-glow: color-mix(in srgb, var(--primary) 35%, transparent);
+```
+Then **replace every hardcoded `rgba(230,57,70,…)` in settings.css with `--primary`/`color-mix(... var(--primary) …)`** and every hardcoded green/amber with `--success`/`--warning`. Keep `--danger` independent of `--primary` so failure is always visually distinct **even on the Crimson theme** (use a slightly hotter/pinker red + a shake, see §3.3).
 
-## 6. Suggested build order
-1. **Shared foundation** (§1): config v6 migration + snapshot + preload allowlist + migration unit tests.
-2. **Feature #8 Mic picker** — smallest, mostly renderer + one config field; validates the settings pattern.
-3. **Feature #5 Type-at-cursor** — extends `win32.js`; reuses `lastExternalHwnd`; bubble fallback keeps it safe.
-4. **Feature #1 Transcription history** — new storage + IPC + the richest UI; lands last so it can link to
-   recordings and route "Paste" through the finished output-mode work from #5.
+---
+
+## 3. Feedback redesign (the headline request)
+
+Keep the existing look; make each phase unmistakable and on-theme.
+
+### 3.1 TRANSCRIBING (make "working" obvious)
+- Keep the fast spin-ring + `transcribing-pulse`.
+- Add an **indeterminate progress arc / animated dots** to the status badge text (`TRANSCRIBING·`, `··`, `···`) so it never looks frozen on slow local models.
+- Show a subtle **shimmer sweep** across the mic button while transcribing (theme-tinted via `--primary`).
+- Badge dot already becomes a spinner in `busy` — good; ensure it uses `--primary` (already does) so it themes correctly.
+
+### 3.2 SUCCESS (unify + strengthen)
+- Keep check-morph + `burst` + `container-breath` + chime.
+- Route the green through the new `--success` token everywhere (mic glow, done dot, `✓ COPIED/TYPED` text) so it's one consistent green.
+- Add a brief **success ripple** reusing the `.burst-ring` but tinted `--success`, plus a 1-line ephemeral confirmation ("Copied to clipboard" / "Typed at cursor") fading after ~1.6 s (matches current `hideStatus` timing).
+
+### 3.3 FAILURE (currently the weakest — biggest win)
+Today failure only recolors the badge (and to brand red). Add:
+- **`#mic-button.error` state:** morph the mic icon to an **✕ / error glyph**, glow with `--danger`, and a **short shake** (`@keyframes error-shake`). Symmetric to the success `show-check`.
+- **`#status-badge.err`** uses `--danger`/`--danger-soft` (not `--primary`), so failure is always red regardless of theme.
+- **Distinct error tone** (single low tone) — reuse the WebAudio chime helper; gate by the same finish-sound setting.
+- **Clear, human status text per code** (extend the existing map): `NO_SPEECH → "No speech heard"`, `MIC_TOO_QUIET → "Mic too quiet"`, `NO_API_KEY → "Add a Gemini key"`, `MODEL_UNAVAILABLE/NOT_DOWNLOADED → "Download a model"`, `RATE_LIMITED → "Rate limited"`, default → "Transcription failed". Localize via `locales/*.json`.
+- Keep `#retry-btn`, but theme it with `--danger` and make it visually tied to the error glyph.
+
+### 3.4 Consistency pass so states never overlap
+- Ensure only one terminal state is visible at a time (clear `show-check`/`error` before setting a new one).
+- Align the vertical stack: `#status-badge` (top:158) and `#retry-btn` (top:168) currently nearly overlap — move retry below the badge with proper spacing so both can show without collision.
+
+---
+
+## 4. Bugs / issues found during audit
+
+1. **Error state not theme-aware** (§2.1) — error is invisible/wrong-colored on Ocean/Aurora/Terminal. _Fix via `--danger`._
+2. **Settings modal ignores active theme** — 27 crimson literals. _Fix via tokens._
+3. **Inconsistent success greens** (`#4ade80` vs `#10b981`). _Unify to `--success`._
+4. **Aurora theme ring mismatch** — the blob button morphs its border-radius, but `.sonar-ring/.spin-ring/.burst-ring` are only re-shaped for Ocean & Terminal, so Aurora's rings stay circular around a blob. _Add Aurora ring overrides._
+5. **`#submit-icon` uses success-green while recording** — a green check during an active recording can read as "done." _Consider tinting it neutral/`--primary` to avoid confusing it with the success state._
+6. **Badge/retry overlap** (§3.4).
+7. **No failure audio/haptic-style cue** — success has a chime, failure has nothing (§3.3).
+8. **`prefers-reduced-motion`** nukes ALL transitions globally (`transition-duration: .01ms !important`) — acceptable, but verify state changes (success/error) still read without motion (they rely on color/glyph, which is fine once §3 lands).
+9. **Verify no duplicate/conflicting `const finishSoundCheckbox`** (declared around lines 1543 and 1889) — confirm they're function-scoped, not a redeclare error, during the JS cleanup pass.
+
+---
+
+## 5. File-by-file change list
+
+- **`styles/base.css`**
+  - Add semantic token block to `:root`.
+  - Add `#mic-button.error` glyph/glow + `@keyframes error-shake`.
+  - Add transcribing shimmer.
+  - Swap hardcoded greens → `--success`.
+- **`styles/widget.css`**
+  - `#status-badge.err` → `--danger`; `.done` → `--success`.
+  - Animated `busy` dots hook if using CSS.
+- **`styles/settings.css`**
+  - Replace all `rgba(230,57,70,…)` → `--primary` / `color-mix(...)`.
+  - Replace greens → `--success`, ambers → `--warning`.
+  - Re-position `#retry-btn` to avoid badge overlap; theme with `--danger`.
+- **`styles/themes.css`**
+  - Optionally per-theme `--danger`/`--success` tweaks (e.g. Terminal keeps neon).
+  - Add Aurora ring border-radius overrides.
+- **`index.html`**
+  - Add `#error-icon` SVG (✕) inside the mic button next to `#check-icon`.
+  - Minor: normalize the mixed-indentation Language section.
+- **`renderer.js`**
+  - `setStatus`: support animated busy dots; ensure single terminal state.
+  - Success path: add success-ripple hook; keep chime.
+  - Failure path: add `micBtn.classList.add('error')` + timed removal, play error tone, use richer per-code status text.
+  - Extend the code→message map; ensure retry button positioned/shown consistently.
+- **`locales/en.json` / `es.json` / `zh.json`**
+  - Add the new status strings (`status.NO_SPEECH` exists; add the rest) so feedback is localized.
+
+---
+
+## 6. Execution phases
+
+1. **Tokens & theme unification** — add semantic tokens; de-hardcode settings.css; wire `--danger`/`--success`/`--warning`. (Foundational; unblocks the rest.)
+2. **Failure feedback** — error glyph, shake, `--danger` badge, error tone, per-code messages + locales.
+3. **Transcribing + success polish** — busy dots/shimmer, success ripple, unified green.
+4. **Consistency & bug sweep** — badge/retry layout, Aurora rings, submit-icon color, single-terminal-state guard, JS cleanup (item 9).
+5. **Verify** — `npm run check`, `npm run check:i18n`, `npm test`; manual pass of each state across all 4 widget styles (Crimson/Ocean/Aurora/Terminal) confirming feedback is clear and on-theme.
+
+---
+
+## 7. Acceptance criteria
+
+- Transcribing, success, and failure are each **instantly distinguishable** (color + glyph + motion + optional sound).
+- **No hardcoded crimson** remains in settings.css; the whole UI (widget + settings) recolors correctly for all 4 themes.
+- Failure always reads as an error (dedicated `--danger`) on every theme.
+- No overlapping/clipped feedback elements; rings match button shape on every theme.
+- All checks/tests pass; new strings localized in en/es/zh.

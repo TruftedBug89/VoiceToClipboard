@@ -43,30 +43,58 @@ function findModelRoot(directory, expectedFiles) {
     return null;
 }
 
-function downloadFile(url, destination, onProgress, redirectCount = 0) {
+function downloadFile(url, destination, onProgress, redirectCount = 0, abortSignal = null) {
     if (!url.startsWith('https:') && !url.startsWith('http:')) {
         return Promise.reject(new Error('Model download URL must be http(s).'));
     }
     if (redirectCount >= 5) {
         return Promise.reject(new Error('Too many redirects during model download.'));
     }
+    if (abortSignal?.aborted) {
+        return Promise.reject(new Error('Download cancelled.'));
+    }
     return new Promise((resolve, reject) => {
         const httpModule = url.startsWith('http:') ? require('http') : https;
         let output = null;
+        let request = null;
+        let lastEmit = 0;
 
         const cleanupAndReject = (err) => {
+            if (abortSignal) {
+                try { abortSignal.removeEventListener('abort', onAbort); } catch (e) {}
+            }
             if (output) {
                 try { output.destroy(); } catch (e) {}
             }
+            if (request) {
+                try { request.destroy(); } catch (e) {}
+            }
+            try {
+                if (fs.existsSync(destination)) fs.unlinkSync(destination);
+            } catch (e) {}
             reject(err);
         };
 
-        const request = httpModule.get(url, response => {
+        const onAbort = () => {
+            cleanupAndReject(new Error('Download cancelled.'));
+        };
+
+        if (abortSignal) {
+            abortSignal.addEventListener('abort', onAbort, { once: true });
+        }
+
+        request = httpModule.get(url, response => {
+            if (abortSignal?.aborted) {
+                response.resume();
+                cleanupAndReject(new Error('Download cancelled.'));
+                return;
+            }
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 response.resume();
                 try {
+                    if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
                     const targetUrl = new URL(response.headers.location, url).toString();
-                    downloadFile(targetUrl, destination, onProgress, redirectCount + 1).then(resolve, cleanupAndReject);
+                    downloadFile(targetUrl, destination, onProgress, redirectCount + 1, abortSignal).then(resolve, cleanupAndReject);
                 } catch (e) {
                     cleanupAndReject(e);
                 }
@@ -83,11 +111,27 @@ function downloadFile(url, destination, onProgress, redirectCount = 0) {
             output = fs.createWriteStream(destination);
             response.on('data', chunk => {
                 loaded += chunk.length;
-                onProgress?.({ loaded, total });
+                const now = Date.now();
+                if (now - lastEmit >= 80 || (total > 0 && loaded >= total)) {
+                    lastEmit = now;
+                    onProgress?.({ loaded, total });
+                }
             });
             output.on('error', cleanupAndReject);
             response.on('error', cleanupAndReject);
-            output.on('finish', () => output.close(() => resolve()));
+            output.on('finish', () => {
+                if (abortSignal) {
+                    try { abortSignal.removeEventListener('abort', onAbort); } catch (e) {}
+                }
+                output.close(() => {
+                    if (abortSignal?.aborted) {
+                        try { if (fs.existsSync(destination)) fs.unlinkSync(destination); } catch (e) {}
+                        reject(new Error('Download cancelled.'));
+                    } else {
+                        resolve();
+                    }
+                });
+            });
             response.pipe(output);
         });
         request.setTimeout(25000, () => {
@@ -99,7 +143,10 @@ function downloadFile(url, destination, onProgress, redirectCount = 0) {
 
 // Probe the remote size of a file (HEAD, following redirects). Used to give
 // the mirror fallback an accurate per-file progress total.
-function headRemoteSize(url, redirectCount = 0) {
+function headRemoteSize(url, redirectCount = 0, abortSignal = null) {
+    if (abortSignal?.aborted) {
+        return Promise.reject(new Error('Download cancelled.'));
+    }
     if (redirectCount >= 5) {
         return Promise.reject(new Error('Too many redirects during model mirror probe.'));
     }
@@ -109,7 +156,7 @@ function headRemoteSize(url, redirectCount = 0) {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 response.resume();
                 const targetUrl = new URL(response.headers.location, url).toString();
-                headRemoteSize(targetUrl, redirectCount + 1).then(resolve, reject);
+                headRemoteSize(targetUrl, redirectCount + 1, abortSignal).then(resolve, reject);
                 return;
             }
             response.resume();
@@ -125,7 +172,8 @@ function headRemoteSize(url, redirectCount = 0) {
     });
 }
 
-async function extractArchive(archivePath, destination, archiveType = 'tar', expectedFiles = null) {
+async function extractArchive(archivePath, destination, archiveType = 'tar', expectedFiles = null, abortSignal = null) {
+    if (abortSignal?.aborted) throw new Error('Download cancelled.');
     // Only extract what the model actually loads. Whisper-style archives bundle
     // fp32 copies of every weight (~1 GB of files we never use); skipping them
     // makes extraction ~3× faster and keeps the installed size honest.
@@ -136,10 +184,15 @@ async function extractArchive(archivePath, destination, archiveType = 'tar', exp
     if (archiveType === 'zip') {
         const yauzl = require('yauzl');
         await new Promise((resolve, reject) => {
+            if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
             yauzl.open(archivePath, { lazyEntries: true }, (error, zipFile) => {
                 if (error) return reject(error);
                 zipFile.readEntry();
                 zipFile.on('entry', entry => {
+                    if (abortSignal?.aborted) {
+                        zipFile.close();
+                        return reject(new Error('Download cancelled.'));
+                    }
                     const normalized = path.normalize(entry.fileName);
                     if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
                         zipFile.close();
@@ -174,6 +227,7 @@ async function extractArchive(archivePath, destination, archiveType = 'tar', exp
         // then feed the plain tar stream into tar.Unpack.
         const bz2 = require('unbzip2-stream');
         await new Promise((resolve, reject) => {
+            if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
             const source = fs.createReadStream(archivePath);
             const unpack = new tar.Unpack({ cwd: destination, strict: true, filter });
             source.on('error', reject);
@@ -183,6 +237,7 @@ async function extractArchive(archivePath, destination, archiveType = 'tar', exp
         });
         return;
     }
+    if (abortSignal?.aborted) throw new Error('Download cancelled.');
     await tar.x({ file: archivePath, cwd: destination, strict: true, filter });
 }
 
@@ -260,7 +315,7 @@ class ModelCache {
         }
     }
 
-    async install(modelKey, onProgress) {
+    async install(modelKey, onProgress, abortSignal = null) {
         const model = getModel(modelKey);
         if (!model.verified || !model.archiveName) {
             throw new Error(model.unavailableReason || 'This model package is not available yet.');
@@ -268,12 +323,12 @@ class ModelCache {
         if (await this.isInstalled(modelKey)) return this.getPath(modelKey);
         if (this.locks.has(modelKey)) return this.locks.get(modelKey);
 
-        const operation = this._install(model, onProgress).finally(() => this.locks.delete(modelKey));
+        const operation = this._install(model, onProgress, abortSignal).finally(() => this.locks.delete(modelKey));
         this.locks.set(modelKey, operation);
         return operation;
     }
 
-    async _install(model, onProgress) {
+    async _install(model, onProgress, abortSignal = null) {
         await fsp.mkdir(this.modelsDir, { recursive: true });
         const tempDir = `${this.getPath(model.key)}.download-${process.pid}-${Date.now()}`;
         const archivePath = path.join(tempDir, model.archiveName);
@@ -285,7 +340,13 @@ class ModelCache {
 
         await fsp.rm(tempDir, { recursive: true, force: true });
         await fsp.mkdir(extractedDir, { recursive: true });
+
+        const checkAbort = () => {
+            if (abortSignal?.aborted) throw new Error('Download cancelled.');
+        };
+
         try {
+            checkAbort();
             onProgress?.({ status: 'initiate', file: model.archiveName });
             let mirrorMode = false;
             try {
@@ -294,17 +355,21 @@ class ModelCache {
                     file: model.archiveName,
                     loaded: data.loaded,
                     total: data.total || model.downloadBytes || 0
-                }));
+                }), 0, abortSignal);
+                checkAbort();
                 onProgress?.({ status: 'extracting', file: model.archiveName });
-                await extractArchive(archivePath, extractedDir, model.archiveType, model.expectedFiles);
+                await extractArchive(archivePath, extractedDir, model.archiveType, model.expectedFiles, abortSignal);
+                checkAbort();
             } catch (error) {
+                if (abortSignal?.aborted || error.message === 'Download cancelled.') throw error;
                 // GitHub release downloads are flaky on some networks (TLS
                 // resets). Fall back to per-file downloads from the HF mirror
                 // when one is registered for this model.
                 if (!model.mirrorBase) throw error;
                 if (await pathExists(archivePath)) await fsp.rm(archivePath, { force: true });
                 mirrorMode = true;
-                await this._downloadMirror(model, extractedDir, onProgress);
+                await this._downloadMirror(model, extractedDir, onProgress, abortSignal);
+                checkAbort();
             }
             const installedRoot = findModelRoot(extractedDir, model.expectedFiles);
             if (!installedRoot) throw new Error('Downloaded model is missing required files.');
@@ -315,6 +380,7 @@ class ModelCache {
             } else {
                 await fsp.rename(installedRoot, stagedDir);
             }
+            checkAbort();
             await fsp.writeFile(path.join(stagedDir, MANIFEST_NAME), JSON.stringify({
                 modelKey: model.key,
                 registryVersion: 1,
@@ -344,24 +410,26 @@ class ModelCache {
             if (movedExisting && !(await pathExists(finalDir)) && await pathExists(backupDir)) {
                 await fsp.rename(backupDir, finalDir).catch(() => {});
             }
-            await fsp.rm(tempDir, { recursive: true, force: true });
+            await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => {});
             throw error;
         }
     }
 
     // Per-file fallback download from a Hugging Face mirror repo. Used when
     // the GitHub release archive cannot be downloaded (flaky networks).
-    async _downloadMirror(model, destDir, onProgress) {
+    async _downloadMirror(model, destDir, onProgress, abortSignal = null) {
         const base = model.mirrorBase.replace(/\/+$/, '');
         const sizes = {};
         let totalBytes = 0;
         for (const file of model.expectedFiles) {
+            if (abortSignal?.aborted) throw new Error('Download cancelled.');
             const url = `${base}/${encodeURIComponent(file)}`;
-            const size = await headRemoteSize(url);
+            const size = await headRemoteSize(url, 0, abortSignal);
             sizes[file] = size;
             totalBytes += size;
         }
         for (const file of model.expectedFiles) {
+            if (abortSignal?.aborted) throw new Error('Download cancelled.');
             const url = `${base}/${encodeURIComponent(file)}`;
             const dest = path.join(destDir, file);
             await downloadFile(url, dest, data => onProgress?.({
@@ -369,7 +437,7 @@ class ModelCache {
                 file,
                 loaded: data.loaded,
                 total: data.total || sizes[file] || totalBytes || model.downloadBytes || 0
-            }));
+            }), 0, abortSignal);
         }
     }
 

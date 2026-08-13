@@ -15,8 +15,6 @@
     --primary-hover: #38bdf8;
     --bg-glass: rgba(6, 24, 38, 0.94);
     --border-glass: rgba(125, 200, 255, 0.18);
-    --text-main: #eaf6ff;
-    --text-dim: #8fb8d6;
     --mic-width: 78px;
     --mic-height: 50px;
     --mic-radius: 25px;
@@ -27,8 +25,6 @@
     --primary-hover: #c084fc;
     --bg-glass: rgba(24, 12, 40, 0.94);
     --border-glass: rgba(192, 132, 252, 0.18);
-    --text-main: #f5edff;
-    --text-dim: #bda6e0;
     --mic-width: 66px;
     --mic-height: 66px;
     --mic-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
@@ -39,8 +35,6 @@
     --primary-hover: #55ff99;
     --bg-glass: rgba(5, 20, 10, 0.92);
     --border-glass: rgba(0, 255, 102, 0.35);
-    --text-main: #00ff66;
-    --text-dim: rgba(0, 255, 102, 0.7);
     --mic-width: 64px;
     --mic-height: 64px;
     --mic-radius: 8px;
@@ -88,6 +82,13 @@
 }
 :root[data-widget-style="aurora"] #mic-button.recording {
     animation: aurora-blob-morph 4.5s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, mic-live 2.2s ease-in-out infinite;
+}
+:root[data-widget-style="aurora"] #mic-aura,
+:root[data-widget-style="aurora"] .sonar-ring,
+:root[data-widget-style="aurora"] .spin-ring,
+:root[data-widget-style="aurora"] .burst-ring,
+:root[data-widget-style="aurora"] .burst-ring::after {
+    border-radius: var(--mic-radius);
 }
 @keyframes aurora-blob-morph {
     0%   { border-radius: 44% 56% 68% 32% / 46% 44% 56% 54%; transform: rotate(0deg) scale(1); }

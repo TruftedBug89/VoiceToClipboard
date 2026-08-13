@@ -2,10 +2,15 @@ const WAV_HEADER_BYTES = 44;
 const MAX_AUDIO_SECONDS = 15 * 60;
 
 function toFloat32Array(value) {
-    if (value instanceof Float32Array) return value;
-    if (value instanceof ArrayBuffer) return new Float32Array(value);
+    if (value instanceof Float32Array && value.byteOffset % 4 === 0) {
+        return value;
+    }
+    if (value instanceof ArrayBuffer) {
+        return new Float32Array(value.slice(0));
+    }
     if (ArrayBuffer.isView(value)) {
-        return new Float32Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 4));
+        const slice = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+        return new Float32Array(slice);
     }
     throw new Error('Invalid PCM audio buffer.');
 }

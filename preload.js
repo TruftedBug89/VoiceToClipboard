@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
     startRecordingHotkey: () => ipcRenderer.invoke('start-recording-hotkey'),
     checkModelDownloaded: (modelKey) => ipcRenderer.invoke('check-model-downloaded', modelKey),
     downloadLocalModel: (modelKey) => ipcRenderer.invoke('download-local-model', modelKey),
+    cancelLocalModelDownload: (modelKey) => ipcRenderer.invoke('cancel-local-model-download', modelKey),
     removeLocalModel: (modelKey) => ipcRenderer.invoke('remove-local-model', modelKey),
     saveApiKey: (keys) => ipcRenderer.invoke('save-api-key', keys),
     removeApiKey: () => ipcRenderer.invoke('remove-api-key'),

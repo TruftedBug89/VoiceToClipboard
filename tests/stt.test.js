@@ -235,3 +235,50 @@ test('removes stale model cache entries not in the registry', async () => {
     assert.equal(fs.existsSync(path.join(modelsDir, 'omni-multilingual')), true);
     fs.rmSync(modelsDir, { recursive: true, force: true });
 });
+
+test('SttService cancels active model downloads cleanly', async () => {
+    const { SttService } = require('../stt/index');
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voicetoclipboard-cancel-test-'));
+    const service = new SttService({ modelsDir });
+
+    let installStarted = false;
+    service.cache.install = (modelKey, onProgress, abortSignal) => {
+        installStarted = true;
+        return new Promise((resolve, reject) => {
+            if (abortSignal) {
+                abortSignal.addEventListener('abort', () => reject(new Error('Download cancelled.')), { once: true });
+            }
+        });
+    };
+
+    const downloadPromise = service.download('omni-multilingual');
+    assert.equal(service.activeDownloads.has('omni-multilingual'), true);
+
+    const cancelled = service.cancelDownload('omni-multilingual');
+    assert.equal(cancelled, true);
+
+    const result = await downloadPromise;
+    assert.equal(result.success, false);
+    assert.equal(result.code, 'CANCELLED');
+    assert.equal(result.error, 'Download cancelled.');
+    assert.equal(service.activeDownloads.has('omni-multilingual'), false);
+
+    fs.rmSync(modelsDir, { recursive: true, force: true });
+});
+
+test('SttService handles idle unload timer and lazy loading', async () => {
+    const { SttService } = require('../stt/index');
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voicetoclipboard-idle-test-'));
+    const service = new SttService({ modelsDir });
+
+    assert.equal(service._sherpa, null);
+    assert.equal(service.idleTimer, null);
+
+    service.scheduleIdleUnload(50);
+    assert.notEqual(service.idleTimer, null);
+
+    service.cancelIdleUnload();
+    assert.equal(service.idleTimer, null);
+
+    fs.rmSync(modelsDir, { recursive: true, force: true });
+});

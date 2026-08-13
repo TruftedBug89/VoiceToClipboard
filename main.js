@@ -51,14 +51,19 @@ const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v
 
 app.disableHardwareAcceleration();
 // Force V8 incremental GC to actually run when Power-Saving Mode unloads the
-// ~0.3–1.2 GB of native STT weights — without --expose-gc the memory stays
-// resident until Node/JetBrains decides to collect, which can take minutes.
-app.commandLine.appendSwitch('js-flags', '--expose-gc');
+// ~0.3–1.2 GB of native STT weights and cap main-process JS old space to 256MB.
+app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=256');
 // Windows App User Model ID — required before windows are created so the
 // taskbar groups the app correctly and pinning the icon works properly.
 app.setAppUserModelId('com.voicetoclipboard.app');
 
-const canonicalUserDataPath = path.join(app.getPath('appData'), 'VoiceToClipboard');
+// Portable mode support (plan2.md §3.3): if PORTABLE_EXECUTABLE_DIR is set, place data next to executable
+let canonicalUserDataPath;
+if (process.env.PORTABLE_EXECUTABLE_DIR && typeof process.env.PORTABLE_EXECUTABLE_DIR === 'string') {
+    canonicalUserDataPath = path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+} else {
+    canonicalUserDataPath = path.join(app.getPath('appData'), 'VoiceToClipboard');
+}
 app.setPath('userData', canonicalUserDataPath);
 logger.init(canonicalUserDataPath);
 
@@ -316,7 +321,8 @@ async function broadcastSettingsChanged() {
     }
 }
 
-function broadcastModelsChanged() {
+async function broadcastModelsChanged() {
+    await broadcastSettingsChanged();
     for (const window of [mainWindow, settingsWindow]) {
         if (window && !window.isDestroyed()) window.webContents.send('models-changed');
     }
@@ -450,13 +456,14 @@ function createSettingsWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
-            backgroundThrottling: false
+            backgroundThrottling: true
         }
     });
 
     secureWebContents(settingsWindow.webContents);
     settingsWindow.loadFile('index.html', { query: { settings: '1' } });
     settingsWindow.on('closed', () => {
+        sttService.cancelAllDownloads();
         settingsWindow = null;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('settings-window-closed');
@@ -1170,6 +1177,15 @@ ipcMain.handle('remove-local-model', async (event, modelKey) => {
     return result;
 });
 
+ipcMain.handle('cancel-local-model-download', async (event, modelKey) => {
+    if (typeof modelKey === 'string' && modelKey) {
+        sttService.cancelDownload(modelKey);
+    } else {
+        sttService.cancelAllDownloads();
+    }
+    return { success: true };
+});
+
 ipcMain.handle('save-api-key', async (event, newKey) => {
     const list = (Array.isArray(newKey) ? newKey : [newKey])
         .map(k => String(k || '').trim())
@@ -1191,6 +1207,7 @@ ipcMain.on('show-settings-window', () => {
 });
 
 ipcMain.on('close-settings-window', () => {
+    sttService.cancelAllDownloads();
     if (settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.close();
     }

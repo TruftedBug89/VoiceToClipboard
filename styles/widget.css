@@ -55,14 +55,23 @@
         }
 
         #status-badge.done .rec-dot {
-            background: #4ade80;
-            box-shadow: 0 0 6px rgba(74, 222, 128, 0.8);
+            background: var(--success, #4ade80);
+            box-shadow: 0 0 6px color-mix(in srgb, var(--success, #4ade80) 80%, transparent);
             animation: none;
+        }
+
+        #status-badge.done {
+            color: var(--success, #4ade80);
         }
 
         #status-badge.err .rec-dot {
             animation: none;
-            box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 80%, transparent);
+            background: var(--danger, #ff5468);
+            box-shadow: 0 0 6px color-mix(in srgb, var(--danger, #ff5468) 80%, transparent);
+        }
+
+        #status-badge.err {
+            color: var(--danger, #ff5468);
         }
 
         #status-badge.dim .rec-dot {

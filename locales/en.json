@@ -156,6 +156,8 @@
   "model.extracting": "Extracting & verifying… (may take a minute or two)",
   "model.verified": "Verified ✓",
   "model.downloadFailed": "Download failed — {err}",
+  "model.downloadCancelled": "Download cancelled.",
+  "model.cancelDownload": "✖ Cancel Download",
   "model.retry": "⚠️ Retry",
   "model.cardMeta": "{backend} · {lang} · {size} · {ram}",
   "spacepaste.styleBubble": "Bubble (press a key)",

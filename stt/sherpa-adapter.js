@@ -151,7 +151,11 @@ class SherpaAdapter {
                     whisper: {
                         encoder: getRequiredPath(modelPath, encFile),
                         decoder: getRequiredPath(modelPath, decFile),
-                        language: 'auto',
+                        // sherpa-onnx rejects language 'auto' for Whisper: the C++
+                        // decoder aborts the whole process at decode time
+                        // ("Invalid language: auto"). A concrete language token must
+                        // be chosen; fall back to English like a transparent default.
+                        language: this._whisperLanguage || 'en',
                         task: 'transcribe',
                         tailPaddings: 1000
                     },
@@ -204,10 +208,13 @@ class SherpaAdapter {
     }
 
     async transcribe(modelKey, pcm, sampleRate = 16000, opts = {}) {
-        // Language hint from the UI language (SenseVoice supports zh/en/yue/ja/ko).
+        // Language hint from the UI language (SenseVoice supports zh/en/yue/ja/ko,
+        // Whisper needs a concrete language code — never 'auto').
         if (opts && opts.uiLanguage) {
             const langMap = { zh: 'zh', en: 'en', es: 'auto', ja: 'ja', ko: 'ko' };
             this._senseVoiceLanguage = langMap[opts.uiLanguage] || 'auto';
+            const whisperLangMap = { zh: 'zh', en: 'en', es: 'es', ja: 'ja', ko: 'ko' };
+            this._whisperLanguage = whisperLangMap[opts.uiLanguage] || 'en';
         }
         const samples = validatePcm(pcm, sampleRate);
         const loaded = await this.load(modelKey);

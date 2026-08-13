@@ -156,6 +156,8 @@
   "model.extracting": "Extrayendo y verificando… (puede tardar un minuto o dos)",
   "model.verified": "Verificado ✓",
   "model.downloadFailed": "Descarga fallida — {err}",
+  "model.downloadCancelled": "Descarga cancelada.",
+  "model.cancelDownload": "✖ Cancelar descarga",
   "model.retry": "⚠️ Reintentar",
   "model.cardMeta": "{backend} · {lang} · {size} · {ram}",
   "spacepaste.styleBubble": "Burbuja (pulsa una tecla)",

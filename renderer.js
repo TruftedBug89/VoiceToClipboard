@@ -147,6 +147,40 @@ function playFinishChime() {
     } catch (e) {}
 }
 
+// Gentle single low-pitch error tone (D4 -> A3, soft decay).
+// Controlled by the finish sound setting so sound operation is unified.
+function playErrorTone() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ctx.currentTime;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+        gain.connect(ctx.destination);
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(293.66, now);
+        osc.frequency.exponentialRampToValueAtTime(220.0, now + 0.35);
+        osc.connect(gain);
+        osc.start(now);
+        osc.stop(now + 0.45);
+        setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
+    } catch (e) {}
+}
+
+function triggerErrorState() {
+    if (micBtn) {
+        micBtn.classList.remove('show-check', 'pop', 'burst', 'recording', 'transcribing');
+        micBtn.classList.add('show-error');
+        setTimeout(() => {
+            if (micBtn) micBtn.classList.remove('show-error');
+        }, 2200);
+    }
+    if (!currentSttConfig || currentSttConfig.playFinishSound !== false) {
+        playErrorTone();
+    }
+}
+
 // Minimal status indicator (dot + text)
 function setStatus(mode, text) {
     text = tr(text);
@@ -244,14 +278,18 @@ function renderModelCardAction(model) {
         modelCardAction.append(note);
         return;
     }
-if (activeDownloadKey === model.key) {
-        const dlBtn = document.createElement('button');
-        dlBtn.type = 'button';
-        dlBtn.className = 'btn-save';
-        dlBtn.disabled = true;
-        dlBtn.textContent = t('model.downloading');
-        dlBtn.style.cssText = 'padding: 7px 12px; font-size: 11px; opacity: 0.55; cursor: not-allowed;';
-        modelCardAction.append(dlBtn);
+    if (activeDownloadKey === model.key) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn-secondary';
+        cancelBtn.textContent = t('model.cancelDownload');
+        cancelBtn.style.cssText = 'padding: 6px 12px; font-size: 10.5px; border-color: rgba(230, 57, 70, 0.4); color: #ff8f9d; cursor: pointer;';
+        cancelBtn.addEventListener('click', async () => {
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = t('model.downloading');
+            await window.api.cancelLocalModelDownload(model.key).catch(() => {});
+        });
+        modelCardAction.append(cancelBtn);
         return;
     }
     if (model.installed) {
@@ -732,7 +770,7 @@ window.api.on('widget-hover', (payload) => {
 });
 
 // Global Hotkey / IPC handlers
-window.api.on('settings-changed', (snapshot) => {
+window.api.on('settings-changed', async (snapshot) => {
     currentSttConfig = snapshot;
     applyAppearanceSnapshot(snapshot);
     // Live language switch: re-render the whole UI (widget + settings window).
@@ -740,6 +778,7 @@ window.api.on('settings-changed', (snapshot) => {
         setUiLanguage(snapshot.uiLanguage);
     }
     if (isSettingsWindow) refreshSettingsUi(snapshot);
+    await checkApiKeyStatus();
 });
 
 window.api.on('sync-settings', () => {
@@ -752,6 +791,7 @@ window.api.on('models-changed', async () => {
     updateLocalModelUi();
     buildModelDropdown();
     renderModelCard();
+    await checkApiKeyStatus();
 });
 
 window.api.on('toggle-recording', () => {
@@ -1205,10 +1245,15 @@ async function checkApiKeyStatus() {
         const status = await window.api.getApiKeyStatus();
         if (!status.hasKey) {
             setStatus('err', 'API KEY REQUIRED');
+        } else if (statusBadge && (statusBadge.textContent.includes('API KEY REQUIRED') || statusBadge.textContent.includes('NO API KEY'))) {
+            hideStatus();
         }
     } else {
         if (!sttConfig.isDownloaded) {
             setStatus('err', 'DOWNLOAD MODEL');
+        } else if (statusBadge && (statusBadge.textContent.includes('DOWNLOAD MODEL') || statusBadge.textContent.includes('MODEL NOT DOWNLOADED') || statusBadge.textContent.includes('MODEL UNAVAILABLE'))) {
+            setStatus('done', '✓ MODEL READY');
+            setTimeout(hideStatus, 2000);
         }
     }
 }
@@ -1679,6 +1724,11 @@ if (saveRecordingsCheckbox) {
 function closeSettings() {
     stopSettingsMicPreview();
     stopMicTest();
+    if (activeDownloadKey) {
+        const downloadingKey = activeDownloadKey;
+        activeDownloadKey = null;
+        window.api.cancelLocalModelDownload(downloadingKey).catch(() => {});
+    }
     if (isSettingsWindow) {
         window.api.closeSettingsWindow();
         return;
@@ -1834,12 +1884,26 @@ async function startModelDownload(modelKey, triggerBtn) {
     } else {
         removeDownloadSpinner();
         modelDownloadBar.classList.remove('extracting');
-        modelDownloadStatus.textContent = t('model.downloadFailed', { err: friendlyDownloadError(res.error) });
-        modelDownloadBar.style.width = '0%';
-        modelDownloadPct.textContent = '—';
-        modelCardStatus.textContent = t('model.retry');
-        modelCardStatus.className = 'status-pill download-needed';
-        renderModelCardAction(modelForSelection());
+        if (res.code === 'CANCELLED' || res.error === 'Download cancelled.') {
+            modelDownloadStatus.textContent = t('model.downloadCancelled');
+            modelDownloadBar.style.width = '0%';
+            modelDownloadPct.textContent = '—';
+            modelCardStatus.textContent = '⚠️ ' + t('model.pending');
+            modelCardStatus.className = 'status-pill download-needed';
+            renderModelCardAction(modelForSelection());
+            setTimeout(() => {
+                if (!activeDownloadKey) {
+                    modelDownloadProgress.style.display = 'none';
+                }
+            }, 1400);
+        } else {
+            modelDownloadStatus.textContent = t('model.downloadFailed', { err: friendlyDownloadError(res.error) });
+            modelDownloadBar.style.width = '0%';
+            modelDownloadPct.textContent = '—';
+            modelCardStatus.textContent = t('model.retry');
+            modelCardStatus.className = 'status-pill download-needed';
+            renderModelCardAction(modelForSelection());
+        }
     }
 }
 
@@ -2457,22 +2521,32 @@ async function startRecording() {
                     // the next recording or cancel.
                     hideRetryButton();
                     refreshRetranscribeBtn();
+                    micBtn.classList.remove('show-error');
                     micBtn.classList.add('show-check');
-                    setTimeout(() => micBtn.classList.remove('show-check'), 1200);
+                    setTimeout(() => micBtn?.classList.remove('show-check'), 1400);
                     log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
                     setStatus('done', result.typed ? '✓ TYPED' : '✓ COPIED');
                     setTimeout(hideStatus, 1600);
                     if (!currentSttConfig || currentSttConfig.playFinishSound !== false) playFinishChime();
                 } else {
                     log(`[render] transcribe FAIL | code: ${result.code} | err: ${result.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
-                    const status = result.code === 'NO_SPEECH' ? t('status.NO_SPEECH') : (result.code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (result.code === 'NO_API_KEY' ? 'NO API KEY' : 'ERROR'));
-                    setStatus('err', status);
+                    const statusMap = {
+                        NO_SPEECH: t('status.NO_SPEECH'),
+                        MIC_TOO_QUIET: t('status.MIC_TOO_QUIET'),
+                        NO_API_KEY: t('status.NO_API_KEY'),
+                        MODEL_UNAVAILABLE: t('status.MODEL_UNAVAILABLE'),
+                        MODEL_NOT_DOWNLOADED: t('status.MODEL_NOT_DOWNLOADED'),
+                        RATE_LIMIT: t('status.RATE_LIMIT')
+                    };
+                    const statusText = statusMap[result.code] || t('status.ERROR');
+                    setStatus('err', statusText);
+                    triggerErrorState();
                     if (isRetryableFailure(result.code)) {
                         showRetryButton();
                         setTimeout(hideStatus, 5000);
                     } else {
                         lastAudio = null;
-                        setTimeout(hideStatus, 3000);
+                        setTimeout(hideStatus, 3500);
                     }
                     refreshRetranscribeBtn();
                 }
@@ -2481,7 +2555,8 @@ async function startRecording() {
                 isStartingRecording = false;
                 micBtn.classList.remove('transcribing');
                 micContainer.classList.remove('transcribing');
-                setStatus('err', 'ERROR');
+                setStatus('err', t('status.ERROR'));
+                triggerErrorState();
                 if (lastAudio) showRetryButton();
                 refreshRetranscribeBtn();
                 setTimeout(hideStatus, 4000);
@@ -2642,8 +2717,9 @@ async function retranscribeLast() {
     micContainer.classList.remove('transcribing');
 
     if (result && result.success) {
+        micBtn.classList.remove('show-error');
         micBtn.classList.add('show-check');
-        setTimeout(() => micBtn.classList.remove('show-check'), 1200);
+        setTimeout(() => micBtn.classList.remove('show-check'), 1400);
         log(`[render] transcribe OK | engine: ${currentSttConfig?.sttEngine || '?'}`);
         setStatus('done', result?.typed ? '✓ TYPED' : '✓ COPIED');
         setTimeout(hideStatus, 1600);
@@ -2652,6 +2728,7 @@ async function retranscribeLast() {
         log(`[render] transcribe FAIL(retry) | code: ${code} | err: ${result?.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
         const status = code === 'NO_SPEECH' ? t('status.NO_SPEECH') : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : (code === 'RATE_LIMITED' ? 'RATE LIMIT' : 'ERROR')));
         setStatus('err', status);
+        triggerErrorState();
         if (isRetryableFailure(code)) {
             showRetryButton();
         } else {
