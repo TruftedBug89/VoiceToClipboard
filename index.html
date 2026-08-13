@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';"/>
 <title>VoiceToClipboard</title>
 <link rel="stylesheet" href="styles/base.css"/>
 <link rel="stylesheet" href="styles/widget.css"/>
@@ -389,10 +389,17 @@
 <div class="autosave-status">
 <span class="check-green">✓</span> <span data-i18n="footer.autosaved">Auto-saved</span>
 </div>
-<div class="app-version-badge" id="app-version-display">v4.1.1</div>
+<div class="app-version-badge" id="app-version-display">v4.1.3</div>
 <button class="btn-remove" data-i18n="footer.removeKey" id="remove-key-btn">Remove Key</button>
 </div>
 </div>
+<script src="src/renderer/i18n.js"></script>
+<script src="src/renderer/audio.js"></script>
+<script src="src/renderer/vad.js"></script>
+<script src="src/renderer/visualizer.js"></script>
+<script src="src/renderer/interaction.js"></script>
+<script src="src/renderer/settings-ui.js"></script>
+<script src="src/renderer/recording.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

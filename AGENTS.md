@@ -1,52 +1,88 @@
-# VoiceToClipboard STT Tool
+# VoiceToClipboard STT Tool — AI Agent & Developer Guide
 
 ## Project Goal
-A lightweight Windows widget that records microphone audio, transcribes it with Gemini or a local offline model, and copies the result to the clipboard.
+A lightweight Windows widget that records microphone audio, transcribes it with Gemini or a local offline model, and copies/pastes the result.
 
-## Security model (v4.0.0)
-- Renderer has `contextIsolation: true`, `nodeIntegration: false`; the only main↔renderer
-  surface is the whitelisted `window.api` in `preload.js` (contextBridge). `index.html` has a
-  strict CSP (no `unsafe-inline` for scripts or styles).
-- CSS is split into `styles/{base,widget,settings,themes}.css`; Widget Styles (Crimson/Ocean/
-  Aurora) are `:root[data-widget-style]` overrides in `styles/themes.css`, persisted as
-  `widgetStyle` in config and applied live to both windows.
+## Security Model & Invariants
+- Renderer runs with `contextIsolation: true`, `nodeIntegration: false`; the only main↔renderer surface is `window.api` defined in `preload.js` (contextBridge).
+- Strict Content Security Policy (CSP) in `index.html`: `script-src 'self'`.
+- All CSS is partitioned into `styles/{base,widget,settings,themes}.css`. Themes (Crimson, Ocean, Aurora, Terminal) use `:root[data-widget-style]` overrides in `styles/themes.css`.
 - Every log line is redaction-safe via `logger.js` → `stt/error-sanitizer.js`.
+- **STRICT MANDATE:** Never process, read, echo, print, log, display, visualize, or output API keys, passwords, or credentials.
 
-## Current State (v4.0.0)
-- **Language/Environment:** Node.js, Electron 43, Windows 10/11.
-- **Core files:** `main.js` (windows, tray, hotkeys, config, IPC, STT service, clipboard, startup cleanup), `index.html` + `renderer.js` (widget, settings, Web Audio capture, VAD, visualizer, click-through, Transcribe Again).
-- **Cloud STT:** `@google/genai` using `gemini-2.5-flash`.
-- **Local STT (multilingual-only, no language selection):** `stt/` main-process service with **six auto-language models** (tier → key → backend): `tiny-multilingual` (moonshine, Moonshine v2 Base INT8 EN/ES/ZH, ~239 MB dl), `mini-multilingual` (nemo-transducer, FastConformer Transducer 10-lang, ~102 MB dl), `zh-en-light` (sense-voice, SenseVoice zh/en/yue/ja/ko, ~158 MB dl), `omni-multilingual` (whisper, Whisper Small INT8, 1600+ langs, ~610 MB dl — the default `light` tier), `big-multilingual` (whisper, Whisper Turbo INT8, ~538 MB dl), `zh-en-big` (fire-red-asr-ctc, FireRedASR2 zh/en, ~496 MB dl). UI ramEstimates add ~1/3 headroom for peak transcription RAM (tiny 290 / mini 270 / zh-light 400 / light 550 / big 950 / zh-big 1.1 GB). GitHub release downloads can fail on some networks (TLS resets) — every model except `mini-multilingual` has a `mirrorBase` HuggingFace per-file fallback in the install pipeline; stale cached models are deleted at startup and installs whose content no longer matches the registry are purged.
-- **Transcribe Again:** the last recording is kept in memory only while a retry is possible; a retry button appears on failure and resends the audio with the CURRENT engine (switch engine/key/model, then retry). Audio is cleared on success/new recording/cancel.
-- **Hygiene:** startup removes stale model caches, leftover archives, crashpad dumps >7 days, oversized Electron caches, and old log files.
-- **Dependencies:** `@google/genai`, `sherpa-onnx-node`, `koffi`, `uiohook-napi`, and archive extraction tooling.
-- **API key:** read from `GEMINI_API_KEY` or saved in `userData/config.json`; never log or expose the key.
+---
 
-## Architecture Notes
-- **Click-through widget:** the window starts with `setIgnoreMouseEvents(true, { forward: true })`; the renderer re-enables interaction over the mic, top bar, and modal areas through `set-ignore-mouse` IPC.
-- **Custom drag (widget):** no `-webkit-app-region`; pointer events and `setPointerCapture` send drag deltas over IPC. A short press toggles recording. The settings window instead uses a native drag region on its header.
-- **Recording lifecycle:** idle → starting → recording → transcribing → copied/error. Escape discards the current session. Session IDs prevent stale callbacks from updating a later recording.
-- **Audio:** `MediaRecorder` selects a supported WebM codec. Local inference receives validated mono 16 kHz Float32 PCM. Gemini receives the recorded WebM bytes and actual MIME type.
-- **All six models are verified:** downloaded through the real install pipeline and transcribed live on Windows x64 (EN/ES samples; Mandarin for the zh-en pair). Every model pins a `sha256` (archive) and per-file `fileHashes` (HF mirror), enforced by `model-cache.js` before extraction. See `stt/model-registry.js` for exact archives, hashes, and licenses.
-- **Model cache:** verified model archives are installed atomically under Electron `userData/models`; model archives are never committed or bundled into the installer.
-- **Archive extraction:** `.tar.bz2` (Moonshine/Parakeet) is decompressed with `unbzip2-stream` piped into `tar.Unpack` — npm `tar` alone cannot decode bzip2 (older builds threw `invalid base256 encoding` on every sherpa-onnx model).
-- **Settings window:** frameless (`frame: false`), 400×700, resizable; the modal header is the drag region (`-webkit-app-region: drag`) with custom minimize (`minimize-settings-window` IPC) and close buttons.
-- **Downloads UI:** a single model card (name, size, RAM, license, status) with inline progress and one Download & Activate / Remove action; there is no separate download modal.
-- **Threshold calculator:** `calculateSpeechVolume` (frequency-weighted RMS, fftSize 64, bins 2–23) feeds the live meter (`METER_MAX = 120`) and VAD auto-stop. Auto-calibrate uses percentile stats (p90 noise / p10 speech), spike-tolerant sampling, a configurable 2–5 s phase duration, and a Reset-to-12 button.
-- **IPC result contract:** transcription returns `{ success, text }` or `{ success: false, code, error }`. Clipboard writes happen in the main process.
-- **Status badge:** `setStatus(mode, text)` uses `busy`, `done`, `err`, and `dim` modes.
-- **No live subtitles/Web Speech API:** transcription is batch-on-submit.
+## Codebase Architecture & File Structure
 
-## Commands
-- Run: `npm start`
-- Tests: `npm test`
-- Pack unpacked app: `npm run pack` (output `dist/win-unpacked/VoiceToClipboard.exe`)
-- Build NSIS installer: `npm run build` (output under `dist/`)
-- Clean generated output: `npm run clean:dist`
-- Regenerate icon: `npm run icon`
+```
+VoiceToClipboard/
+├── main.js                     # Lean main process coordinator (<100 lines)
+├── src/
+│   ├── main/                   # Modular backend subsystems (deep modules)
+│   │   ├── config-store.js     # Config I/O, 200ms debounce queue, synchronous flush
+│   │   ├── history-store.js    # Thread-safe history storage & export (JSON/CSV/TXT)
+│   │   ├── recordings-store.js # Voice recordings file saver (WAV/WebM)
+│   │   ├── gemini.js           # Cloud Gemini client, failover ladder, cooldowns
+│   │   ├── windows.js          # BrowserWindow management, geometry, click-through hover
+│   │   ├── tray.js             # System tray icon, fallback base64, dynamic context menu
+│   │   ├── hotkeys.js          # uIOhook keyboard/mouse hooks & recording promise
+│   │   ├── delivery.js         # Output router: clipboard, bubble, toast, autotype
+│   │   ├── hygiene.js          # Startup cache/log pruning & stale model cleanup
+│   │   ├── i18n.js             # Main-process localized strings (en, es, zh)
+│   │   └── ipc.js              # Consolidated typed IPC handlers
+│   └── renderer/               # Modular frontend subsystems (<300 lines each)
+│       ├── i18n.js             # Client-side t(), tr(), data-i18n bindings, hint tooltips
+│       ├── audio.js            # Web Audio sounds, mic stream, Float32 16kHz resampler
+│       ├── vad.js              # Speech RMS volume, percentiles, live meter, calibrate
+│       ├── visualizer.js       # Canvas animation loop for Crimson/Ocean/Aurora/Terminal
+│       ├── interaction.js      # Pointer drag, click-through, keyboard hotkey recording
+│       ├── settings-ui.js      # Model catalog, download progress, sliders, history UI
+│       └── recording.js        # Recording lifecycle (start/stop/cancel), retry logic
+├── renderer.js                 # Frontend bootstrap entry point (<60 lines)
+├── preload.js                  # Whitelisted contextBridge API (window.api)
+├── win32.js                    # Koffi User32 bindings (GetForegroundWindow, SendInput)
+├── logger.js                   # Redaction-safe log rotator writing to app.log
+├── index.html                  # Widget & Settings UI markup
+├── bubble.html                 # Space-to-paste popup markup
+├── stt/                        # Core offline STT engine (sherpa-onnx runtime)
+│   ├── index.js                # SttService coordinator
+│   ├── config.js               # STT config validation & RAM recommendation ladder
+│   ├── model-registry.js       # 6 verified multilingual models with sha256 checksums
+│   ├── model-cache.js          # Model download pipeline with bzip2/zip & HF mirror
+│   ├── sherpa-adapter.js       # Sherpa-onnx runtime adapter for Moonshine/Whisper/etc.
+│   ├── audio.js                # PCM validation & Float32-to-WAV serializer
+│   ├── threading.js            # CPU core detection & ORT thread pool scheduler
+│   └── error-sanitizer.js      # API key / token sanitizer
+├── locales/                    # Bundled translation dictionaries (en.json, es.json, zh.json)
+├── tests/                      # Fast unit tests for all modules (<500ms)
+└── docs/
+    └── ARCHITECTURE.md         # System diagram & complete IPC contract reference
+```
 
-## Security and release rules
-- Never leak, print, or expose `GEMINI_API_KEY`.
-- Do not commit `node_modules`, model archives, user config, logs, installers, blockmaps, `latest.yml`, `dist/`, or `dist_build*/`.
-- Built installers belong in GitHub Releases, not Git. Do not create a release, upload artifacts, push, or commit unless explicitly requested.
-- Test native addon loading in both Node and Electron on Windows x64 before shipping a runtime change.
+---
+
+## Development Guidelines for AI Agents
+
+1. **Deep Modules & Clean Responsibilities:**
+   - Keep files small, cohesive (<300 lines), and single-purpose.
+   - When adding features, place backend logic in `src/main/` and frontend logic in `src/renderer/`.
+2. **IPC Channel Integrity:**
+   - When introducing new IPC channels, declare them in [preload.js](file:///C:/Users/lavvo/Documents/VoiceToClipboard/preload.js), handle them in [src/main/ipc.js](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/ipc.js), and document them in [docs/ARCHITECTURE.md](file:///C:/Users/lavvo/Documents/VoiceToClipboard/docs/ARCHITECTURE.md).
+3. **Verification Commands (Always Run Before Finishing):**
+   - Run tests: `node scripts/run-tests.js`
+   - Run syntax check: `node scripts/check-js.js`
+   - Run i18n check: `node scripts/check-i18n.js`
+4. **Native Modules & Windows Quirks:**
+   - `sherpa-onnx-node`, `koffi`, and `uiohook-napi` are unpacked in `asarUnpack` in `package.json`.
+   - On Windows, `unbzip2-stream` + `tar` is required for `.tar.bz2` archives.
+   - `koffi-asar-fix.js` redirects `app.asar` to `app.asar.unpacked` for native DLLs.
+
+---
+
+## Common Scripts
+- Start App: `npm start`
+- Run Tests: `node scripts/run-tests.js` (or `npm test`)
+- Check Syntax: `node scripts/check-js.js`
+- Check Locales: `node scripts/check-i18n.js`
+- Build NSIS Installer: `node scripts/build.js` (or `npm run build`)
+- Pack Unpacked Executable: `node scripts/pack.js` (or `npm run pack`)
