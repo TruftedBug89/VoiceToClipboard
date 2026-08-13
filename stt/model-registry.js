@@ -83,6 +83,7 @@ const MODEL_REGISTRY = Object.freeze({
         sourceUrl: 'https://github.com/FunAudioLLM/SenseVoice',
         license: 'SenseVoice model license (Apache-2.0 compatible)',
         verified: true,
+        fast: true,
         notes: 'Alibaba SenseVoice small int8. Strong on Mandarin; also covers en/yue/ja/ko with language=auto + ITN. Verified live on zh/en samples.'
     },
     'omni-multilingual': {

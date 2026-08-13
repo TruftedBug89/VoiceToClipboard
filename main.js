@@ -1275,10 +1275,13 @@ ipcMain.handle('cancel-local-model-download', async (event, modelKey) => {
 });
 
 ipcMain.handle('save-api-key', async (event, newKey) => {
+    // Exactly one Gemini API key is ever stored; an env-provided key wins and
+    // the in-app field is hidden (see get-api-key-status), so there is a single
+    // source of truth at all times.
     const list = (Array.isArray(newKey) ? newKey : [newKey])
         .map(k => String(k || '').trim())
         .filter(k => k.length > 0 && k.length <= 512)
-        .slice(0, 8);
+        .slice(0, 1);
     const success = saveConfig({ apiKey: list[0] || '', apiKeys: list });
     if (success) await broadcastSettingsChanged();
     return { success };

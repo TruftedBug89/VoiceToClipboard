@@ -880,6 +880,11 @@
             background: rgba(126, 226, 184, 0.10);
             border-color: rgba(126, 226, 184, 0.3);
         }
+        .mo-chip-fast {
+            color: #7cc7ff;
+            background: rgba(124, 199, 255, 0.10);
+            border-color: rgba(124, 199, 255, 0.3);
+        }
         .mo-chip {
             display: inline-flex;
             align-items: center;
@@ -985,6 +990,29 @@
         .sec-label { font-size: 9.5px; color: var(--text-dim); white-space: nowrap; }
         .calibrate-duration-select { padding: 4px 6px; font-size: 10px; }
         .calibrate-feedback-text { font-size: 9.5px; color: var(--text-dim); margin-top: 4px; min-height: 12px; }
+        /* Compact ⓘ info hints — replace long helper paragraphs with a hover tooltip */
+        .hint-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-height: 16px; }
+        .info-hint {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 15px; height: 15px; border-radius: 50%;
+            border: 1px solid var(--border-glass, rgba(255,255,255,0.22));
+            background: rgba(255,255,255,0.05);
+            color: var(--text-dim, #9a9aa6);
+            font-size: 10px; font-weight: 700; line-height: 1;
+            cursor: help; position: relative; flex-shrink: 0; user-select: none; vertical-align: middle;
+        }
+        .info-hint:hover, .info-hint:focus-visible { color: var(--primary); border-color: var(--primary); outline: none; }
+        /* Tooltip is a single fixed-position bubble (see renderer.js) so it is
+           never clipped by the scrollable settings pane. */
+        #hint-tooltip {
+            position: fixed; z-index: 9999; max-width: 240px; padding: 8px 10px;
+            border-radius: 8px; background: #17181f;
+            border: 1px solid var(--border-glass, rgba(255,255,255,0.16));
+            color: var(--text-main, #e9e9f0); font-size: 11px; line-height: 1.45;
+            text-align: left; white-space: normal;
+            opacity: 0; visibility: hidden; transition: opacity 0.15s ease;
+            pointer-events: none; box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+        }
         .noise-meter-wrap-box { margin-top: 8px; }
         .noise-meter-status-text { font-weight: 600; }
         .noise-meter-bg { position: relative; width: 100%; height: 14px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.35) 30%, rgba(245, 158, 11, 0.3) 60%, rgba(239, 68, 68, 0.3) 100%); border-radius: 5px; overflow: hidden; }

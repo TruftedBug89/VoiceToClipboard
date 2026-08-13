@@ -50,6 +50,13 @@ function applyI18n(lang) {
         el.setAttribute('title', label);
         el.setAttribute('aria-label', label);
     });
+    // ⓘ info hints: the translated text lives in a data-hint attribute that the
+    // CSS tooltip shows on hover, so the settings pane stays compact.
+    document.querySelectorAll('[data-i18n-hint]').forEach(el => {
+        const hint = t(el.getAttribute('data-i18n-hint'));
+        el.setAttribute('data-hint', hint);
+        el.setAttribute('aria-label', hint);
+    });
     // Models note has an embedded styled span — rebuild innerHTML.
     const recoNote = document.getElementById('model-reco-note');
     if (recoNote) {
@@ -69,6 +76,54 @@ function setUiLanguage(lang) {
     applyI18n(lang);
     applyModelRecommendation(null);
 }
+
+// ⓘ info-hint tooltip: one fixed-position bubble shared by every info icon, so
+// the text is never clipped by the scrollable settings pane (absolute-positioned
+// tooltips inside a scroll container get cut off at the edges).
+const hintTooltip = document.createElement('div');
+hintTooltip.id = 'hint-tooltip';
+hintTooltip.setAttribute('role', 'tooltip');
+hintTooltip.setAttribute('aria-hidden', 'true');
+document.body.appendChild(hintTooltip);
+
+function showHintTooltip(el) {
+    const text = el.getAttribute('data-hint') || el.getAttribute('aria-label') || '';
+    if (!text) return;
+    hintTooltip.textContent = text;
+    hintTooltip.setAttribute('aria-hidden', 'false');
+    hintTooltip.style.visibility = 'visible';
+    hintTooltip.style.opacity = '1';
+    const r = el.getBoundingClientRect();
+    const tw = hintTooltip.offsetWidth;
+    const th = hintTooltip.offsetHeight;
+    let left = Math.round(r.left + r.width / 2 - tw / 2);
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+    let top = Math.round(r.top - th - 10);
+    if (top < 8) top = Math.round(r.bottom + 10); // flip below when no room above
+    hintTooltip.style.left = left + 'px';
+    hintTooltip.style.top = top + 'px';
+}
+
+function hideHintTooltip() {
+    hintTooltip.setAttribute('aria-hidden', 'true');
+    hintTooltip.style.opacity = '0';
+    hintTooltip.style.visibility = 'hidden';
+}
+
+document.addEventListener('mouseover', (e) => {
+    const el = e.target && e.target.closest && e.target.closest('.info-hint');
+    if (el) showHintTooltip(el);
+});
+document.addEventListener('mouseout', (e) => {
+    const el = e.target && e.target.closest && e.target.closest('.info-hint');
+    if (el && (!e.relatedTarget || !el.contains(e.relatedTarget))) hideHintTooltip();
+});
+document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('info-hint')) showHintTooltip(e.target);
+});
+document.addEventListener('focusout', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('info-hint')) hideHintTooltip();
+});
 
 const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
 if (isSettingsWindow) document.body.classList.add('settings-window');
@@ -253,6 +308,7 @@ function renderModelCard() {
     };
     const backendLabel = backendLabels[model.backend] || model.name;
     modelCardMeta.textContent = t('model.cardMeta', { backend: backendLabel, lang: t('model.language.auto'), size: formatDownloadSize(model.downloadBytes), ram: model.ramEstimate || '' });
+    if (model.fast) modelCardMeta.textContent += ' · ⚡ ' + t('models.fast', null, 'Fast');
     modelCardDesc.textContent = model.description;
     modelCardLicense.textContent = `License: ${model.license}`;
     if (model.verified === false) {
@@ -416,7 +472,7 @@ function buildModelDropdown() {
         if (model.tier === recommendedTier) {
             const chip = document.createElement('span');
             chip.className = 'mo-chip';
-            chip.textContent = '⭐ ' + t('models.recommended', null, 'Recommended');
+            chip.textContent = t('models.recommended', null, 'Recommended');
             name.appendChild(chip);
         }
         // Quality scales with size in this registry — flag the top tier so users
@@ -425,6 +481,12 @@ function buildModelDropdown() {
             const chip = document.createElement('span');
             chip.className = 'mo-chip mo-chip-best';
             chip.textContent = '🏆 ' + t('models.bestQuality', null, 'Best quality');
+            name.appendChild(chip);
+        }
+        if (model.fast) {
+            const chip = document.createElement('span');
+            chip.className = 'mo-chip mo-chip-fast';
+            chip.textContent = '⚡ ' + t('models.fast', null, 'Fast');
             name.appendChild(chip);
         }
         const sub = document.createElement('span');
@@ -647,10 +709,6 @@ let mouseIgnored = true;
 let mouseX = 0, mouseY = 0;
 let cursorInsideWindow = true; // authoritative state from main-process polling
 
-// Wake-peek: when the cursor enters the widget, show the pill immediately so
-// the user can always find Settings, then auto-hide it after a few seconds if
-// the pointer is not over a trigger zone (top strip / record button).
-let wakePeekUntil = 0;
 let lastPointerEventTime = 0;
 
 function refreshMouseIgnore() {
@@ -673,15 +731,12 @@ function refreshMouseIgnore() {
         return;
     }
 
-    // The pill (settings/cancel/close) appears when the pointer is over the
-    // top strip where the buttons live, or over the record button itself.
+    // The pill (settings/cancel/close) appears only when the pointer is in the
+    // top third of the widget — never merely because the cursor is over the app.
     // cursorInsideWindow is driven by main-process cursor polling (mouseleave
     // is unreliable with click-through + forward:true).
-    const el = document.elementFromPoint(mouseX, mouseY);
-    const overRecordButton = !!(el && el.closest('#mic-container'));
     const isMouseHoverTop = cursorInsideWindow && (
-        (mouseY >= 0 && mouseY <= 60 && mouseX >= 0 && mouseX <= window.innerWidth) ||
-        overRecordButton
+        mouseY >= 0 && mouseY <= window.innerHeight * 0.33 && mouseX >= 0 && mouseX <= window.innerWidth
     );
 
     if (isMouseHoverTop) {
@@ -690,8 +745,7 @@ function refreshMouseIgnore() {
         topBar.classList.remove('hover-active');
     }
 
-    const wakePeek = Date.now() < wakePeekUntil;
-    if (isMouseHoverTop || isRecording || wakePeek) {
+    if (isMouseHoverTop || isRecording) {
         topBar.classList.add('visible');
     } else {
         topBar.classList.remove('visible');
@@ -722,7 +776,6 @@ document.addEventListener('mousemove', (e) => {
 
 document.addEventListener('mouseleave', () => {
     cursorInsideWindow = false;
-    wakePeekUntil = 0;
     document.body.classList.remove('is-hovering');
     if (pointerDrag) return;
     if (!settingsModal.classList.contains('active')) {
@@ -743,10 +796,8 @@ window.api.on('gemini-fallback', (model) => {
 
 window.api.on('widget-hover', (payload) => {
     const inside = typeof payload === 'boolean' ? payload : !!(payload && payload.inside);
-    const entered = inside && !cursorInsideWindow;
     cursorInsideWindow = inside;
     if (!inside) {
-        wakePeekUntil = 0;
         document.body.classList.remove('is-hovering');
         if (pointerDrag) return;
         if (!settingsModal.classList.contains('active') && !isRecording) {
@@ -762,10 +813,6 @@ window.api.on('widget-hover', (payload) => {
         mouseX = payload.x;
         mouseY = payload.y;
     }
-    // On wake-up (cursor enters the widget) always show the pill briefly so
-    // Settings can always be found, then let it auto-hide if the pointer is
-    // not over a trigger zone. Only re-arm on a real enter, not every tick.
-    if (entered) wakePeekUntil = Date.now() + 3000;
     refreshMouseIgnore();
 });
 
@@ -1091,6 +1138,12 @@ async function startSettingsMicPreview() {
     try {
         settingsPreviewStream = await getMicStream();
         settingsPreviewAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Chromium can start a context 'suspended' (autoplay policy, or after a
+        // prior context closed) — without resume the analyser feeds zeros and
+        // the meter reads "no sound" even though the mic is fine.
+        if (settingsPreviewAudioCtx.state === 'suspended') {
+            try { await settingsPreviewAudioCtx.resume(); } catch (e) { /* analyser stays silent */ }
+        }
         settingsPreviewAnalyser = settingsPreviewAudioCtx.createAnalyser();
         settingsPreviewAnalyser.fftSize = 64;
         const previewSource = settingsPreviewAudioCtx.createMediaStreamSource(settingsPreviewStream);
@@ -1158,6 +1211,9 @@ async function autoCalibrateNoiseFloor() {
     }
 
     const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (tempCtx.state === 'suspended') {
+        try { await tempCtx.resume(); } catch (e) { /* analyser stays silent; dead-mic check below flags it */ }
+    }
     const tempAnalyser = tempCtx.createAnalyser();
     tempAnalyser.fftSize = 64;
     const tempSrc = tempCtx.createMediaStreamSource(tempStream);
@@ -1199,6 +1255,23 @@ async function autoCalibrateNoiseFloor() {
     const noiseP90 = percentile(sorted, 90);
     let newThresh = Math.round(noiseP90 * 1.25 + 6);
     newThresh = Math.min(100, Math.max(2, newThresh));
+
+    // A working mic always yields a non-zero analyser reading across a 3-10s
+    // sample window (room noise is rarely digital zero). If every sample was
+    // zero the stream is muted/unplugged or the context failed to resume —
+    // setting the threshold to its floor would make auto-stop misfire.
+    if (!noiseSamples.length || Math.max(...noiseSamples) < 1) {
+        if (calibrateFeedback) {
+            calibrateFeedback.style.color = '#ef4444';
+            calibrateFeedback.textContent = 'No sound detected — check that the microphone is connected, unmuted, and allowed in Windows privacy settings, then try again.';
+        }
+        autoCalibrateBtn.textContent = origText;
+        autoCalibrateBtn.disabled = false;
+        isCalibrating = false;
+        if (noiseMeterWrap) noiseMeterWrap.style.display = 'none';
+        stopSettingsMicPreview();
+        return;
+    }
 
     if (silenceThresholdSlider) silenceThresholdSlider.value = newThresh;
     if (thresholdValueDisplay) thresholdValueDisplay.textContent = newThresh;
@@ -1371,6 +1444,9 @@ async function startMicTest() {
     try {
         testMicStream = await getMicStream();
         testMicAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (testMicAudioCtx.state === 'suspended') {
+            try { await testMicAudioCtx.resume(); } catch (e) { /* analyser stays silent */ }
+        }
         testMicAnalyser = testMicAudioCtx.createAnalyser();
         testMicAnalyser.fftSize = 64;
         const src = testMicAudioCtx.createMediaStreamSource(testMicStream);
@@ -1380,6 +1456,7 @@ async function startMicTest() {
         if (micTestBtn) micTestBtn.textContent = t('mic.stopTest');
         if (micTestMeterWrap) micTestMeterWrap.style.display = 'block';
 
+        let lastNonZeroAt = performance.now();
         function renderTestMeter() {
             if (!isTestingMic || !testMicAnalyser || !settingsModal.classList.contains('active')) {
                 stopMicTest();
@@ -1391,9 +1468,13 @@ async function startMicTest() {
             const pct = Math.min(100, Math.max(0, Math.round((vol / METER_MAX) * 100)));
             if (micTestMeterBar) micTestMeterBar.style.width = `${pct}%`;
             if (micTestMeterStatus) {
+                if (vol > 0) lastNonZeroAt = performance.now();
                 if (vol > 15) {
                     micTestMeterStatus.textContent = `${t('meter.speech')} ${Math.round(vol)}`;
                     micTestMeterStatus.style.color = '#10b981';
+                } else if (vol === 0 && performance.now() - lastNonZeroAt > 2000) {
+                    micTestMeterStatus.textContent = 'No signal detected — check the mic is unmuted & connected';
+                    micTestMeterStatus.style.color = '#ef4444';
                 } else {
                     micTestMeterStatus.textContent = `${t('meter.silent')} ${Math.round(vol)}`;
                     micTestMeterStatus.style.color = 'var(--text-dim)';
@@ -1646,13 +1727,18 @@ async function refreshSettingsUi(snapshot = null) {
     const envKeyConfigured = apiStatus.source === 'env';
     removeKeyBtn.disabled = envKeyConfigured;
     removeKeyBtn.title = envKeyConfigured ? 'Set via GEMINI_API_KEY environment variable — not stored in the app.' : '';
-    const nKeys = apiStatus.count || 0;
-    if (apiStatus.source === 'env' && nKeys <= 1) {
-        apiKeyNote.innerHTML = 'Key set via <code>GEMINI_API_KEY</code> environment var.';
-    } else if (nKeys > 0) {
-        apiKeyNote.textContent = nKeys === 1 ? '✓ 1 key saved in app config.' : `✓ ${nKeys} keys saved — rate-limited keys are skipped automatically.`;
+    if (envKeyConfigured) {
+        // Env-provided key wins: hide the in-app input entirely so there is a
+        // single key source of truth and it cannot be edited or duplicated.
+        geminiKeyGroup.style.display = 'none';
+        apiKeyNote.innerHTML = 'Key set via <code>GEMINI_API_KEY</code> environment variable. Remove it from Windows to enter a key here.';
     } else {
-        apiKeyNote.innerHTML = 'No key yet — get one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
+        const nKeys = apiStatus.count || 0;
+        if (nKeys > 0) {
+            apiKeyNote.textContent = '✓ Key saved in app config.';
+        } else {
+            apiKeyNote.innerHTML = 'No key yet — get one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
+        }
     }
 
     const appVersionDisplay = document.getElementById('app-version-display');
@@ -1933,7 +2019,7 @@ function autoSaveSettings() {
 
             const keyLines = apiKeyInput.value.split('\n').map(s => s.trim()).filter(Boolean);
             if (keyLines.length) {
-                await window.api.saveApiKey(keyLines);
+                await window.api.saveApiKey(keyLines.slice(0, 1));
                 apiKeyInput.value = '';
                 await checkApiKeyStatus();
             }
@@ -2087,9 +2173,11 @@ function drawVisualizer() {
                 noiseFloor = Math.max(4, smoothedSpeechVolume);
             } else if (smoothedSpeechVolume < noiseFloor) {
                 noiseFloor = noiseFloor * 0.6 + smoothedSpeechVolume * 0.4;
-            } else {
-                noiseFloor = noiseFloor * 0.9995 + smoothedSpeechVolume * 0.0005;
             }
+            // Hold the noise floor steady while speech is present: if speech is
+            // allowed to raise it, long utterances creep the effective threshold
+            // up to near speech level and natural volume dips read as "silence",
+            // so auto-stop fires mid-sentence. A noise floor is a minimum tracker.
             const effectiveThresh = Math.max(MIN_VAD_THRESHOLD, Math.min(silenceThresh, noiseFloor + NOISE_MARGIN));
 
             const nowTs = performance.now();
@@ -2100,7 +2188,11 @@ function drawVisualizer() {
                 vadSpeechFrames++;
                 speechFramesCount++;
                 if (speechFramesCount >= SPEECH_ARM_FRAMES) hasSpoken = true;
-                if (silenceAccumMs > 0) silenceAccumMs = Math.max(0, silenceAccumMs - frameDt);
+                // Real speech instantly clears the silence timer — a short word
+                // after a pause must fully reset auto-stop, not merely subtract
+                // one frame. The old gradual decay let "pause → brief word →
+                // short pause" sum to the stop threshold and cut dictation off.
+                silenceAccumMs = 0;
                 if (silenceStartTime !== null) {
                     silenceStartTime = null;
                     setStatus('', 'REC');

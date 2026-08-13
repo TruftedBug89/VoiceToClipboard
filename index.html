@@ -76,7 +76,7 @@
                         <option value="zh" data-i18n="lang.zh">中文</option>
                     </select>
                 </div>
-                <div class="setting-note" data-i18n="lang.note">Interface language and speech hint. Applies instantly, offline.</div>
+                <div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="lang.note">ⓘ</span></div>
             </div>
             </div>
 <div class="settings-section">
@@ -90,7 +90,7 @@
 </select>
 <button id="mic-test-btn" type="button" class="btn-secondary record-hotkey-btn" data-i18n="mic.test">⚡ Test Mic</button>
 </div>
-<div class="setting-subnote" data-i18n="mic.note">Select input device for voice capture.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="mic.note">ⓘ</span></div>
 <div id="mic-test-meter-wrap" class="hidden-element noise-meter-wrap-box mt-6">
 <div class="flex-between-center text-dim-95 mb-3">
 <span data-i18n="mic.level">Live Mic Level</span>
@@ -129,7 +129,7 @@
 <span class="slider"></span>
 </label>
 </div>
-<div class="setting-subnote" data-i18n="finishSound.note">A soft two-tone chime plays when the transcript is copied. Turn off for silent operation.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="finishSound.note">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
@@ -194,14 +194,14 @@
 <span class="slider"></span>
 </label>
 </div>
-<div class="setting-subnote" data-i18n="eco.note">On (default): loads the model only while transcribing, then frees the RAM. Off: keeps the model always loaded for the lowest latency.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="eco.note">ⓘ</span></div>
 </div>
 <!-- Gemini API Keys Input -->
 <div class="input-group" id="gemini-key-group">
 <label data-i18n="gemini.keys" for="api-key-input">Gemini API Keys </label>
-<textarea autocomplete="off" id="api-key-input" class="api-key-textarea" placeholder="Paste API keys, one per line..." rows="3" spellcheck="false" data-i18n-placeholder="gemini.placeholder"></textarea>
+<input autocomplete="off" id="api-key-input" class="api-key-textarea" type="text" placeholder="Paste your Gemini API key" spellcheck="false" data-i18n-placeholder="gemini.placeholder" />
 <div id="api-key-note"></div>
-<div class="gemini-note-text" data-i18n="gemini.note">Models &amp; keys handled automatically — 5-model fallback, rate-limited keys skipped until tomorrow</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="gemini.note">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
@@ -291,7 +291,7 @@
 <option value="paste" data-i18n="output.method.paste">Paste (Ctrl+V simulation)</option>
 </select>
 </div>
-<div id="autotype-note" class="setting-subnote" data-i18n="output.autotypeNote">Types the transcript into the active window. Preserves clipboard. If an app blocks it, switch to 'Paste' method.</div>
+<div id="autotype-note" class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="output.autotypeNote">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
@@ -304,7 +304,7 @@
 <span class="slider"></span>
 </label>
 </div>
-<div class="setting-subnote" data-i18n="history.toggleNote">Save transcriptions locally for search, copying, and quick reuse.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="history.toggleNote">ⓘ</span></div>
 </div>
 <div id="history-controls-group" class="input-group">
 <div class="flex-row gap-8 mb-8">
@@ -371,14 +371,14 @@
 <span class="slider"></span>
 </label>
 </div>
-<div class="setting-subnote" data-i18n="recordings.toggleNote">Disabled by default. When enabled, recorded voice audio files are saved locally on your PC.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="recordings.toggleNote">ⓘ</span></div>
 </div>
 <div class="input-group" id="recordings-folder-details">
 <div class="flex-between-center">
 <label class="recordings-heading" data-i18n="recordings.label">Voice Recordings</label>
 <button class="btn-secondary btn-compact" id="open-recordings-btn" type="button" data-i18n="recordings.openFolder">📁 Open Recordings Folder</button>
 </div>
-<div class="setting-subnote" data-i18n="recordings.note">All voice messages are automatically saved as audio files on your PC and kept forever.</div>
+<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="recordings.note">ⓘ</span></div>
 <div id="recordings-path-display" class="recordings-path-display"></div>
 </div>
 </div>

@@ -74,6 +74,7 @@ class SttService {
             sourceUrl: model.sourceUrl,
             license: model.license,
             verified: model.verified,
+            fast: !!model.fast,
             unavailableReason: model.unavailableReason || null,
             installed: model.verified ? await this.cache.isInstalled(model.key) : false
         })));

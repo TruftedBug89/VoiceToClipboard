@@ -315,7 +315,7 @@
             width: 26px;
             height: 26px;
             fill: none;
-            stroke: #fff;
+            stroke: var(--primary-hover, #fff);
             stroke-width: 2.6;
             stroke-linecap: round;
             stroke-linejoin: round;
@@ -342,10 +342,11 @@
             to { stroke-dashoffset: 0; }
         }
 
-        /* Success state: green glow on button */
+        /* Success state: glow uses the widget style's own accent so the tick
+           matches every theme instead of a fixed green. */
         #mic-button.show-check {
-            box-shadow: 0 0 20px var(--success-soft, rgba(74, 222, 128, 0.5)), 0 0 8px var(--success, #4ade80), 0 8px 25px rgba(0,0,0,0.5);
-            border-color: var(--success, #4ade80);
+            box-shadow: 0 0 20px color-mix(in srgb, var(--primary) 55%, transparent), 0 0 8px var(--primary-hover, var(--primary)), 0 8px 25px rgba(0,0,0,0.5);
+            border-color: var(--primary);
         }
 
         /* Error state: error icon, red glow & shake */
