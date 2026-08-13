@@ -6,7 +6,7 @@ const test = require('node:test');
 const { deriveLocalModelKey, migrateConfig, validateSttConfig } = require('../stt/config');
 const { getModel, MODEL_REGISTRY } = require('../stt/model-registry');
 const { pcmToWav, validatePcm } = require('../stt/audio');
-const { ModelCache } = require('../stt/model-cache');
+const { ModelCache, downloadFile } = require('../stt/model-cache');
 const { sanitizeErrorMessage } = require('../stt/error-sanitizer');
 
 test('derives multilingual model keys (no language selection)', () => {
@@ -170,6 +170,24 @@ test('registry contains the six verified multilingual models', () => {
     }
 });
 
+test('every model has a pinned sha256 and full mirror file hashes', () => {
+    const HEX64 = /^[0-9a-f]{64}$/;
+    for (const [key, model] of Object.entries(MODEL_REGISTRY)) {
+        // Every archive must be pinned so integrity checks actually enforce.
+        assert.match(model.sha256, HEX64, `${key} must pin a 64-hex archive sha256`);
+        assert.ok(Array.isArray(model.expectedFiles) && model.expectedFiles.length > 0, `${key} must list expectedFiles`);
+
+        if (model.mirrorBase) {
+            // Per-file mirror downloads must cover every extracted file so a
+            // tampered mirror file is rejected before native code loads it.
+            assert.ok(model.fileHashes, `${key} must pin per-file mirror hashes`);
+            for (const file of model.expectedFiles) {
+                assert.match(model.fileHashes[file], HEX64, `${key} must pin a 64-hex hash for ${file}`);
+            }
+        }
+    }
+});
+
 test('validates PCM and writes a mono 16-bit WAV header', () => {
     const pcm = new Float32Array([0, -1, 1]);
     assert.equal(validatePcm(pcm, 16000).length, 3);
@@ -193,6 +211,47 @@ test('redacts API keys and authorization values from errors', () => {
     assert.equal(message.includes(googleKey), false);
     assert.equal(message.includes('top-secret'), false);
     assert.equal(message, 'request failed?key=[REDACTED] authorization: Bearer [REDACTED]');
+});
+
+test('redacts header-style keys and bare bearer tokens from errors', () => {
+    const key = `AIza${'B'.repeat(32)}`;
+    const message = sanitizeErrorMessage(new Error(
+        `x-goog-api-key: ${key}, api_key=${key}, x-api-key: ${key}, authorization: Bearer ${key}`
+    ));
+    assert.equal(message.includes(key), false);
+    assert.equal(
+        message,
+        'x-goog-api-key: [REDACTED], api_key=[REDACTED], x-api-key: [REDACTED], authorization: Bearer [REDACTED]'
+    );
+});
+
+test('model downloads reject non-HTTPS URLs (http and other schemes)', async () => {
+    const dest = path.join(os.tmpdir(), 'vtc-download-test.bin');
+    // downloadFile must refuse http:// (cleartext) and any non-https scheme
+    // before ever opening a socket; redirects to http:// hit the same guard.
+    await assert.rejects(() => downloadFile('http://example.com/model.tar.bz2', dest), /https/);
+    await assert.rejects(() => downloadFile('ftp://example.com/model.tar.bz2', dest), /https/);
+    assert.equal(fs.existsSync(dest), false);
+});
+
+test('model integrity verification rejects corrupted archives and files', async () => {
+    const { verifyArchiveIntegrity, verifyMirrorFile, hashFile } = require('../stt/model-cache');
+    const file = path.join(os.tmpdir(), 'vtc-integrity-test.bin');
+    fs.writeFileSync(file, 'fake model bytes');
+    const good = await hashFile(file);
+
+    // Matching hash → passes.
+    await assert.doesNotReject(() => verifyArchiveIntegrity({ sha256: good }, file));
+    // Wrong hash → rejected before the archive is ever extracted.
+    await assert.rejects(() => verifyArchiveIntegrity({ sha256: 'f'.repeat(64) }, file), /integrity/);
+    // No pinned hash → skips verification (no false rejections today).
+    await assert.doesNotReject(() => verifyArchiveIntegrity({}, file));
+
+    // Per-file mirror verification behaves the same.
+    await assert.doesNotReject(() => verifyMirrorFile({ fileHashes: { 'model.onnx': good } }, 'model.onnx', file));
+    await assert.rejects(() => verifyMirrorFile({ fileHashes: { 'model.onnx': 'f'.repeat(64) } }, 'model.onnx', file), /integrity/);
+
+    fs.rmSync(file, { force: true });
 });
 
 test('keeps model cache paths inside the configured cache directory', async () => {

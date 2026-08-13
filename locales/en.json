@@ -24,6 +24,7 @@
   "status.MODEL_UNAVAILABLE": "MODEL UNAVAILABLE",
   "status.MODEL_NOT_DOWNLOADED": "MODEL NOT DOWNLOADED",
   "status.RATE_LIMIT": "RATE LIMIT",
+  "status.AUTH_ERROR": "INVALID API KEY",
   "retry.btn": "↻ Transcribe Again",
   "settings.title": "Settings",
   "settings.language": "Language",

@@ -53,36 +53,7 @@ class SherpaAdapter {
         const registryModel = getModel(modelKey);
 
         let config;
-        if (registryModel.backend === 'parakeet') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    transducer: {
-                        encoder: getRequiredPath(modelPath, 'encoder.int8.onnx'),
-                        decoder: getRequiredPath(modelPath, 'decoder.int8.onnx'),
-                        joiner: getRequiredPath(modelPath, 'joiner.int8.onnx')
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt'),
-                    modelType: 'nemo_transducer'
-                },
-                numThreads: numThreadsFor(modelKey),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'nemo-ctc') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    nemoCtc: {
-                        model: getRequiredPath(modelPath, 'model.int8.onnx')
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: numThreadsFor(modelKey),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'nemo-transducer') {
+        if (registryModel.backend === 'nemo-transducer') {
             config = {
                 featConfig: { sampleRate: 16000, featureDim: 80 },
                 modelConfig: {
@@ -117,19 +88,6 @@ class SherpaAdapter {
                 featConfig: { sampleRate: 16000, featureDim: 80 },
                 modelConfig: {
                     fireRedAsrCtc: {
-                        model: getRequiredPath(modelPath, 'model.int8.onnx')
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: numThreadsFor(modelKey),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'omnilingual' || registryModel.modelType === 'omnilingual') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    omnilingual: {
                         model: getRequiredPath(modelPath, 'model.int8.onnx')
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')

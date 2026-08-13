@@ -44,8 +44,12 @@ function findModelRoot(directory, expectedFiles) {
 }
 
 function downloadFile(url, destination, onProgress, redirectCount = 0, abortSignal = null) {
-    if (!url.startsWith('https:') && !url.startsWith('http:')) {
-        return Promise.reject(new Error('Model download URL must be http(s).'));
+    // HTTPS-only: model archives are consumed by native code, so a cleartext
+    // download (or an https→http redirect) would be a supply-chain risk.
+    // The recursive redirect handling below re-enters this function, so any
+    // redirect target that downgrades to http:// is rejected here too.
+    if (!url.startsWith('https:')) {
+        return Promise.reject(new Error('Model download URL must be https.'));
     }
     if (redirectCount >= 5) {
         return Promise.reject(new Error('Too many redirects during model download.'));
@@ -54,7 +58,7 @@ function downloadFile(url, destination, onProgress, redirectCount = 0, abortSign
         return Promise.reject(new Error('Download cancelled.'));
     }
     return new Promise((resolve, reject) => {
-        const httpModule = url.startsWith('http:') ? require('http') : https;
+        const httpModule = https;
         let output = null;
         let request = null;
         let lastEmit = 0;
@@ -144,6 +148,9 @@ function downloadFile(url, destination, onProgress, redirectCount = 0, abortSign
 // Probe the remote size of a file (HEAD, following redirects). Used to give
 // the mirror fallback an accurate per-file progress total.
 function headRemoteSize(url, redirectCount = 0, abortSignal = null) {
+    if (!url.startsWith('https:')) {
+        return Promise.reject(new Error('Model mirror URL must be https.'));
+    }
     if (abortSignal?.aborted) {
         return Promise.reject(new Error('Download cancelled.'));
     }
@@ -151,7 +158,7 @@ function headRemoteSize(url, redirectCount = 0, abortSignal = null) {
         return Promise.reject(new Error('Too many redirects during model mirror probe.'));
     }
     return new Promise((resolve, reject) => {
-        const httpModule = url.startsWith('http:') ? require('http') : https;
+        const httpModule = https;
         const request = httpModule.request(url, { method: 'HEAD' }, response => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 response.resume();
@@ -249,6 +256,31 @@ async function hashFile(filePath) {
         input.on('data', chunk => hash.update(chunk));
         input.on('end', () => resolve(hash.digest('hex')));
     });
+}
+
+// Integrity verification (supply-chain). Pin a known-good sha256 in the
+// registry — `model.sha256` for the archive, `model.fileHashes[filename]` for
+// mirror per-file downloads. Until a hash is pinned the check is a no-op, so
+// installs without hashes keep working; any model WITH a hash is verified and
+// rejected on mismatch before it is ever extracted/loaded by native code.
+const SHA256_RE = /^[a-f0-9]{64}$/i;
+
+async function verifyArchiveIntegrity(model, archivePath) {
+    const expected = model && model.sha256;
+    if (!expected || !SHA256_RE.test(String(expected))) return;
+    const actual = await hashFile(archivePath);
+    if (actual.toLowerCase() !== String(expected).toLowerCase()) {
+        throw new Error('Downloaded model archive failed integrity verification.');
+    }
+}
+
+async function verifyMirrorFile(model, fileName, filePath) {
+    const expected = model && model.fileHashes && model.fileHashes[fileName];
+    if (!expected || !SHA256_RE.test(String(expected))) return;
+    const actual = await hashFile(filePath);
+    if (actual.toLowerCase() !== String(expected).toLowerCase()) {
+        throw new Error(`Downloaded model file failed integrity verification: ${fileName}`);
+    }
 }
 
 class ModelCache {
@@ -357,6 +389,8 @@ class ModelCache {
                     total: data.total || model.downloadBytes || 0
                 }), 0, abortSignal);
                 checkAbort();
+                await verifyArchiveIntegrity(model, archivePath);
+                checkAbort();
                 onProgress?.({ status: 'extracting', file: model.archiveName });
                 await extractArchive(archivePath, extractedDir, model.archiveType, model.expectedFiles, abortSignal);
                 checkAbort();
@@ -385,6 +419,7 @@ class ModelCache {
                 modelKey: model.key,
                 registryVersion: 1,
                 expectedFiles: model.expectedFiles,
+                sha256: model.sha256 || null,
                 installedAt: new Date().toISOString()
             }, null, 2), 'utf8');
             await fsp.rm(archivePath, { force: true });
@@ -438,6 +473,7 @@ class ModelCache {
                 loaded: data.loaded,
                 total: data.total || sizes[file] || totalBytes || model.downloadBytes || 0
             }), 0, abortSignal);
+            await verifyMirrorFile(model, file, dest);
         }
     }
 
@@ -467,5 +503,8 @@ class ModelCache {
 module.exports = {
     ModelCache,
     findModelRoot,
-    hashFile
+    hashFile,
+    downloadFile,
+    verifyArchiveIntegrity,
+    verifyMirrorFile
 };

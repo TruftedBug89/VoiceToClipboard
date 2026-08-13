@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, screen,
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
+const crypto = require('crypto');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { SttService } = require('./stt');
 const { migrateConfig, validateSttConfig, systemRamGB, recommendedTierForRam, WIDGET_STYLES } = require('./stt/config');
@@ -124,6 +125,22 @@ async function saveHistory(historyArray) {
     }
 }
 
+// Serialize all history read-modify-write operations so an append during a
+// clear/delete can't drop the new item or resurrect a deleted one (classic
+// lost-update when several IPC handlers hit loadHistory→saveHistory at once).
+let historyQueue = Promise.resolve();
+function mutateHistory(mutator) {
+    const run = async () => {
+        const history = await loadHistory();
+        const next = await mutator(history);
+        await saveHistory(Array.isArray(next) ? next : history);
+        return next;
+    };
+    const op = historyQueue.then(run, run);
+    historyQueue = op.then(() => {}, () => {});
+    return op;
+}
+
 async function saveRecordingAudio(request) {
     if (!request) return null;
     const config = loadConfig();
@@ -210,8 +227,17 @@ function flushConfigImmediately() {
         saveDebounceTimer = null;
     }
     if (cachedConfig) {
+        // Synchronous write: this runs from the 'will-quit' handler, where an
+        // async fs write would lose the race with process teardown and drop the
+        // user's last settings change (hotkey, position, API key, …).
         const configSnapshot = { ...loadConfig() };
-        writeQueue = writeQueue.then(() => performWriteToDisk(configSnapshot)).catch(() => {});
+        try {
+            const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+            fs.writeFileSync(tempPath, JSON.stringify(configSnapshot, null, 2), 'utf8');
+            fs.renameSync(tempPath, configPath);
+        } catch (e) {
+            console.error('Failed to save config synchronously:', e.message || e);
+        }
     }
 }
 
@@ -344,6 +370,12 @@ function getApiKeys() {
 }
 function getApiKey() { return getApiKeys()[0] || ''; }
 
+// Cooldowns are persisted keyed by a stable hash of the API key rather than the
+// raw key, so the plaintext secret isn't duplicated as a JSON property name.
+function cooldownKey(rawKey) {
+    return crypto.createHash('sha256').update(String(rawKey)).digest('hex').slice(0, 32);
+}
+
 function secureWebContents(webContents) {
     webContents.setWindowOpenHandler(({ url }) => {
         if (url === 'https://aistudio.google.com/apikey') shell.openExternal(url).catch(() => {});
@@ -464,6 +496,7 @@ function createSettingsWindow() {
     settingsWindow.loadFile('index.html', { query: { settings: '1' } });
     settingsWindow.on('closed', () => {
         sttService.cancelAllDownloads();
+        settleHotkeyCapture();
         settingsWindow = null;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('settings-window-closed');
@@ -719,7 +752,7 @@ app.on('will-quit', () => {
     clearInterval(foregroundPoll);
     clearInterval(widgetHoverPoll);
     uIOhook.stop();
-    // Do NOT unload native STT models here: vosk-koffi/sherpa-onnx native calls
+    // Do NOT unload native STT models here: sherpa-onnx native calls
     // racing with Electron teardown caused koffi.node fail-fast crashes (0xc0000409)
     // on exit. The OS reclaims model memory when the process ends.
 });
@@ -785,6 +818,7 @@ function ensureBubbleWindow() {
         },
     });
     bubbleWindow.setAlwaysOnTop(true, 'screen-saver');
+    secureWebContents(bubbleWindow.webContents);
     bubbleWindow.loadFile(path.join(__dirname, 'bubble.html'));
     bubbleWindow.webContents.on('did-finish-load', () => {
         if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
@@ -887,7 +921,9 @@ function deliverTranscriptionOutput(text) {
                 win32.setForegroundWindow(target);
                 const ok = win32.typeUnicodeText(clean);
                 if (ok) {
-                    clipboard.writeText(clean);
+                    // Unicode SendInput does not use the clipboard, so leave the
+                    // user's clipboard untouched (matches the "preserves
+                    // clipboard" promise shown in Settings).
                     typed = true;
                 }
             }
@@ -968,6 +1004,16 @@ const sttService = new SttService({
                 || /rate.?limit|quota|RESOURCE_EXHAUSTED|429|too many requests|daily/i.test(msg);
         };
 
+        // A rejected/expired key should fail fast with an honest message instead
+        // of fanning out across every model × every key and then reporting a
+        // generic "network error" after ~10 pointless API calls.
+        const isAuthError = (err) => {
+            const status = err && (err.status || err.code);
+            const msg = (err && (err.message || String(err))) || '';
+            if (status === 401 || status === 403) return true;
+            return status === 400 && /api key|unauthorized|forbidden|permission|invalid.?key|authentication/i.test(msg);
+        };
+
         // Rate-limited models AND API keys get a persisted 24h cooldown;
         // both are skipped until they expire (survives app restarts).
         const now = Date.now();
@@ -987,7 +1033,7 @@ const sttService = new SttService({
         const preferred = loadConfig().geminiModel || 'gemini-2.5-flash';
         const chain = [preferred, ...GEMINI_MODEL_LADDER.filter(m => m !== preferred)]
             .filter(m => !(modelCds[m] && modelCds[m] > now));
-        const usableKeys = keys.filter(k => !(keyCds[k] && keyCds[k] > now));
+        const usableKeys = keys.filter(k => !(keyCds[cooldownKey(k)] && keyCds[cooldownKey(k)] > now));
 
         if (usableKeys.length === 0 || chain.length === 0) {
             const why = usableKeys.length === 0 && chain.length === 0
@@ -1000,6 +1046,7 @@ const sttService = new SttService({
 
         let lastError = null;
         let usedModel = null;
+        let authFailures = 0;
         const keyRateHits = {}; // distinct-model 429s per key within this run
 
         outer:
@@ -1028,7 +1075,8 @@ const sttService = new SttService({
                         const cd = { ...(loadConfig().modelCooldowns || {}) };
                         if (cd[model]) { delete cd[model]; saveConfig({ modelCooldowns: cd }); }
                         const kd = { ...(loadConfig().keyCooldowns || {}) };
-                        if (kd[key]) { delete kd[key]; saveConfig({ keyCooldowns: kd }); }
+                        const ck = cooldownKey(key);
+                        if (kd[ck]) { delete kd[ck]; saveConfig({ keyCooldowns: kd }); }
                         if (model !== preferred) {
                             saveConfig({ geminiModel: model });
                             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1040,16 +1088,24 @@ const sttService = new SttService({
                     } catch (error) {
                         lastError = error;
                         console.warn(`Gemini API attempt failed (${model}):`, sanitizeErrorMessage(error));
+                        if (isAuthError(error)) {
+                            // A rejected/expired key is unusable for this run regardless
+                            // of model: skip it and try the next key. Only after every
+                            // usable key fails auth do we report AUTH_ERROR.
+                            authFailures++;
+                            continue outer;
+                        }
                         if (isRateLimitError(error)) {
                             // 24h cooldown for this model, move to the next one instantly.
                             const cd = { ...(loadConfig().modelCooldowns || {}) };
                             cd[model] = Date.now() + GEMINI_COOLDOWN_MS;
                             saveConfig({ modelCooldowns: cd });
                             // 2+ distinct-model 429s → this key's daily quota is spent: cool it too.
-                            keyRateHits[key] = (keyRateHits[key] || 0) + 1;
-                            if (keyRateHits[key] >= 2) {
+                            const rateKey = cooldownKey(key);
+                            keyRateHits[rateKey] = (keyRateHits[rateKey] || 0) + 1;
+                            if (keyRateHits[rateKey] >= 2) {
                                 const kd = { ...(loadConfig().keyCooldowns || {}) };
-                                kd[key] = Date.now() + GEMINI_COOLDOWN_MS;
+                                kd[cooldownKey(key)] = Date.now() + GEMINI_COOLDOWN_MS;
                                 saveConfig({ keyCooldowns: kd });
                                 continue outer;
                             }
@@ -1061,6 +1117,9 @@ const sttService = new SttService({
             }
         }
 
+        if (authFailures >= usableKeys.length) {
+            return { success: false, code: 'AUTH_ERROR', error: 'Gemini rejected the API key. Check your key in Settings.' };
+        }
         return { success: false, code: 'NETWORK_ERROR', error: sanitizeErrorMessage(lastError) };
     }
 });
@@ -1139,6 +1198,23 @@ function formatHotkey(hk) {
 
 let isRecordingHotkey = false;
 let hotkeyPromiseResolve = null;
+let hotkeyCaptureTimeout = null;
+
+// Settle any in-flight hotkey capture with the current hotkey and reset all
+// capture state. Prevents a stale capture from swallowing the next global
+// keypress or hanging the Settings "Change Key" promise forever.
+function settleHotkeyCapture() {
+    if (hotkeyCaptureTimeout) {
+        clearTimeout(hotkeyCaptureTimeout);
+        hotkeyCaptureTimeout = null;
+    }
+    isRecordingHotkey = false;
+    if (hotkeyPromiseResolve) {
+        const finish = hotkeyPromiseResolve;
+        hotkeyPromiseResolve = null;
+        finish(formatHotkey(loadConfig().customHotkey || currentHotkeyConfig));
+    }
+}
 
 ipcMain.handle('get-hotkey', () => {
     const config = loadConfig();
@@ -1146,13 +1222,25 @@ ipcMain.handle('get-hotkey', () => {
 });
 
 ipcMain.handle('start-recording-hotkey', async () => {
+    settleHotkeyCapture(); // never leave a previous capture pending
     isRecordingHotkey = true;
     return new Promise((resolve) => {
         hotkeyPromiseResolve = (hk) => {
+            if (hotkeyCaptureTimeout) { clearTimeout(hotkeyCaptureTimeout); hotkeyCaptureTimeout = null; }
             applyHotkeyConfig(hk);
             saveConfig({ customHotkey: hk });
             resolve(formatHotkey(hk));
         };
+        // Timeout so a capture can't hang forever if the user never presses a key.
+        hotkeyCaptureTimeout = setTimeout(() => {
+            hotkeyCaptureTimeout = null;
+            if (hotkeyPromiseResolve) {
+                const finish = hotkeyPromiseResolve;
+                hotkeyPromiseResolve = null;
+                isRecordingHotkey = false;
+                finish(formatHotkey(loadConfig().customHotkey || currentHotkeyConfig));
+            }
+        }, 10000);
     });
 });
 
@@ -1333,7 +1421,6 @@ async function appendTranscriptionToHistory(r, request, started, recordingFile) 
     const config = loadConfig();
     if (config.historyEnabled === false) return;
     try {
-        const history = await loadHistory();
         const item = {
             id: 'hist_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
             text: r.text,
@@ -1345,17 +1432,30 @@ async function appendTranscriptionToHistory(r, request, started, recordingFile) 
             durationMs: Date.now() - started,
             recordingFile: recordingFile || null
         };
-        history.unshift(item);
-        await saveHistory(history);
+        await mutateHistory(history => { history.unshift(item); return history; });
     } catch (e) {
         logApp(`[main] Failed to append history: ${e.message || e}`, 'WARN');
     }
 }
 
+// Compute the true byte size of an audio payload even when it arrives as a
+// plain Array (which has no .byteLength and previously bypassed the size guard).
+function audioPayloadBytes(request) {
+    const measure = (value, bytesPerElement) => {
+        if (!value) return 0;
+        if (typeof value.byteLength === 'number') return value.byteLength;
+        if (Array.isArray(value)) return value.length * bytesPerElement;
+        return 0;
+    };
+    if (request.pcm) return measure(request.pcm, 4); // Float32 = 4 bytes/sample
+    if (request.arrayBuffer) return measure(request.arrayBuffer, 1);
+    return 0;
+}
+
 ipcMain.handle('transcribe-audio', async (event, request) => {
     if (!request || typeof request !== 'object') return { success: false, code: 'BAD_REQUEST', error: 'Invalid transcription request.' };
-    const audioBytes = request.pcm ? request.pcm.byteLength : (request.arrayBuffer ? request.arrayBuffer.byteLength : 0);
-    if (audioBytes && audioBytes > 62914560) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
+    const audioBytes = audioPayloadBytes(request);
+    if (audioBytes > 62914560) return { success: false, code: 'AUDIO_TOO_LARGE', error: 'Audio payload exceeds size limit.' };
     const savedRecordingPath = await saveRecordingAudio(request);
     const config = loadConfig();
     const started = Date.now();
@@ -1428,14 +1528,12 @@ ipcMain.handle('history-list', async (_e, query = '') => {
 
 ipcMain.handle('history-delete', async (_e, id) => {
     if (!id) return { success: false };
-    const history = await loadHistory();
-    const filtered = history.filter(item => item.id !== id);
-    await saveHistory(filtered);
+    await mutateHistory(history => history.filter(item => item.id !== id));
     return { success: true };
 });
 
 ipcMain.handle('history-clear', async () => {
-    await saveHistory([]);
+    await mutateHistory(() => []);
     return { success: true };
 });
 

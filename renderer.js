@@ -1511,9 +1511,12 @@ async function renderHistoryList(query = '') {
             deleteBtn.className = 'btn-remove history-act-btn';
             deleteBtn.style.display = 'inline-block';
             deleteBtn.textContent = t('history.delete');
-            deleteBtn.addEventListener('click', async () => {
-                await window.api.history.delete(item.id);
-                renderHistoryList(historySearchInput ? historySearchInput.value : '');
+            deleteBtn.addEventListener('click', () => {
+                card.classList.add('removing');
+                setTimeout(async () => {
+                    await window.api.history.delete(item.id);
+                    renderHistoryList(historySearchInput ? historySearchInput.value : '');
+                }, 180);
             });
 
             actions.append(copyBtn, pasteBtn, deleteBtn);
@@ -2536,7 +2539,9 @@ async function startRecording() {
                         NO_API_KEY: t('status.NO_API_KEY'),
                         MODEL_UNAVAILABLE: t('status.MODEL_UNAVAILABLE'),
                         MODEL_NOT_DOWNLOADED: t('status.MODEL_NOT_DOWNLOADED'),
-                        RATE_LIMIT: t('status.RATE_LIMIT')
+                        RATE_LIMIT: t('status.RATE_LIMIT'),
+                        RATE_LIMITED: t('status.RATE_LIMIT'),
+                        AUTH_ERROR: t('status.AUTH_ERROR')
                     };
                     const statusText = statusMap[result.code] || t('status.ERROR');
                     setStatus('err', statusText);
@@ -2726,8 +2731,17 @@ async function retranscribeLast() {
     } else {
         const code = result?.code || 'ERROR';
         log(`[render] transcribe FAIL(retry) | code: ${code} | err: ${result?.error || ''} | engine: ${currentSttConfig?.sttEngine || '?'}`);
-        const status = code === 'NO_SPEECH' ? t('status.NO_SPEECH') : (code === 'MODEL_UNAVAILABLE' ? 'MODEL UNAVAILABLE' : (code === 'NO_API_KEY' ? 'NO API KEY' : (code === 'RATE_LIMITED' ? 'RATE LIMIT' : 'ERROR')));
-        setStatus('err', status);
+        const statusMap = {
+            NO_SPEECH: t('status.NO_SPEECH'),
+            MIC_TOO_QUIET: t('status.MIC_TOO_QUIET'),
+            NO_API_KEY: t('status.NO_API_KEY'),
+            MODEL_UNAVAILABLE: t('status.MODEL_UNAVAILABLE'),
+            MODEL_NOT_DOWNLOADED: t('status.MODEL_NOT_DOWNLOADED'),
+            RATE_LIMIT: t('status.RATE_LIMIT'),
+            RATE_LIMITED: t('status.RATE_LIMIT'),
+            AUTH_ERROR: t('status.AUTH_ERROR')
+        };
+        setStatus('err', statusMap[code] || t('status.ERROR'));
         triggerErrorState();
         if (isRetryableFailure(code)) {
             showRetryButton();

@@ -24,6 +24,7 @@
   "status.MODEL_UNAVAILABLE": "MODELO NO DISPONIBLE",
   "status.MODEL_NOT_DOWNLOADED": "MODELO NO DESCARGADO",
   "status.RATE_LIMIT": "LÍMITE ALCANZADO",
+  "status.AUTH_ERROR": "CLAVE API NO VÁLIDA",
   "retry.btn": "↻ Transcribir de nuevo",
   "settings.title": "Ajustes",
   "settings.language": "Idioma",

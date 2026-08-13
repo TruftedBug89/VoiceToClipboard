@@ -1,7 +1,7 @@
 # Contributing to VoiceToClipboard
 
 A lightweight, always-on-top Windows 10/11 widget that records your voice and copies the
-transcription to the clipboard via **Gemini (cloud)** or a **local offline model** (sherpa/vosk).
+transcription to the clipboard via **Gemini (cloud)** or a **local offline model** (sherpa-onnx).
 
 ## Prerequisites
 - Windows 10/11 (this is a Windows-only app).

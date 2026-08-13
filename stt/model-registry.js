@@ -4,6 +4,13 @@
 // the user never picks a language. Tiers map 1:1 to models; the Settings UI
 // lists them all so the user can pick the trade-off they want
 // (download size / RAM / precision / language coverage).
+//
+// Integrity pins (verified 2026-08-13 against the live release assets):
+//   sha256      — hex sha256 of the downloaded archive (downloadUrl).
+//   fileHashes  — { filename: hex sha256 } for per-file mirror downloads.
+// model-cache.js verifies these in install() (see verifyArchiveIntegrity /
+// verifyMirrorFile). A model without a pin skips the check; a model WITH a
+// pin is rejected on mismatch before its files are ever loaded by native code.
 const MODEL_REGISTRY = Object.freeze({
     'tiny-multilingual': {
         key: 'tiny-multilingual',
@@ -19,6 +26,14 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['preprocess.onnx', 'encode.int8.onnx', 'uncached_decode.int8.onnx', 'cached_decode.int8.onnx', 'tokens.txt'],
         downloadBytes: 250807309,
+        sha256: '21870cecaa2e44e4e2bf63e02d1072bed183ccd10284871353bd9d24dad14e5e',
+        fileHashes: {
+            'preprocess.onnx': 'ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2',
+            'encode.int8.onnx': '7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2',
+            'uncached_decode.int8.onnx': 'c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987',
+            'cached_decode.int8.onnx': '2db74e51cedf64a8b1be3c8192e0bb5e4923af0e90bd9e87f8e8771873f8ea03',
+            'tokens.txt': '1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea'
+        },
         ramEstimate: 'about 290 MB RAM',
         sourceUrl: 'https://github.com/usefulsensors/moonshine',
         license: 'MIT License (Useful Sensors)',
@@ -38,6 +53,7 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt'],
         downloadBytes: 102 * 1024 * 1024,
+        sha256: '06072bad277f0f4c29cc866d7c62b0e47936da39afafeae453faa925025ccad6',
         ramEstimate: 'about 270 MB RAM',
         sourceUrl: 'https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer.html',
         license: 'NVIDIA model release (CC-BY-4.0)',
@@ -58,6 +74,11 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['model.int8.onnx', 'tokens.txt'],
         downloadBytes: 158 * 1024 * 1024,
+        sha256: '7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63',
+        fileHashes: {
+            'model.int8.onnx': '12ca1a2ae7ecf3e0019ef2822307ee0b5cadc9196569e379b4c4026f8205276d',
+            'tokens.txt': 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc'
+        },
         ramEstimate: 'about 400 MB RAM',
         sourceUrl: 'https://github.com/FunAudioLLM/SenseVoice',
         license: 'SenseVoice model license (Apache-2.0 compatible)',
@@ -78,6 +99,12 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['small-encoder.int8.onnx', 'small-decoder.int8.onnx', 'small-tokens.txt'],
         downloadBytes: 639387718,
+        sha256: '486a46afbb7ba798507190ffe02fea2dd726049af212e774537efac6afb210a6',
+        fileHashes: {
+            'small-encoder.int8.onnx': '4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9',
+            'small-decoder.int8.onnx': 'acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee',
+            'small-tokens.txt': 'b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126'
+        },
         ramEstimate: 'about 550 MB RAM',
         sourceUrl: 'https://github.com/openai/whisper',
         license: 'MIT License (OpenAI)',
@@ -98,6 +125,12 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['turbo-encoder.int8.onnx', 'turbo-decoder.int8.onnx', 'turbo-tokens.txt'],
         downloadBytes: 563790207,
+        sha256: 'b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22',
+        fileHashes: {
+            'turbo-encoder.int8.onnx': 'b02dcdf54f348741e93fe732b67d933c8dcb6735655f710640143081db38878b',
+            'turbo-decoder.int8.onnx': '20accd02388482eb3a46bd615631adfdc85e1eb2c7db9ea3f02a40ffe6b81547',
+            'turbo-tokens.txt': 'b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126'
+        },
         ramEstimate: 'about 950 MB RAM',
         sourceUrl: 'https://github.com/openai/whisper',
         license: 'MIT License (OpenAI)',
@@ -118,6 +151,11 @@ const MODEL_REGISTRY = Object.freeze({
         archiveType: 'tar.bz2',
         expectedFiles: ['model.int8.onnx', 'tokens.txt'],
         downloadBytes: 496 * 1024 * 1024,
+        sha256: '1da8b737ecc5e29f36759a4460c754863e7c919a4ba325aea187331fbfc83274',
+        fileHashes: {
+            'model.int8.onnx': 'ca3dbabd82170110cc0b343c2890866d449984bc9cd92b9a18371ff80a81bb99',
+            'tokens.txt': '1bc613de2112d257e61a349c3e72d1b1a9cf19c33d3ca954197ad2171e5ea07b'
+        },
         ramEstimate: 'about 1.1 GB RAM',
         sourceUrl: 'https://github.com/FireRedTeam/FireRedASR',
         license: 'FireRedASR model license',

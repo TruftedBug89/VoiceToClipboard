@@ -24,6 +24,7 @@
   "status.MODEL_UNAVAILABLE": "模型不可用",
   "status.MODEL_NOT_DOWNLOADED": "模型未下载",
   "status.RATE_LIMIT": "已达限制",
+  "status.AUTH_ERROR": "API 密钥无效",
   "retry.btn": "↻ 重新转写",
   "settings.title": "设置",
   "settings.language": "语言",

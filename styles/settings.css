@@ -660,6 +660,21 @@
             letter-spacing: 0;
             font-weight: 700;
         }
+        /* Subtle staggered entrance for the settings window sections */
+        body.settings-window .settings-section {
+            animation: settingsWindowSectionIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+        }
+        body.settings-window .settings-section:nth-child(2) { animation-delay: 0.02s; }
+        body.settings-window .settings-section:nth-child(3) { animation-delay: 0.04s; }
+        body.settings-window .settings-section:nth-child(4) { animation-delay: 0.06s; }
+        body.settings-window .settings-section:nth-child(5) { animation-delay: 0.08s; }
+        body.settings-window .settings-section:nth-child(6) { animation-delay: 0.10s; }
+        body.settings-window .settings-section:nth-child(7) { animation-delay: 0.12s; }
+        body.settings-window .settings-section:nth-child(8) { animation-delay: 0.14s; }
+        @keyframes settingsWindowSectionIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
         /* Flat controls */
         body.settings-window .input-group select,
         body.settings-window .input-group input[type="text"],
@@ -1092,10 +1107,22 @@
             gap: 6px;
             backdrop-filter: blur(12px);
             transition: border-color 0.15s ease, background 0.15s ease;
+            animation: history-card-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) backwards;
         }
         .history-card:hover {
             border-color: rgba(255, 255, 255, 0.2);
             background: rgba(0, 0, 0, 0.38);
+        }
+        .history-card.removing {
+            animation: history-card-out 0.18s ease forwards;
+            pointer-events: none;
+        }
+        @keyframes history-card-in {
+            from { opacity: 0; transform: translateY(6px) scale(0.98); }
+            to   { opacity: 1; transform: none; }
+        }
+        @keyframes history-card-out {
+            to { opacity: 0; transform: translateX(14px) scale(0.96); }
         }
 
         .history-card-header {

@@ -1,137 +1,124 @@
-# VoiceToClipboard — Visual Redesign, Feedback & Bug-Fix Plan
+# VoiceToClipboard — Improvement Plan (v4.1.x hardening pass)
 
-_Scope: keep the visual identity the user already likes (glass widget, crimson orb, sonar rings, themes). Add much stronger feedback for **transcribing / success / failure**, and eliminate the "little design issues" so every state and every theme feels fully unified. Also fix bugs found during the audit._
+> Tailored to the owner's 10 answers on 2026-08-13. This is the working plan for the
+> "improve everything" pass. Items are marked **[DONE]** / **[TODO]** and ordered by priority.
 
----
+## Decisions from the Q&A
 
-## 1. App snapshot (what exists today)
+1. **Model integrity (C1):** pin real hashes **now** — `sha256` (archive) + `fileHashes`
+   (mirror per-file) for all six models.
+2. **Priority areas:** all of them — Security hardening, UI & animations, Performance/RAM,
+   Packaging & portability, Docs & tests.
+3. **Multi-key auth:** in practice one effective key (env + settings, env-grabbed). Make the
+   auth handling robust regardless: skip a rejected key, continue to the rest, return
+   `AUTH_ERROR` only after every key fails.
+4. **Unicode autotype clipboard:** leave the user's clipboard untouched (professional + matches
+   the documented "preserves clipboard" promise). **[DONE]**
+5. **Dead code:** remove VoskAdapter + `vosk-koffi` **fully** (code + dependency + asarUnpack),
+   and trim unreachable sherpa backend branches. Add `koffi` as a direct dependency (it is
+   required by `win32.js`, `koffi-asar-fix.js`, `ort-preload.js` but only pulled in transitively
+   via vosk-koffi today).
+6. **Animation style:** **Moderate** — current level plus a few tasteful entrance/hover effects.
+7. **History default:** **opt-in (off)** — keep config default `false`; remove the misleading
+   `checked` attribute from `history-enabled-checkbox` in `index.html`.
+8. **Docs drift:** just update `AGENTS.md` to match the shipped registry (no drift test).
+9. **Tests:** keep the existing suite and add new tests with the current `node:test` setup.
+10. **Packaging extras (plan2 leftovers):** none selected — compression, CI size guard, lite
+    build, and ORT memory options stay out of scope for now.
 
-- **Electron widget** (`index.html` + `renderer.js`, 2722 lines) — a click-through floating mic orb with a canvas visualizer, sonar/aura/spin rings, and a frameless Settings window.
-- **Styling** is split into 4 files loaded in order: `styles/base.css` (mic + FX), `styles/widget.css` (status badge), `styles/settings.css` (modal + controls), `styles/themes.css` (4 widget styles: Crimson/Ocean/Aurora/Terminal via `:root[data-widget-style]`).
-- **State machine (renderer):** idle → `starting` → `recording` → `transcribing` → `done`/`err` (or `cancelled`). Visuals are driven by classes on `#mic-button`, `#mic-container`, `#status-badge` and `body`.
-- **Feedback surfaces today:**
-  - `#status-badge` (dot + text) with modes `busy | done | dim | err`.
-  - `#mic-button` FX classes: `recording`, `transcribing`, `pop`, `burst`, `show-check`.
-  - Success chime (`playFinishChime`, E5→A5), gated by the "finish sound" setting.
-  - `#retry-btn` ("Transcribe Again") on retryable failures.
+## Status board
 
----
+### A. Security & integrity
+- [x] HTTPS-only downloads + redirects (`stt/model-cache.js`).
+- [x] Archive/file sha256 verification plumbing (`verifyArchiveIntegrity` / `verifyMirrorFile`),
+      wired into install, hash recorded in `installation.json`, exported + tested.
+- [x] **Pin real hashes now** — `sha256` + `fileHashes` filled for all six models in
+      `stt/model-registry.js` (fetched live from the GitHub release digests + HF LFS oids).
+      Registry test asserts every model has a valid 64-hex `sha256` and full mirror `fileHashes`.
+- [x] Gemini auth errors fail fast → `AUTH_ERROR` + i18n + status mapping.
+- [x] Make auth handling skip-and-continue across keys (multi-key safe) — `AUTH_ERROR` only after
+      every usable key fails auth; failed keys are skipped for the run.
+- [x] Sync config flush on quit (no lost settings).
+- [x] History write serialization (`mutateHistory`).
+- [x] Audio size guard computes bytes correctly.
+- [x] Bubble window `secureWebContents`.
+- [x] API-key cooldowns keyed by sha256 hash (no plaintext keys as property names).
+- [x] Error sanitizer broadened (`x-goog-api-key`, `x-api-key`, `api_key`, bare `Bearer`).
+- [x] Logger best-effort wording + in-session rotation (`app.log` → `app.log.1`).
 
-## 2. Root problem: states & themes don't fully "merge into the style"
+### B. UI & animations (moderate)
+- [x] History card entrance + delete-out animations.
+- [x] Paste bubble springy entrance + reduced-motion guard.
+- [x] A few more tasteful accents: settings-window section entrance stagger, style-swatch hover
+      elevation, smoother status-badge color/dot transitions.
 
-### 2.1 Semantic colors are hardcoded, not theme-aware
-Literal color audit (should be design tokens instead):
+### C. Performance / RAM (already mostly shipped in `9cfd103`)
+- [x] Lazy native STT loading, idle-unload timer, deferred unload, `--max-old-space-size=256`.
+- [x] Remove dead `vosk-koffi` native load path + unreachable sherpa branches
+      (`parakeet`, `nemo-ctc`, `omnilingual`).
 
-| File | crimson literals | green literals | amber literals |
-|---|---|---|---|
-| base.css | 2 | 4 | 0 |
-| widget.css | 0 | 2 | 0 |
-| **settings.css** | **27** | 10 | 6 |
-| themes.css | 3 | 0 | 0 |
+### D. Packaging & portability
+- [x] Portable data dir (`PORTABLE_EXECUTABLE_DIR`).
+- [x] Drop `vosk-koffi` from dependencies + `asarUnpack`; add `koffi` as a direct dependency
+      (lockfile re-synced via `npm install`).
 
-Consequences:
-- The **Settings modal is hardwired crimson** (`rgba(230,57,70,…)` ×27). When the widget style is Ocean (blue), Aurora (purple) or Terminal (green), the widget changes but the settings panel, focus glows, toggles, save button and scrollbar **stay red** — the biggest "doesn't merge" issue.
-- **Error state == brand color.** `#status-badge.err` and `#retry-btn` reuse `--primary`. In non-Crimson themes an "error" shows up blue/purple/green, so failure reads as normal. Error has no dedicated semantic color.
-- **Two different greens** for success: `#4ade80` (mic glow, done dot) vs `#10b981` (status pill "ready"). No single success token.
+### E. Docs & tests
+- [x] Update `AGENTS.md` to match `stt/model-registry.js` (deps, archive extraction, verified
+      wording now notes pinned sha256; RAM/tier figures already matched).
+- [x] New tests: HTTPS-only rejection; integrity verification.
+- [x] New tests: registry hash coverage; sanitizer header/bearer patterns (no new config keys
+      were added, so no new migration test needed).
 
-### 2.2 Fix: introduce a semantic token layer (in `base.css :root`, overridable per theme)
+## §1 — Hash-pinning strategy (the "now" item)
+
+Preferred order (fast → slow, no 2.1 GB download unless an API lacks the data):
+
+1. **GitHub release asset `digest`** — `GET https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/tags/asr-models`
+   returns an `assets[]` array; each asset carries `name` and (since ~2023) a `digest` field that
+   is the sha256 of the uploaded archive. Match `archiveName` → `sha256`.
+2. **Hugging Face LFS oid** — for each `mirrorBase`, `GET https://huggingface.co/api/models/{repo}/tree/main`
+   returns per-file `oid` (sha256) and `path`. Map `expectedFiles` leaf names → `fileHashes`.
+3. **Fallback:** if an API omits the digest/oid, download that one archive and `hashFile()` it
+   locally (the verifier already computes sha256), then record the value.
+
+Validation: a new `tests` assertion that every registry entry has a 64-hex `sha256`, and every
+model with a `mirrorBase` has `fileHashes` for all `expectedFiles`. No runtime behavior changes
+beyond the verifier now actually enforcing.
+
+## §2 — Dead-code removal (vosk)
+
+- `stt/index.js`: delete the `vosk` getter, the `backend === 'vosk'` branch, and the `_vosk`
+  cleanup in `remove()` / `unloadAll()`.
+- Delete `stt/vosk-adapter.js`.
+- `stt/sherpa-adapter.js`: remove unreachable branches — `parakeet`, `nemo-ctc`, `omnilingual`
+  (no registry entry uses them; the registry backends are moonshine, nemo-transducer,
+  sense-voice, whisper, fire-red-asr-ctc).
+- `package.json`: remove `vosk-koffi`; add `koffi` (version = the one vosk-koffi pulled in).
+- `asarUnpack`: remove `node_modules/vosk-koffi/**/*`; keep `node_modules/koffi/**/*`.
+- `npm install` (or `npm uninstall vosk-koffi` + `npm install koffi@…`) to sync the lockfile.
+- Verify native loading still works: `koffi` loads `user32.dll` in `win32.js` and the sherpa DLLs
+  via `ort-preload.js`; the `koffi-asar-fix` ordering (before `preloadOrt`) must be preserved.
+
+## §3 — Multi-key auth (skip-and-continue)
+
+In `main.js` `geminiTranscriber`: on `isAuthError(error)`, mark that key as unusable for this run
+(skip it), continue to the next key; if every usable key fails auth, return
+`{ success:false, code:'AUTH_ERROR' }`. Keep the single-key case identical to today.
+
+## §4 — Docs (AGENTS.md)
+
+Reconcile with the registry: six models (moonshine / nemo-transducer / sense-voice /
+whisper-small / whisper-turbo / fire-red-asr-ctc), correct RAM figures (tiny 290 / mini 270 /
+zh-light 400 / light 550 / big 950 / zh-big 1.1 GB), default tier = `light`, and soften the
+"verified" claim to "has a pinned sha256 once the hash pass lands".
+
+## §5 — Verification (after each change)
+
+```bash
+npm run check        # syntax OK
+npm run check:i18n   # en/es/zh parity
+npm test             # existing + new tests green
 ```
---success: #4ade80;  --success-soft: rgba(74,222,128,.15);
---danger:  #ff5468;  --danger-soft:  rgba(255,84,104,.16);
---warning: #f59e0b;  --warning-soft: rgba(245,158,11,.14);
---focus-glow: color-mix(in srgb, var(--primary) 35%, transparent);
-```
-Then **replace every hardcoded `rgba(230,57,70,…)` in settings.css with `--primary`/`color-mix(... var(--primary) …)`** and every hardcoded green/amber with `--success`/`--warning`. Keep `--danger` independent of `--primary` so failure is always visually distinct **even on the Crimson theme** (use a slightly hotter/pinker red + a shake, see §3.3).
 
----
-
-## 3. Feedback redesign (the headline request)
-
-Keep the existing look; make each phase unmistakable and on-theme.
-
-### 3.1 TRANSCRIBING (make "working" obvious)
-- Keep the fast spin-ring + `transcribing-pulse`.
-- Add an **indeterminate progress arc / animated dots** to the status badge text (`TRANSCRIBING·`, `··`, `···`) so it never looks frozen on slow local models.
-- Show a subtle **shimmer sweep** across the mic button while transcribing (theme-tinted via `--primary`).
-- Badge dot already becomes a spinner in `busy` — good; ensure it uses `--primary` (already does) so it themes correctly.
-
-### 3.2 SUCCESS (unify + strengthen)
-- Keep check-morph + `burst` + `container-breath` + chime.
-- Route the green through the new `--success` token everywhere (mic glow, done dot, `✓ COPIED/TYPED` text) so it's one consistent green.
-- Add a brief **success ripple** reusing the `.burst-ring` but tinted `--success`, plus a 1-line ephemeral confirmation ("Copied to clipboard" / "Typed at cursor") fading after ~1.6 s (matches current `hideStatus` timing).
-
-### 3.3 FAILURE (currently the weakest — biggest win)
-Today failure only recolors the badge (and to brand red). Add:
-- **`#mic-button.error` state:** morph the mic icon to an **✕ / error glyph**, glow with `--danger`, and a **short shake** (`@keyframes error-shake`). Symmetric to the success `show-check`.
-- **`#status-badge.err`** uses `--danger`/`--danger-soft` (not `--primary`), so failure is always red regardless of theme.
-- **Distinct error tone** (single low tone) — reuse the WebAudio chime helper; gate by the same finish-sound setting.
-- **Clear, human status text per code** (extend the existing map): `NO_SPEECH → "No speech heard"`, `MIC_TOO_QUIET → "Mic too quiet"`, `NO_API_KEY → "Add a Gemini key"`, `MODEL_UNAVAILABLE/NOT_DOWNLOADED → "Download a model"`, `RATE_LIMITED → "Rate limited"`, default → "Transcription failed". Localize via `locales/*.json`.
-- Keep `#retry-btn`, but theme it with `--danger` and make it visually tied to the error glyph.
-
-### 3.4 Consistency pass so states never overlap
-- Ensure only one terminal state is visible at a time (clear `show-check`/`error` before setting a new one).
-- Align the vertical stack: `#status-badge` (top:158) and `#retry-btn` (top:168) currently nearly overlap — move retry below the badge with proper spacing so both can show without collision.
-
----
-
-## 4. Bugs / issues found during audit
-
-1. **Error state not theme-aware** (§2.1) — error is invisible/wrong-colored on Ocean/Aurora/Terminal. _Fix via `--danger`._
-2. **Settings modal ignores active theme** — 27 crimson literals. _Fix via tokens._
-3. **Inconsistent success greens** (`#4ade80` vs `#10b981`). _Unify to `--success`._
-4. **Aurora theme ring mismatch** — the blob button morphs its border-radius, but `.sonar-ring/.spin-ring/.burst-ring` are only re-shaped for Ocean & Terminal, so Aurora's rings stay circular around a blob. _Add Aurora ring overrides._
-5. **`#submit-icon` uses success-green while recording** — a green check during an active recording can read as "done." _Consider tinting it neutral/`--primary` to avoid confusing it with the success state._
-6. **Badge/retry overlap** (§3.4).
-7. **No failure audio/haptic-style cue** — success has a chime, failure has nothing (§3.3).
-8. **`prefers-reduced-motion`** nukes ALL transitions globally (`transition-duration: .01ms !important`) — acceptable, but verify state changes (success/error) still read without motion (they rely on color/glyph, which is fine once §3 lands).
-9. **Verify no duplicate/conflicting `const finishSoundCheckbox`** (declared around lines 1543 and 1889) — confirm they're function-scoped, not a redeclare error, during the JS cleanup pass.
-
----
-
-## 5. File-by-file change list
-
-- **`styles/base.css`**
-  - Add semantic token block to `:root`.
-  - Add `#mic-button.error` glyph/glow + `@keyframes error-shake`.
-  - Add transcribing shimmer.
-  - Swap hardcoded greens → `--success`.
-- **`styles/widget.css`**
-  - `#status-badge.err` → `--danger`; `.done` → `--success`.
-  - Animated `busy` dots hook if using CSS.
-- **`styles/settings.css`**
-  - Replace all `rgba(230,57,70,…)` → `--primary` / `color-mix(...)`.
-  - Replace greens → `--success`, ambers → `--warning`.
-  - Re-position `#retry-btn` to avoid badge overlap; theme with `--danger`.
-- **`styles/themes.css`**
-  - Optionally per-theme `--danger`/`--success` tweaks (e.g. Terminal keeps neon).
-  - Add Aurora ring border-radius overrides.
-- **`index.html`**
-  - Add `#error-icon` SVG (✕) inside the mic button next to `#check-icon`.
-  - Minor: normalize the mixed-indentation Language section.
-- **`renderer.js`**
-  - `setStatus`: support animated busy dots; ensure single terminal state.
-  - Success path: add success-ripple hook; keep chime.
-  - Failure path: add `micBtn.classList.add('error')` + timed removal, play error tone, use richer per-code status text.
-  - Extend the code→message map; ensure retry button positioned/shown consistently.
-- **`locales/en.json` / `es.json` / `zh.json`**
-  - Add the new status strings (`status.NO_SPEECH` exists; add the rest) so feedback is localized.
-
----
-
-## 6. Execution phases
-
-1. **Tokens & theme unification** — add semantic tokens; de-hardcode settings.css; wire `--danger`/`--success`/`--warning`. (Foundational; unblocks the rest.)
-2. **Failure feedback** — error glyph, shake, `--danger` badge, error tone, per-code messages + locales.
-3. **Transcribing + success polish** — busy dots/shimmer, success ripple, unified green.
-4. **Consistency & bug sweep** — badge/retry layout, Aurora rings, submit-icon color, single-terminal-state guard, JS cleanup (item 9).
-5. **Verify** — `npm run check`, `npm run check:i18n`, `npm test`; manual pass of each state across all 4 widget styles (Crimson/Ocean/Aurora/Terminal) confirming feedback is clear and on-theme.
-
----
-
-## 7. Acceptance criteria
-
-- Transcribing, success, and failure are each **instantly distinguishable** (color + glyph + motion + optional sound).
-- **No hardcoded crimson** remains in settings.css; the whole UI (widget + settings) recolors correctly for all 4 themes.
-- Failure always reads as an error (dedicated `--danger`) on every theme.
-- No overlapping/clipped feedback elements; rings match button shape on every theme.
-- All checks/tests pass; new strings localized in en/es/zh.
+Manual (when runnable): dictation cycle still works; Unicode autotype leaves clipboard alone;
+a bad Gemini key reports INVALID API KEY fast; a bad model hash aborts install.

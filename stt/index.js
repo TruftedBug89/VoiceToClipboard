@@ -18,22 +18,12 @@ class SttService {
         this.copyText = copyText;
         this.cache = new ModelCache(modelsDir);
         this.geminiTranscriber = geminiTranscriber;
-        this._vosk = null;
         this._sherpa = null;
         this.queue = Promise.resolve();
         this.activeDownloads = new Map();
         this.idleTimer = null;
         this.idleUnloadSeconds = 20;
         this._pendingUnload = null;
-    }
-
-    get vosk() {
-        if (!this._vosk) {
-            require('./koffi-asar-fix').applyKoffiAsarFix();
-            const { VoskAdapter } = require('./vosk-adapter');
-            this._vosk = new VoskAdapter(this.cache);
-        }
-        return this._vosk;
     }
 
     get sherpa() {
@@ -154,7 +144,6 @@ class SttService {
 
     async remove(modelKey) {
         this.cancelDownload(modelKey);
-        if (this._vosk?.loaded?.modelKey === modelKey) await this.vosk.unload();
         if (this._sherpa?.loaded?.modelKey === modelKey) await this.sherpa.unload();
         await this.cache.remove(modelKey);
         return { success: true };
@@ -167,7 +156,6 @@ class SttService {
         // recognizer while a decode is in flight (settings saves call unloadAll
         // on every change, even mid-transcription).
         const doUnload = async () => {
-            if (this._vosk) await this._vosk.unload();
             if (this._sherpa) await this._sherpa.unload();
         };
         this.queue = this.queue.then(doUnload, doUnload);
@@ -175,7 +163,7 @@ class SttService {
     }
 
     // Hygiene: delete model cache entries that are no longer in the registry
-    // (e.g. per-language Vosk/Moonshine models replaced by the multilingual set).
+    // (e.g. per-language Moonshine models replaced by the multilingual set).
     async cleanupStale() {
         await this.cache.removeStaleModels(Object.keys(this.registry));
     }
@@ -186,7 +174,7 @@ class SttService {
         const model = getModel(modelKey);
         if (!model.verified) throw new Error(model.unavailableReason || 'This model is not available.');
         if (!(await this.cache.isInstalled(modelKey))) throw new Error('Model weights are not downloaded yet.');
-        const adapter = model.backend === 'vosk' ? this.vosk : this.sherpa;
+        const adapter = this.sherpa;
         const text = await adapter.transcribe(modelKey, pcm, sampleRate, { uiLanguage });
 
         if (ecoMode !== false) {
