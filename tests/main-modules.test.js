@@ -6,6 +6,8 @@ const test = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const ipcSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'ipc.js'), 'utf8');
 const { clipTranscript } = require('../src/main/delivery');
 const { audioPayloadBytes } = require('../src/main/recordings-store');
 const { L, mapUiLanguage } = require('../src/main/i18n');
@@ -48,4 +50,21 @@ test('main i18n helper resolves translations and variable interpolations', () =>
 
     const formatted = L('autostop.seconds.1.5', null, 'en');
     assert.equal(formatted, '1.5 sec');
+});
+
+test('main process resolves live window state instead of a destructured null getter', () => {
+    assert.match(mainSource, /const windows = require\('\.\/src\/main\/windows'\);/);
+    assert.match(mainSource, /initForegroundPolling\(\(\) => windows\.mainWindow\)/);
+    assert.doesNotMatch(mainSource, /broadcastSettingsChanged,\s*mainWindow/);
+    assert.match(ipcSource, /windows\.mainWindow\.setIgnoreMouseEvents/);
+    assert.doesNotMatch(ipcSource, /if \(mainWindow \|\| mainWindow\.isDestroyed\(\)\)/);
+    assert.match(ipcSource, /delivery\.lastDeliveryTyped/);
+    assert.match(ipcSource, /hotkeys\.currentHotkeyConfig/);
+});
+
+test('foreground polling supports every target-dependent output mode', () => {
+    const deliverySource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'delivery.js'), 'utf8');
+    assert.match(deliverySource, /config\.outputMode === 'autotype'/);
+    assert.match(deliverySource, /config\.outputMode === 'bubble'/);
+    assert.match(deliverySource, /config\.outputMode === 'toast'/);
 });

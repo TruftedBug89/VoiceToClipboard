@@ -19,6 +19,7 @@ const {
     initForegroundPolling,
     stopForegroundPolling
 } = require('./src/main/delivery');
+const windows = require('./src/main/windows');
 const {
     createMainWindow,
     showSettingsWindow,
@@ -26,9 +27,8 @@ const {
     ensureWidgetOnScreen,
     initWidgetHoverPoll,
     stopWidgetHoverPoll,
-    broadcastSettingsChanged,
-    mainWindow
-} = require('./src/main/windows');
+    broadcastSettingsChanged
+} = windows;
 const { createTray, updateTrayMenu } = require('./src/main/tray');
 const { initHotkeys, stopHotkeys, settleHotkeyCapture } = require('./src/main/hotkeys');
 const { cleanupJunk } = require('./src/main/hygiene');
@@ -46,10 +46,10 @@ if (!gotTheLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-            mainWindow.show();
+        if (windows.mainWindow) {
+            if (windows.mainWindow.isMinimized()) windows.mainWindow.restore();
+            windows.mainWindow.focus();
+            windows.mainWindow.show();
         }
     });
 
@@ -58,8 +58,8 @@ if (!gotTheLock) {
         copyText: text => deliverTranscriptionOutput(text),
         geminiTranscriber: createGeminiTranscriber({
             onFallback: (model) => {
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('gemini-fallback', model);
+                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) {
+                    windows.mainWindow.webContents.send('gemini-fallback', model);
                 }
             },
             onDeliver: (text) => deliverTranscriptionOutput(text)
@@ -68,7 +68,7 @@ if (!gotTheLock) {
 
     const updateTray = () => updateTrayMenu({
         onToggleRecording: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
+            if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
         },
         onResetPosition: () => resetWidgetPosition(),
         onShowSettings: () => showSettingsWindow({
@@ -77,15 +77,15 @@ if (!gotTheLock) {
         }),
         onAlwaysOnTopChange: (checked) => {
             saveConfig({ alwaysOnTop: checked });
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(checked);
+            if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(checked);
             updateTray();
             broadcastSettingsChanged(sttService, updateTray);
         },
         onQuit: () => app.quit(),
         onToggleWindow: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                if (mainWindow.isVisible()) mainWindow.focus();
-                else mainWindow.show();
+            if (windows.mainWindow && !windows.mainWindow.isDestroyed()) {
+                if (windows.mainWindow.isVisible()) windows.mainWindow.focus();
+                else windows.mainWindow.show();
             }
         }
     });
@@ -93,9 +93,14 @@ if (!gotTheLock) {
     registerIpcHandlers({ sttService, updateTray });
 
     app.whenReady().then(async () => {
-        await migrateLegacyUserData();
-        await sttService.prepare();
-        await cleanupJunk(sttService);
+        try {
+            await migrateLegacyUserData();
+            await sttService.prepare();
+            await cleanupJunk(sttService);
+        } catch (error) {
+            const message = sanitizeErrorMessage(error);
+            logger.error(`[main] startup preparation failed | ${message}`);
+        }
         saveConfig({});
 
         const cfg = loadConfig();
@@ -104,7 +109,7 @@ if (!gotTheLock) {
         createMainWindow();
         createTray({
             onToggleRecording: () => {
-                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
+                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
             },
             onResetPosition: () => resetWidgetPosition(),
             onShowSettings: () => showSettingsWindow({
@@ -113,27 +118,27 @@ if (!gotTheLock) {
             }),
             onAlwaysOnTopChange: (checked) => {
                 saveConfig({ alwaysOnTop: checked });
-                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(checked);
+                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(checked);
                 updateTray();
                 broadcastSettingsChanged(sttService, updateTray);
             },
             onQuit: () => app.quit(),
             onToggleWindow: () => {
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    if (mainWindow.isVisible()) mainWindow.focus();
-                    else mainWindow.show();
+                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) {
+                    if (windows.mainWindow.isVisible()) windows.mainWindow.focus();
+                    else windows.mainWindow.show();
                 }
             }
         });
 
         initHotkeys({
             onToggleRecording: () => {
-                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-recording');
+                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
             }
         });
 
         initWidgetHoverPoll();
-        initForegroundPolling(() => mainWindow);
+        initForegroundPolling(() => windows.mainWindow);
 
         screen.on('display-removed', () => ensureWidgetOnScreen());
         screen.on('display-metrics-changed', () => ensureWidgetOnScreen());
@@ -143,11 +148,19 @@ if (!gotTheLock) {
         });
     });
 
-    app.on('will-quit', () => {
+    let isQuitting = false;
+    app.on('before-quit', (event) => {
+        if (isQuitting) return;
+        event.preventDefault();
+        isQuitting = true;
         flushConfigImmediately();
         stopForegroundPolling();
         stopWidgetHoverPoll();
         stopHotkeys();
+        sttService.cancelAllDownloads();
+        sttService.unloadAll()
+            .catch(error => logger.error(`[main] shutdown cleanup failed | ${sanitizeErrorMessage(error)}`))
+            .finally(() => app.quit());
     });
 
     app.on('window-all-closed', () => {

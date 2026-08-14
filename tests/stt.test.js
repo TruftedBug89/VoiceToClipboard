@@ -262,6 +262,27 @@ test('keeps model cache paths inside the configured cache directory', async () =
     fs.rmSync(modelsDir, { recursive: true, force: true });
 });
 
+test('rejects modified installed model files during integrity verification', async () => {
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voicetoclipboard-models-'));
+    const cache = new ModelCache(modelsDir);
+    const modelKey = 'omni-multilingual';
+    const model = getModel(modelKey);
+    const modelDir = cache.getPath(modelKey);
+    fs.mkdirSync(modelDir, { recursive: true });
+    const fileHashes = {};
+    for (const file of model.expectedFiles) {
+        const filePath = path.join(modelDir, file);
+        fs.writeFileSync(filePath, `fixture:${file}`);
+    }
+    const { hashFile } = require('../stt/model-cache');
+    for (const file of model.expectedFiles) fileHashes[file] = await hashFile(path.join(modelDir, file));
+    fs.writeFileSync(path.join(modelDir, 'installation.json'), JSON.stringify({ modelKey, fileHashes }), 'utf8');
+    assert.equal(await cache.verifyInstalled(modelKey), true);
+    fs.appendFileSync(path.join(modelDir, model.expectedFiles[0]), 'tampered');
+    assert.equal(await cache.verifyInstalled(modelKey), false);
+    fs.rmSync(modelsDir, { recursive: true, force: true });
+});
+
 test('recovers interrupted model swaps and removes stale downloads', async () => {
     const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voicetoclipboard-models-'));
     const cache = new ModelCache(modelsDir);

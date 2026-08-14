@@ -230,6 +230,24 @@ window.VTC = window.VTC || {};
             mediaRecorder.onerror = () => {
                 if (sessionId !== recordingSessionId) return;
                 cancelPending = true;
+                isRecording = false;
+                isStartingRecording = false;
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    try { mediaRecorder.stop(); } catch (error) {}
+                }
+                if (stream) stream.getTracks().forEach(track => track.stop());
+                if (audioCtx) {
+                    try { audioCtx.close(); } catch (error) {}
+                    audioCtx = null;
+                }
+                mediaRecorder = null;
+                analyser = null;
+                source = null;
+                document.body.classList.remove('is-recording');
+                if (micBtn) micBtn.classList.remove('recording', 'transcribing');
+                if (micContainer) micContainer.classList.remove('recording', 'transcribing');
+                refreshRetranscribeBtn();
+                window.VTC?.interaction?.refreshMouseIgnore();
                 setStatus('err', 'RECORDING FAILED');
             };
             mediaRecorder.ondataavailable = event => {

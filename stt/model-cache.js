@@ -337,6 +337,37 @@ class ModelCache {
         return !!(await this.getInstalledPath(modelKey));
     }
 
+    async verifyInstalled(modelKey) {
+        const model = getModel(modelKey);
+        const installedPath = await this.getInstalledPath(modelKey);
+        if (!installedPath) return false;
+        const manifest = await this.getManifest(modelKey);
+        if (!manifest || manifest.modelKey !== model.key) return false;
+        const expectedHashes = manifest.fileHashes || model.fileHashes;
+        if (!expectedHashes) return false;
+        const actualHashes = {};
+        for (const file of model.expectedFiles) {
+            const expected = expectedHashes[file];
+            if (!expected || !SHA256_RE.test(String(expected))) return false;
+            const actual = await hashFile(path.join(installedPath, file));
+            if (actual.toLowerCase() !== String(expected).toLowerCase()) return false;
+            actualHashes[file] = actual;
+        }
+        if (!manifest.fileHashes) {
+            const upgradedManifest = {
+                ...manifest,
+                expectedFiles: model.expectedFiles,
+                fileHashes: actualHashes,
+                migratedAt: new Date().toISOString()
+            };
+            const manifestPath = path.join(this.getPath(modelKey), MANIFEST_NAME);
+            const tempPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+            await fsp.writeFile(tempPath, JSON.stringify(upgradedManifest, null, 2), 'utf8');
+            await fsp.rename(tempPath, manifestPath);
+        }
+        return true;
+    }
+
     async getManifest(modelKey) {
         const installedPath = await this.getInstalledPath(modelKey);
         if (!installedPath) return null;
@@ -352,7 +383,7 @@ class ModelCache {
         if (!model.verified || !model.archiveName) {
             throw new Error(model.unavailableReason || 'This model package is not available yet.');
         }
-        if (await this.isInstalled(modelKey)) return this.getPath(modelKey);
+        if (await this.verifyInstalled(modelKey)) return this.getPath(modelKey);
         if (this.locks.has(modelKey)) return this.locks.get(modelKey);
 
         const operation = this._install(model, onProgress, abortSignal).finally(() => this.locks.delete(modelKey));
@@ -415,11 +446,17 @@ class ModelCache {
                 await fsp.rename(installedRoot, stagedDir);
             }
             checkAbort();
+            const fileHashes = {};
+            for (const file of model.expectedFiles) {
+                fileHashes[file] = await hashFile(path.join(stagedDir, file));
+                checkAbort();
+            }
             await fsp.writeFile(path.join(stagedDir, MANIFEST_NAME), JSON.stringify({
                 modelKey: model.key,
                 registryVersion: 1,
                 expectedFiles: model.expectedFiles,
                 sha256: model.sha256 || null,
+                fileHashes,
                 installedAt: new Date().toISOString()
             }, null, 2), 'utf8');
             await fsp.rm(archivePath, { force: true });

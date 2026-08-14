@@ -55,7 +55,7 @@ class SttService {
         return {
             modelKey,
             available: model.verified,
-            installed: model.verified ? await this.cache.isInstalled(modelKey) : false,
+            installed: model.verified ? await this.cache.verifyInstalled(modelKey) : false,
             reason: model.unavailableReason || null,
             cachePath: this.cache.getPath(modelKey)
         };
@@ -76,7 +76,7 @@ class SttService {
             verified: model.verified,
             fast: !!model.fast,
             unavailableReason: model.unavailableReason || null,
-            installed: model.verified ? await this.cache.isInstalled(model.key) : false
+            installed: model.verified ? await this.cache.verifyInstalled(model.key) : false
         })));
     }
 
@@ -174,7 +174,7 @@ class SttService {
         this.cancelPendingUnload();
         const model = getModel(modelKey);
         if (!model.verified) throw new Error(model.unavailableReason || 'This model is not available.');
-        if (!(await this.cache.isInstalled(modelKey))) throw new Error('Model weights are not downloaded yet.');
+        if (!(await this.cache.verifyInstalled(modelKey))) throw new Error('Model weights are not downloaded or failed integrity verification.');
         const adapter = this.sherpa;
         const text = await adapter.transcribe(modelKey, pcm, sampleRate, { uiLanguage });
 

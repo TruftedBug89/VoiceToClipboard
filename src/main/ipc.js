@@ -24,12 +24,13 @@ const {
     saveRecordingAudio,
     openRecordingsFolder
 } = require('./recordings-store');
+const delivery = require('./delivery');
 const {
     handleBubblePaste,
     closePasteBubble,
-    deliverTranscriptionOutput,
-    lastDeliveryTyped
-} = require('./delivery');
+    deliverTranscriptionOutput
+} = delivery;
+const windows = require('./windows');
 const {
     showSettingsWindow,
     closeSettingsWindow,
@@ -37,16 +38,14 @@ const {
     handleDragMove,
     handleDragEnd,
     broadcastSettingsChanged,
-    broadcastModelsChanged,
-    mainWindow,
-    settingsWindow
-} = require('./windows');
+    broadcastModelsChanged
+} = windows;
+const hotkeys = require('./hotkeys');
 const {
     formatHotkey,
     startRecordingHotkey,
-    settleHotkeyCapture,
-    currentHotkeyConfig
-} = require('./hotkeys');
+    settleHotkeyCapture
+} = hotkeys;
 const { validateSttConfig, WIDGET_STYLES } = require('../../stt/config');
 const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { mapUiLanguage, LOCALES, L } = require('./i18n');
@@ -112,7 +111,7 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         });
 
         if (!success) return { success: false };
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(alwaysOnTop);
+        if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(alwaysOnTop);
         if (stt.sttEngine !== 'local' || effectiveEcoMode) await sttService.unloadAll();
         await broadcastSettingsChanged(sttService, updateTray);
         return { success: true };
@@ -121,7 +120,7 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     // ─── Hotkey Handlers ───────────────────────────────────────────────────
     ipcMain.handle('get-hotkey', () => {
         const config = loadConfig();
-        return formatHotkey(config.customHotkey || currentHotkeyConfig);
+        return formatHotkey(config.customHotkey || hotkeys.currentHotkeyConfig);
     });
 
     ipcMain.handle('start-recording-hotkey', async () => {
@@ -199,7 +198,7 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
                 });
                 if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
                 else {
-                    r.typed = lastDeliveryTyped;
+                    r.typed = delivery.lastDeliveryTyped;
                     await appendTranscriptionToHistory(r, request, started, savedRecordingPath);
                 }
                 logger.info(`[main] transcribe DONE | engine: local | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
@@ -222,7 +221,7 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
             });
             if (!r.success) lastErrorText = `${r.code || 'ERR'}: ${r.error || ''}`;
             else {
-                r.typed = lastDeliveryTyped;
+                r.typed = delivery.lastDeliveryTyped;
                 await appendTranscriptionToHistory(r, request, started, savedRecordingPath);
             }
             logger.info(`[main] transcribe DONE | engine: gemini | ok: ${!!r.success} | code: ${r.code || '?'} | ms: ${Date.now() - started}`);
@@ -273,16 +272,15 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     ipcMain.handle('history-delete', (_e, id) => deleteHistory(id));
     ipcMain.handle('history-clear', () => clearHistory());
     ipcMain.handle('history-export', (event, format = 'json') => {
-        const win = BrowserWindow.fromWebContents(event.sender) || settingsWindow || mainWindow;
+        const win = BrowserWindow.fromWebContents(event.sender) || windows.settingsWindow || windows.mainWindow;
         return exportHistory(win, format, (k) => L(k, null, getUiLanguage()));
     });
 
     ipcMain.handle('paste-text', async (_e, text) => {
         if (typeof text === 'string' && text) {
             clipboard.writeText(text);
-            const { lastExternalHwnd } = require('./delivery');
-            if (win32.available && lastExternalHwnd && win32.isWindow(lastExternalHwnd)) {
-                win32.setForegroundWindow(lastExternalHwnd);
+            if (win32.available && delivery.lastExternalHwnd && win32.isWindow(delivery.lastExternalHwnd)) {
+                win32.setForegroundWindow(delivery.lastExternalHwnd);
                 setTimeout(() => win32.sendCtrlV(), 80);
             }
         }
@@ -306,14 +304,14 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     ipcMain.on('drag-move', () => handleDragMove());
     ipcMain.on('drag-end', () => handleDragEnd());
     ipcMain.on('set-ignore-mouse', (event, ignore) => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
+        if (!windows.mainWindow || windows.mainWindow.isDestroyed()) return;
+        windows.mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
     });
     ipcMain.on('widget-raise', () => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
+        if (!windows.mainWindow || windows.mainWindow.isDestroyed()) return;
         if (loadConfig().alwaysOnTop !== false) {
-            mainWindow.setAlwaysOnTop(true, 'screen-saver');
-            mainWindow.moveTop();
+            windows.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            windows.mainWindow.moveTop();
         }
     });
 }

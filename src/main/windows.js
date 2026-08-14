@@ -58,6 +58,11 @@ function ensureWidgetOnScreen() {
 }
 
 function createMainWindow() {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        return mainWindow;
+    }
     const config = loadConfig();
     let windowX = config.windowX;
     let windowY = config.windowY;

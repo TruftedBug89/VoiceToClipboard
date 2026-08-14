@@ -37,7 +37,9 @@ function clipTranscript(text, head = 110, tail = 70) {
 function initForegroundPolling(getMainWindow) {
     if (foregroundPoll) clearInterval(foregroundPoll);
     foregroundPoll = setInterval(() => {
-        if (!loadConfig().spacePaste) return;
+        const config = loadConfig();
+        const needsTarget = config.outputMode === 'autotype' || config.outputMode === 'bubble' || config.outputMode === 'toast' || config.spacePaste;
+        if (!needsTarget) return;
         const mainWin = getMainWindow ? getMainWindow() : null;
         if (!win32.available || !mainWin || mainWin.isDestroyed()) return;
         try {

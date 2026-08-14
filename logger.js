@@ -11,6 +11,7 @@ const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
 function init(dirPath) {
     _logDir = dirPath;
+    try { fs.mkdirSync(_logDir, { recursive: true }); } catch (e) {}
 }
 
 function _file() {
