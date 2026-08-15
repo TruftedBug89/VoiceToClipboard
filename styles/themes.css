@@ -1,112 +1,60 @@
-/* styles/themes.css */
-/* Inverted, high-contrast theme system: every style owns the full surface,
-   not just the mic button. Settings controls inherit the active identity. */
-
 :root {
     --mic-width: 60px;
     --mic-height: 60px;
     --mic-radius: 50%;
-    --canvas: #0c0d12;
-    --surface: #15161b;
-    --surface-raised: #1a1c22;
-    --text-main: #ffffff;
-    --text-dim: #a9adb8;
-    --border-strong: rgba(255, 255, 255, 0.22);
-    --border-muted: rgba(255, 255, 255, 0.1);
-    --focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
-/* ─── Crimson (Blood Coral / Pulse Orb) ─── */
 :root[data-widget-style="crimson"] {
-    --primary: #ff3b4e;
-    --primary-hover: #ff6b7a;
-    --bg-glass: rgba(18, 16, 24, 0.94);
-    --border-glass: rgba(255, 59, 78, 0.42);
-    --canvas: #0b0a0e;
-    --surface: #17141a;
-    --surface-raised: #1d1820;
-    --text-dim: #b8a7ab;
     --mic-width: 60px;
     --mic-height: 60px;
     --mic-radius: 50%;
 }
-:root[data-widget-style="crimson"] #mic-button {
-    border-radius: 50%;
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, background 0.35s ease;
-}
-:root[data-widget-style="crimson"] #mic-button.recording {
-    background: linear-gradient(145deg, #ff3b4e, #e11d48);
-    border-color: #ff6b7a;
-    box-shadow: 0 0 24px rgba(255, 59, 78, 0.55), 0 0 8px rgba(255, 107, 122, 0.45), 0 8px 25px rgba(0,0,0,0.5);
-}
-:root[data-widget-style="crimson"] #mic-button.recording #submit-icon,
-:root[data-widget-style="crimson"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-:root[data-widget-style="crimson"] #mic-button:hover {
-    border-color: #ff6b7a;
-    background: rgba(30, 18, 24, 0.96);
-}
-:root[data-widget-style="crimson"] #mic-button:focus-visible {
-    outline: 2px solid #ff6b7a;
-    outline-offset: 3px;
-}
-:root[data-widget-style="crimson"] #mic-button.show-check {
-    background: rgba(255, 59, 78, 0.16);
-    border-color: #ff6b7a;
-}
-:root[data-widget-style="crimson"] #mic-button.show-error {
-    border-color: #ff6b7a;
-    background: rgba(255, 59, 78, 0.12);
-}
 
-/* ─── Ocean (Deep Sea / Cyan Tide) ─── */
 :root[data-widget-style="ocean"] {
-    --primary: #06b6d4;
-    --primary-hover: #67e8f9;
-    --bg-glass: rgba(5, 22, 34, 0.94);
-    --border-glass: rgba(6, 182, 212, 0.46);
-    --canvas: #041018;
-    --surface: #071d28;
-    --surface-raised: #0a2836;
-    --text-dim: #9fc4d2;
+    --primary: #0ea5e9;
+    --primary-hover: #38bdf8;
+    --bg-glass: rgba(6, 24, 38, 0.94);
+    --border-glass: rgba(125, 200, 255, 0.18);
     --mic-width: 78px;
     --mic-height: 50px;
     --mic-radius: 25px;
 }
+
+:root[data-widget-style="aurora"] {
+    --primary: #a855f7;
+    --primary-hover: #c084fc;
+    --bg-glass: rgba(24, 12, 40, 0.94);
+    --border-glass: rgba(192, 132, 252, 0.18);
+    --mic-width: 66px;
+    --mic-height: 66px;
+    --mic-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+}
+
+:root[data-widget-style="terminal"] {
+    --primary: #00ff66;
+    --primary-hover: #55ff99;
+    --bg-glass: rgba(5, 20, 10, 0.92);
+    --border-glass: rgba(0, 255, 102, 0.35);
+    --mic-width: 64px;
+    --mic-height: 64px;
+    --mic-radius: 8px;
+}
+
+/* ─── Per-Style Structural & Motion Transformations ─── */
+
+/* Crimson — Pulse Orb */
+:root[data-widget-style="crimson"] #mic-button {
+    border-radius: 50%;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, background 0.35s ease;
+}
+
+/* Ocean — Tide Bar (Capsule/Pill shape & smooth sway glide) */
 :root[data-widget-style="ocean"] #mic-button {
     border-radius: var(--mic-radius);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-radius 0.4s ease;
 }
 :root[data-widget-style="ocean"] #mic-button.recording {
-    background: linear-gradient(145deg, #06b6d4, #0284c7);
-    border-color: #67e8f9;
-    box-shadow: 0 0 26px rgba(6, 182, 212, 0.5), 0 0 8px rgba(103, 232, 249, 0.4), 0 8px 25px rgba(0,0,0,0.5);
     animation: ocean-tide-sway 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-}
-:root[data-widget-style="ocean"] #mic-button:hover {
-    border-color: #67e8f9;
-    background: rgba(8, 38, 52, 0.96);
-}
-:root[data-widget-style="ocean"] #mic-button:focus-visible {
-    outline: 2px solid #67e8f9;
-    outline-offset: 3px;
-}
-:root[data-widget-style="ocean"] #mic-button.show-check {
-    background: rgba(6, 182, 212, 0.16);
-    border-color: #67e8f9;
-}
-:root[data-widget-style="ocean"] #mic-button.show-error {
-    border-color: #67e8f9;
-    background: rgba(6, 182, 212, 0.12);
-}
-:root[data-widget-style="ocean"] #mic-button.recording #submit-icon,
-:root[data-widget-style="ocean"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 :root[data-widget-style="ocean"] #mic-aura,
 :root[data-widget-style="ocean"] .sonar-ring,
@@ -126,55 +74,14 @@
     }
 }
 
-/* ─── Aurora (Nebula Violet / Liquid Blob) ─── */
-:root[data-widget-style="aurora"] {
-    --primary: #c084fc;
-    --primary-hover: #f0abfc;
-    --bg-glass: rgba(24, 12, 40, 0.94);
-    --border-glass: rgba(192, 132, 252, 0.5);
-    --canvas: #0c0616;
-    --surface: #150d24;
-    --surface-raised: #1e1233;
-    --text-dim: #bfa9d4;
-    --mic-width: 66px;
-    --mic-height: 66px;
-    --mic-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
-}
+/* Aurora — Liquid Blob (Organic morphing blob border-radius & fluid morph) */
 :root[data-widget-style="aurora"] #mic-button {
     border-radius: var(--mic-radius);
     animation: aurora-blob-morph 9s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
 }
-:root[data-widget-style="aurora"] #mic-button.transcribing {
-    animation: aurora-blob-morph 9s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, transcribing-breathe 2.2s ease-in-out infinite;
-}
 :root[data-widget-style="aurora"] #mic-button.recording {
-    background: linear-gradient(145deg, #a855f7, #ec4899);
-    border-color: #f0abfc;
-    box-shadow: 0 0 26px rgba(192, 132, 252, 0.55), 0 0 10px rgba(240, 171, 252, 0.45), 0 8px 25px rgba(0,0,0,0.5);
     animation: aurora-blob-morph 4.5s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, mic-live 2.2s ease-in-out infinite;
-}
-:root[data-widget-style="aurora"] #mic-button:hover {
-    border-color: #f0abfc;
-    background: rgba(42, 22, 64, 0.96);
-}
-:root[data-widget-style="aurora"] #mic-button:focus-visible {
-    outline: 2px solid #f0abfc;
-    outline-offset: 3px;
-}
-:root[data-widget-style="aurora"] #mic-button.show-check {
-    background: rgba(192, 132, 252, 0.16);
-    border-color: #f0abfc;
-}
-:root[data-widget-style="aurora"] #mic-button.show-error {
-    border-color: #f0abfc;
-    background: rgba(192, 132, 252, 0.12);
-}
-:root[data-widget-style="aurora"] #mic-button.recording #submit-icon,
-:root[data-widget-style="aurora"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 :root[data-widget-style="aurora"] #mic-aura,
 :root[data-widget-style="aurora"] .sonar-ring,
@@ -191,63 +98,17 @@
     100% { border-radius: 46% 54% 64% 36% / 54% 46% 54% 46%; transform: rotate(0deg) scale(1); }
 }
 
-/* ─── Terminal (Neon Phosphor Matrix) ─── */
-:root[data-widget-style="terminal"] {
-    --primary: #00ff66;
-    --primary-hover: #7cffb0;
-    --bg-glass: rgba(3, 16, 7, 0.96);
-    --border-glass: rgba(0, 255, 102, 0.58);
-    --canvas: #020803;
-    --surface: #041208;
-    --surface-raised: #06200d;
-    --text-dim: #7f9c88;
-    --mic-width: 64px;
-    --mic-height: 64px;
-    --mic-radius: 8px;
-}
+/* Terminal — Neon Terminal (Sharp panel with scanline sweep & CRT glow) */
 :root[data-widget-style="terminal"] #mic-button {
     border-radius: var(--mic-radius);
-    border-width: 2px;
-    box-shadow: 0 0 16px rgba(0, 255, 102, 0.4), inset 0 0 10px rgba(0, 255, 102, 0.2);
+    border-width: 1.5px;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
     overflow: hidden;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
 }
-:root[data-widget-style="terminal"] #mic-button:not(.recording) #mic-icon {
-    fill: #00ff66 !important;
-    filter: drop-shadow(0 0 4px rgba(0, 255, 102, 0.7));
-}
-:root[data-widget-style="terminal"] #mic-button.recording {
-    background: linear-gradient(145deg, #00ff66, #00dd55);
-    border-color: #7cffb0;
-    box-shadow: 0 0 30px rgba(0, 255, 102, 0.8), 0 0 8px rgba(124, 255, 176, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.4);
-}
-:root[data-widget-style="terminal"] #mic-button:hover {
-    border-color: #7cffb0;
-    background: rgba(6, 34, 14, 0.96);
-}
-:root[data-widget-style="terminal"] #mic-button:focus-visible {
-    outline: 2px solid #7cffb0;
-    outline-offset: 3px;
-}
-:root[data-widget-style="terminal"] #mic-button.show-check {
-    background: rgba(0, 255, 102, 0.14);
-    border-color: #7cffb0;
-}
-:root[data-widget-style="terminal"] #mic-button.show-error {
-    border-color: #7cffb0;
-    background: rgba(0, 255, 102, 0.1);
-}
-:root[data-widget-style="terminal"] #mic-button.recording #submit-icon {
-    stroke: #041208 !important;
-    stroke-width: 3.2px !important;
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
-}
-:root[data-widget-style="terminal"] #mic-button.recording #mic-icon {
-    fill: #041208 !important;
-}
 :root[data-widget-style="terminal"] #mic-aura {
     border-radius: 12px;
-    background: rgba(0, 255, 102, 0.25);
+    background: rgba(0, 255, 102, 0.18);
     filter: blur(6px);
 }
 :root[data-widget-style="terminal"] .sonar-ring,
@@ -259,9 +120,9 @@
     border-radius: 12px;
     -webkit-mask: none;
     mask: none;
-    border: 1.5px dashed rgba(0, 255, 102, 0.8);
+    border: 1.5px dashed rgba(0, 255, 102, 0.7);
     background: transparent;
-    box-shadow: 0 0 14px rgba(0, 255, 102, 0.5);
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.4);
 }
 :root[data-widget-style="terminal"] #mic-button::after {
     content: '';
@@ -270,7 +131,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(180deg, transparent 0%, rgba(0, 255, 102, 0.28) 50%, transparent 100%);
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--primary) 22%, transparent) 50%, transparent 100%);
     pointer-events: none;
     animation: terminal-scanline 3.5s linear infinite;
 }
@@ -283,104 +144,53 @@
     font-family: 'Consolas', 'Courier New', monospace;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #00ff66;
 }
 :root[data-widget-style="terminal"] .rec-dot {
     border-radius: 2px;
-    background: #00ff66;
-    box-shadow: 0 0 8px rgba(0, 255, 102, 0.8);
 }
 
 /* ─── Widget Style picker (Settings) ─── */
 .style-picker {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    width: 100%;
-    margin-top: 4px;
-}
-@media (max-width: 370px) {
-    .style-picker {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 .style-swatch {
-    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 4px;
+    gap: 6px;
+    padding: 10px 12px;
     border-radius: 12px;
-    background: var(--surface-raised, rgba(255, 255, 255, 0.04));
-    border: 1.5px solid var(--border-muted, rgba(255, 255, 255, 0.12));
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-glass, rgba(255, 255, 255, 0.12));
     cursor: pointer;
     color: var(--text-dim, #a0a0ab);
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-    min-width: 0;
-    width: 100%;
-    box-sizing: border-box;
+    transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+    min-width: 76px;
 }
 .style-swatch:hover {
     transform: translateY(-2px);
-    background: var(--border-muted);
-    border-color: var(--border-strong);
-    color: var(--text-main);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-}
-.style-swatch:active {
-    transform: translateY(0) scale(0.98);
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 .style-swatch-dot {
-    width: 32px;
-    height: 32px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255,255,255,0.15);
 }
-.style-swatch:hover .style-swatch-dot,
-.style-swatch:focus-visible .style-swatch-dot {
-    transform: scale(1.08);
-}
-.style-swatch-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-}
+.style-swatch-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; }
 .style-swatch.active {
-    border-color: var(--primary);
-    color: var(--text-main);
-    background: color-mix(in srgb, var(--primary) 16%, var(--surface-raised));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 62%, transparent), 0 0 18px color-mix(in srgb, var(--primary) 20%, transparent), 0 4px 14px rgba(0, 0, 0, 0.4);
-}
-.style-swatch.active::after {
-    content: '✓';
-    position: absolute;
-    top: 5px;
-    right: 6px;
-    width: 15px;
-    height: 15px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--primary);
-    color: #ffffff;
-    font-size: 9px;
-    font-weight: 800;
-    line-height: 1;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 70%, transparent);
+    border-color: var(--primary, #e63946);
+    color: var(--text-main, #fff);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #e63946) 45%, transparent);
 }
 .style-swatch:focus-visible {
-    outline: 2px solid var(--primary-hover);
+    outline: 2px solid var(--primary, #e63946);
     outline-offset: 2px;
 }
 
-/* ─── Accessibility: honor reduced motion ─── */
+/* ─── Accessibility: honor reduced motion (mic pulse, sonar, entrances) ─── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
