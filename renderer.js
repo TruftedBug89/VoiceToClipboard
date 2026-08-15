@@ -50,6 +50,11 @@
     });
 
     async function initializeRenderer() {
+        // Separate settings window (index.html?settings=1): the modal fills
+        // the whole surface and opens immediately on boot.
+        const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
+        if (isSettingsWindow) document.body.classList.add('settings-window');
+
         // Boot feedback: show the busy badge immediately so a slow first
         // config round-trip never looks like a frozen window.
         const bootStartedAt = Date.now();
@@ -63,6 +68,11 @@
         window.VTC.settings.currentSttConfig = snapshot;
         window.VTC.settings.applyModelRecommendation(snapshot);
         await window.VTC.settings.checkApiKeyStatus();
+
+        if (isSettingsWindow) {
+            window.VTC.settings.openSettings(true);
+            return;
+        }
 
         window.VTC.visualizer.startVisualizer();
 

@@ -2,6 +2,13 @@
     --mic-width: 60px;
     --mic-height: 60px;
     --mic-radius: 50%;
+    /* Settings surface defaults (v4.1.5 settings.css relies on these) */
+    --canvas: #0c0d12;
+    --surface: #15161b;
+    --surface-raised: #1a1c22;
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --border-muted: rgba(255, 255, 255, 0.1);
+    --focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 :root[data-widget-style="crimson"] {

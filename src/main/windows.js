@@ -8,8 +8,7 @@ const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { logger } = require('../../logger');
 
 let mainWindow = null;
-let settingsRestoreBounds = null;
-let settingsExpanded = false;
+let settingsWindow = null;
 let dragState = null;
 let widgetHoverPoll = null;
 let lastWidgetHoverState = null;
@@ -133,53 +132,55 @@ function createMainWindow() {
     return mainWindow;
 }
 
-function settingsBoundsForWidget(bounds) {
-    const display = screen.getDisplayNearestPoint({
-        x: bounds.x + Math.round(bounds.width / 2),
-        y: bounds.y + Math.round(bounds.height / 2)
-    });
-    const workArea = display.workArea;
-    const width = Math.min(420, workArea.width);
-    const height = Math.min(720, workArea.height);
-    return {
-        width,
-        height,
-        x: Math.max(workArea.x, Math.min(bounds.x + Math.round((bounds.width - width) / 2), workArea.x + workArea.width - width)),
-        y: Math.max(workArea.y, Math.min(bounds.y + Math.round((bounds.height - height) / 2), workArea.y + workArea.height - height))
-    };
-}
-
-// Settings stay in the widget's renderer as #settings-modal. Expanding the
-// existing window keeps focus ownership simple and avoids a second renderer
-// racing the widget's theme/config state.
+// Settings live in their own frameless window (index.html?settings=1), so
+// the widget keeps its tiny always-on-top footprint while settings get a
+// full, resizable surface.
 function createSettingsWindow() {
-    if (!mainWindow || mainWindow.isDestroyed()) return null;
-    if (!settingsExpanded) {
-        settingsRestoreBounds = mainWindow.getBounds();
-        settingsExpanded = true;
-        mainWindow.setIgnoreMouseEvents(false);
-        mainWindow.setBounds(settingsBoundsForWidget(settingsRestoreBounds), false);
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.show();
+        settingsWindow.focus();
+        return settingsWindow;
     }
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('open-settings');
-    return mainWindow;
+    settingsWindow = new BrowserWindow({
+        width: 420,
+        height: 720,
+        minWidth: 360,
+        minHeight: 520,
+        parent: mainWindow,
+        frame: false,
+        backgroundColor: '#0e0f14',
+        autoHideMenuBar: true,
+        resizable: true,
+        webPreferences: {
+            preload: path.join(__dirname, '../../preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
+            backgroundThrottling: true
+        }
+    });
+    secureWebContents(settingsWindow.webContents);
+    settingsWindow.loadFile(path.join(__dirname, '../../index.html'), { query: { settings: '1' } });
+    settingsWindow.on('closed', () => {
+        settingsWindow = null;
+        ensureWidgetAlwaysOnTop();
+    });
+    return settingsWindow;
 }
 
 function showSettingsWindow() {
-    return createSettingsWindow();
+    const win = createSettingsWindow();
+    if (win) {
+        win.show();
+        win.focus();
+    }
+    ensureWidgetAlwaysOnTop();
+    return win;
 }
 
 function closeSettingsWindow(onCancelDownloads) {
     if (onCancelDownloads) onCancelDownloads();
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (settingsExpanded && settingsRestoreBounds) {
-        const restoreBounds = settingsRestoreBounds;
-        settingsRestoreBounds = null;
-        settingsExpanded = false;
-        mainWindow.setBounds(restoreBounds, false);
-    }
-    mainWindow.webContents.send('settings-layout-restored');
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
     ensureWidgetAlwaysOnTop();
 }
 
@@ -271,18 +272,18 @@ async function broadcastSettingsChanged(sttService, updateTray) {
     if (updateTray) updateTray();
     const snapshot = await getSettingsSnapshot(sttService);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings-changed', snapshot);
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('settings-changed', snapshot);
 }
 
 async function broadcastModelsChanged(sttService, updateTray) {
     await broadcastSettingsChanged(sttService, updateTray);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('models-changed');
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('models-changed');
 }
 
 module.exports = {
     get mainWindow() { return mainWindow; },
-    // Kept as a null compatibility getter for IPC callers that select a
-    // dialog owner; settings are now the main widget's modal, not a window.
-    get settingsWindow() { return null; },
+    get settingsWindow() { return settingsWindow; },
     createMainWindow,
     createSettingsWindow,
     showSettingsWindow,

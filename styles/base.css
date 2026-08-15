@@ -1,4 +1,11 @@
 /* Extracted from index.html (plan Phase 2). Rules copied verbatim; cascade order preserved by <link> order. */
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+    animation: none !important;
+    transition: none !important;
+}
+
 :root {
             --primary: #e63946;
             --primary-hover: #ff4d4d;
@@ -33,6 +40,106 @@
             color: var(--text-main);
             user-select: none;
         }
+
+        /* First-run welcome tour: non-blocking overlay — the container is
+           pointer-events:none so recording/hotkey always work; only the card
+           inside is clickable. */
+        .first-run-tour {
+            position: absolute;
+            inset: 0;
+            z-index: 60;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 10px;
+            pointer-events: none;
+        }
+        .first-run-tour[hidden] { display: none; }
+        .first-run-card {
+            /* Informational copy stays click-through; only Got it can catch a
+               pointer event, so the tour never blocks the mic. */
+            pointer-events: none;
+            max-width: 210px;
+            background: color-mix(in srgb, var(--surface-raised, #1a1c22) 96%, transparent);
+            border: 1px solid var(--border-strong, rgba(255,255,255,0.22));
+            border-radius: 12px;
+            padding: 10px 12px;
+            color: var(--text-main);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--primary) 22%, transparent);
+            animation: first-run-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+        }
+        @keyframes first-run-in {
+            from { opacity: 0; transform: translateY(14px) scale(0.95); }
+            to   { opacity: 1; transform: none; }
+        }
+        .first-run-title {
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: 0.02em;
+        }
+        .first-run-body {
+            font-size: 10.5px;
+            line-height: 1.4;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+        .first-run-steps {
+            margin: 0 0 8px;
+            padding-left: 16px;
+            font-size: 10px;
+            line-height: 1.5;
+            color: var(--text-dim);
+        }
+        .first-run-steps li::marker { color: var(--primary); }
+        .first-run-model-hint {
+            margin: 0 0 8px;
+            padding: 6px 8px;
+            border-left: 2px solid var(--primary);
+            border-radius: 4px;
+            color: var(--text-dim);
+            background: color-mix(in srgb, var(--primary) 9%, transparent);
+            font-size: 9.5px;
+            line-height: 1.35;
+        }
+        .first-run-btn {
+            pointer-events: auto;
+            width: 100%;
+            padding: 7px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 45%, transparent);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .first-run-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 14px color-mix(in srgb, var(--primary) 60%, transparent);
+        }
+        .first-run-btn:active {
+            transform: translateY(0) scale(0.97);
+        }
+        body.first-run-active #top-bar {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+        #mic-button.first-run-highlight {
+            animation: first-run-mic-hint 1.8s ease-in-out infinite;
+        }
+        #settings-btn.first-run-highlight {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent), 0 0 14px color-mix(in srgb, var(--primary) 45%, transparent);
+        }
+        @keyframes first-run-mic-hint {
+            0%, 100% { box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 0 0 color-mix(in srgb, var(--primary) 42%, transparent); }
+            50% { box-shadow: 0 8px 25px rgba(0,0,0,0.5), 0 0 0 9px color-mix(in srgb, var(--primary) 0%, transparent); }
+        }
+        body.settings-active .first-run-tour { display: none; }
 
         /* Top control bar (Settings, Cancel, Close buttons) — glass pill */
         #top-bar {
