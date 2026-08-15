@@ -10,6 +10,7 @@ const {
     getApiKeys,
     getSettingsSnapshot,
     getUiLanguage,
+    getInitialAppearance,
     canonicalUserDataPath
 } = require('./config-store');
 const {
@@ -49,6 +50,7 @@ const {
 const { validateSttConfig, WIDGET_STYLES } = require('../../stt/config');
 const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { mapUiLanguage, LOCALES, L } = require('./i18n');
+const { cooldownSummary } = require('./gemini');
 const { logger } = require('../../logger');
 const win32 = require('../../win32');
 
@@ -61,6 +63,10 @@ let lastErrorText = '';
  * @param {Function} context.updateTray
  */
 function registerIpcHandlers({ sttService, updateTray = () => {} }) {
+    ipcMain.on('get-initial-appearance', event => {
+        event.returnValue = getInitialAppearance();
+    });
+
     // ─── API Key & STT Config ───────────────────────────────────────────────
     ipcMain.handle('get-api-key-status', () => {
         const envKey = process.env.GEMINI_API_KEY;
@@ -73,7 +79,25 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         };
     });
 
+    // Cooldown state for the Gemini failover UI — counts and retry timing
+    // only, never key material.
+    ipcMain.handle('get-gemini-cooldowns', () => {
+        const config = loadConfig();
+        const summary = cooldownSummary({ keyCooldowns: config.keyCooldowns, modelCooldowns: config.modelCooldowns });
+        return {
+            keysActive: summary.keysActive,
+            modelsActive: summary.modelsActive,
+            nextRetryInSec: Math.ceil(summary.nextRetryInMs / 1000),
+            retryInSec: Math.ceil(summary.retryInMs / 1000)
+        };
+    });
+
     ipcMain.handle('get-stt-config', () => getSettingsSnapshot(sttService));
+
+    ipcMain.handle('mark-first-run-done', () => {
+        saveConfig({ firstRunDone: true });
+        return { ok: true };
+    });
 
     ipcMain.handle('get-model-catalog', () => sttService.getCatalog());
 
@@ -104,7 +128,9 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
             saveRecordings: settings.saveRecordings !== undefined ? !!settings.saveRecordings : existing.saveRecordings === true,
             micDeviceId: typeof settings.micDeviceId === 'string' ? settings.micDeviceId : existing.micDeviceId || '',
             micDeviceLabel: typeof settings.micDeviceLabel === 'string' ? settings.micDeviceLabel : existing.micDeviceLabel || '',
-            historyEnabled: settings.historyEnabled !== undefined ? !!settings.historyEnabled : existing.historyEnabled !== false,
+            // History is opt-in. An unrelated settings save must never turn it
+            // on merely because an older config omitted the field.
+            historyEnabled: settings.historyEnabled !== undefined ? !!settings.historyEnabled : existing.historyEnabled === true,
             historyLimit: typeof settings.historyLimit === 'number' && settings.historyLimit > 0 ? settings.historyLimit : (existing.historyLimit || 50),
             uiLanguage: typeof settings.uiLanguage === 'string' && LOCALES[settings.uiLanguage] ? settings.uiLanguage : (existing.uiLanguage || mapUiLanguage(getUiLanguage())),
             widgetStyle: WIDGET_STYLES.includes(settings.widgetStyle) ? settings.widgetStyle : (WIDGET_STYLES.includes(existing.widgetStyle) ? existing.widgetStyle : 'crimson')
@@ -292,13 +318,13 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     ipcMain.on('bubble-dismiss', () => closePasteBubble());
     ipcMain.on('renderer-log', (_e, msg) => { logger.info(String(msg).slice(0, 4000)); });
     ipcMain.on('show-settings-window', () => {
-        showSettingsWindow({
-            onCancelDownloads: () => sttService.cancelAllDownloads(),
-            onSettleHotkeys: () => settleHotkeyCapture()
-        });
+        showSettingsWindow();
     });
     ipcMain.on('close-settings-window', () => {
-        closeSettingsWindow(() => sttService.cancelAllDownloads());
+        closeSettingsWindow(() => {
+            sttService.cancelAllDownloads();
+            settleHotkeyCapture();
+        });
     });
     ipcMain.on('drag-start', () => handleDragStart());
     ipcMain.on('drag-move', () => handleDragMove());

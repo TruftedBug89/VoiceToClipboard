@@ -9,6 +9,7 @@ const screen = electron && typeof electron === 'object' ? electron.screen : null
 const path = require('path');
 const win32 = require('../../win32');
 const { loadConfig, getUiLanguage } = require('./config-store');
+const { WIDGET_STYLES } = require('../../stt/config');
 const { L } = require('./i18n');
 const { logger } = require('../../logger');
 
@@ -64,6 +65,21 @@ function secureWebContents(webContents) {
     });
 }
 
+function bubblePayload(text) {
+    const config = loadConfig();
+    const key = typeof config.pasteKey === 'string' && config.pasteKey ? config.pasteKey : ' ';
+    const lang = getUiLanguage();
+    return {
+        text: clipTranscript(text),
+        key,
+        keyLabel: key === ' ' ? 'SPACE' : key.toUpperCase(),
+        title: L('bubble.title', null, lang),
+        // The bubble window cannot reach the widget DOM; pass the active theme
+        // so bubble.css can reskin the card to match the widget.
+        style: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson'
+    };
+}
+
 function ensureBubbleWindow() {
     if (bubbleWindow && !bubbleWindow.isDestroyed()) return;
     bubbleWindow = new BrowserWindow({
@@ -89,14 +105,7 @@ function ensureBubbleWindow() {
     bubbleWindow.loadFile(path.join(__dirname, '../../bubble.html'));
     bubbleWindow.webContents.on('did-finish-load', () => {
         if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
-            const _k = loadConfig().pasteKey || ' ';
-            const lang = getUiLanguage();
-            bubbleWindow.webContents.send('bubble-set-text', {
-                text: clipTranscript(bubblePendingText),
-                key: _k,
-                keyLabel: _k === ' ' ? 'SPACE' : _k.toUpperCase(),
-                title: L('bubble.title', null, lang)
-            });
+            bubbleWindow.webContents.send('bubble-set-text', bubblePayload(bubblePendingText));
         }
     });
     bubbleWindow.on('closed', () => { bubbleWindow = null; });
@@ -142,8 +151,16 @@ function maybeShowPasteToast(text) {
         silent: true
     });
     pasteToast = t;
-    t.on('click', () => pasteToTarget(lastExternalHwnd, clean));
-    t.on('action', () => pasteToTarget(lastExternalHwnd, clean));
+    // Once-guard: some Windows notification flows deliver both `action` and
+    // `click` for a single interaction — paste exactly once per toast.
+    let toastSettled = false;
+    const pasteOnce = () => {
+        if (toastSettled) return;
+        toastSettled = true;
+        pasteToTarget(lastExternalHwnd, clean);
+    };
+    t.on('click', pasteOnce);
+    t.on('action', pasteOnce);
     t.on('close', () => { if (pasteToast === t) pasteToast = null; });
     t.show();
 }
@@ -160,15 +177,7 @@ function maybeShowPasteBubble(text) {
     if (!bubbleWindow) return;
     positionBubbleNear();
     if (!bubbleWindow.webContents.isLoading()) {
-        const _pasteKey = loadConfig().pasteKey || ' ';
-        const _keyLabel = _pasteKey === ' ' ? 'SPACE' : _pasteKey.toUpperCase();
-        const lang = getUiLanguage();
-        bubbleWindow.webContents.send('bubble-set-text', {
-            text: clipTranscript(bubbleText),
-            key: _pasteKey,
-            keyLabel: _keyLabel,
-            title: L('bubble.title', null, lang)
-        });
+        bubbleWindow.webContents.send('bubble-set-text', bubblePayload(bubbleText));
     }
     bubbleWindow.show();
     bubbleWindow.focus();

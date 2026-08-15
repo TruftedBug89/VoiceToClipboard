@@ -270,13 +270,17 @@ test('rejects modified installed model files during integrity verification', asy
     const modelDir = cache.getPath(modelKey);
     fs.mkdirSync(modelDir, { recursive: true });
     const fileHashes = {};
+    const fileStats = {};
     for (const file of model.expectedFiles) {
         const filePath = path.join(modelDir, file);
         fs.writeFileSync(filePath, `fixture:${file}`);
+        const stat = fs.statSync(filePath);
+        fileStats[file] = { size: stat.size, mtimeMs: stat.mtimeMs };
     }
     const { hashFile } = require('../stt/model-cache');
     for (const file of model.expectedFiles) fileHashes[file] = await hashFile(path.join(modelDir, file));
-    fs.writeFileSync(path.join(modelDir, 'installation.json'), JSON.stringify({ modelKey, fileHashes }), 'utf8');
+    fs.writeFileSync(path.join(modelDir, 'installation.json'), JSON.stringify({ modelKey, fileHashes, fileStats }), 'utf8');
+    assert.equal(await cache.verifyInstalled(modelKey), true);
     assert.equal(await cache.verifyInstalled(modelKey), true);
     fs.appendFileSync(path.join(modelDir, model.expectedFiles[0]), 'tampered');
     assert.equal(await cache.verifyInstalled(modelKey), false);

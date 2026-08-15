@@ -46,11 +46,11 @@ function systemRamGB() {
     return 8;
 }
 
-// RAM-based recommendation ladder:
-//   ≤ 4 GB  -> Tiny        (nemo-ctc, ~250 MB RAM)
+// RAM-based recommendation ladder (multilingual registry backends):
+//   ≤ 4 GB  -> Tiny        (moonshine, ~290 MB RAM)
 //   ≤ 8 GB  -> Mini        (nemo-transducer, ~270 MB RAM)
-//   ≤ 16 GB -> Light       (Omnilingual 1600+ langs, ~550 MB RAM) — current default pick
-//   > 16 GB -> Big         (Parakeet 0.6B, ~950 MB RAM) — one tier above the default
+//   ≤ 16 GB -> Light       (whisper-small, ~550 MB RAM) — current default pick
+//   > 16 GB -> Big         (whisper-turbo, ~950 MB RAM) — one tier above the default
 function recommendedTierForRam(ramGB) {
     if (ramGB <= 4) return 'tiny';
     if (ramGB <= 8) return 'mini';
@@ -79,7 +79,7 @@ function migrateConfig(input = {}) {
         let localTier = 'light';
         if (config.localModelKey === 'big-multilingual') {
             localTier = 'big';
-        } else if ((config.localModel || '').includes('large')) {
+        } else if (typeof config.localModel === 'string' && config.localModel.includes('large')) {
             localTier = 'big';
         }
         config.localTier = localTier;
@@ -134,26 +134,27 @@ function migrateConfig(input = {}) {
 }
 
 function validateSttConfig(input = {}) {
-    const localTier = VALID_TIERS.has(input.localTier)
-        ? input.localTier
+    const settings = input && typeof input === 'object' ? input : {};
+    const localTier = VALID_TIERS.has(settings.localTier)
+        ? settings.localTier
         : recommendedTierForRam(systemRamGB());
     const validGeminiModels = new Set(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']);
-    const widgetStyle = WIDGET_STYLES.includes(input.widgetStyle) ? input.widgetStyle : 'crimson';
+    const widgetStyle = WIDGET_STYLES.includes(settings.widgetStyle) ? settings.widgetStyle : 'crimson';
     return {
-        sttEngine: input.sttEngine === 'gemini' ? 'gemini' : 'local',
+        sttEngine: settings.sttEngine === 'gemini' ? 'gemini' : 'local',
         localTier,
         localLanguage: 'auto',
         localModelKey: deriveLocalModelKey(localTier),
-        geminiModel: validGeminiModels.has(input.geminiModel) ? input.geminiModel : 'gemini-2.5-flash',
-        ecoMode: input.ecoMode !== false,
-        playFinishSound: input.playFinishSound !== false,
-        saveRecordings: typeof input.saveRecordings === 'boolean' ? input.saveRecordings : false,
-        outputMode: resolveOutputMode(input),
-        autotypeMethod: resolveAutotypeMethod(input),
-        micDeviceId: typeof input.micDeviceId === 'string' ? input.micDeviceId : '',
-        micDeviceLabel: typeof input.micDeviceLabel === 'string' ? input.micDeviceLabel : '',
-        historyEnabled: typeof input.historyEnabled === 'boolean' ? input.historyEnabled : false,
-        historyLimit: clampHistoryLimit(input.historyLimit),
+        geminiModel: validGeminiModels.has(settings.geminiModel) ? settings.geminiModel : 'gemini-2.5-flash',
+        ecoMode: settings.ecoMode !== false,
+        playFinishSound: settings.playFinishSound !== false,
+        saveRecordings: typeof settings.saveRecordings === 'boolean' ? settings.saveRecordings : false,
+        outputMode: resolveOutputMode(settings),
+        autotypeMethod: resolveAutotypeMethod(settings),
+        micDeviceId: typeof settings.micDeviceId === 'string' ? settings.micDeviceId : '',
+        micDeviceLabel: typeof settings.micDeviceLabel === 'string' ? settings.micDeviceLabel : '',
+        historyEnabled: typeof settings.historyEnabled === 'boolean' ? settings.historyEnabled : false,
+        historyLimit: clampHistoryLimit(settings.historyLimit),
         widgetStyle
     };
 }

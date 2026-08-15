@@ -48,6 +48,13 @@ class SttService {
 
     async prepare() {
         await this.cache.prepare();
+        // Fast boot: metadata-cached verification for every model that has an
+        // installation.json (file size/mtime only). Full SHA-256 hashing is
+        // deferred to right before inference in transcribeLocal().
+        await Promise.all(Object.keys(this.registry).map(async (key) => {
+            if (!(await this.cache.isInstalled(key))) return;
+            await this.cache.verifyInstalled(key).catch(() => false);
+        }));
     }
 
     async getStatus(modelKey) {

@@ -10,13 +10,12 @@ const zh = require('./locales/zh.json');
 const LISTEN_CHANNELS = new Set([
     'settings-changed',
     'models-changed',
-    'settings-window-closed',
+    'settings-layout-restored',
     'toggle-recording',
     'open-settings',
     'download-progress',
     'gemini-fallback',
     'widget-hover',
-    'sync-settings',
 ]);
 
 const listenerMap = new Map();
@@ -51,10 +50,13 @@ function removeListener(channel, callback) {
 contextBridge.exposeInMainWorld('api', {
     appVersion: require('./package.json').version,
     locales: { en, es, zh },
+    getInitialAppearance: () => ipcRenderer.sendSync('get-initial-appearance'),
 
     // invoke (request/response)
     getApiKeyStatus: () => ipcRenderer.invoke('get-api-key-status'),
+    getGeminiCooldowns: () => ipcRenderer.invoke('get-gemini-cooldowns'),
     getSttConfig: () => ipcRenderer.invoke('get-stt-config'),
+    markFirstRunDone: () => ipcRenderer.invoke('mark-first-run-done'),
     getModelCatalog: () => ipcRenderer.invoke('get-model-catalog'),
     saveSttConfig: (settings) => ipcRenderer.invoke('save-stt-config', settings),
     getHotkey: () => ipcRenderer.invoke('get-hotkey'),

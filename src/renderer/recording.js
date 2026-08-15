@@ -15,6 +15,8 @@ window.VTC = window.VTC || {};
     let audioCtx = null;
     let analyser = null;
     let source = null;
+    let vadTimer = null;
+    let vadBuffer = null;
 
     // VAD & silence auto-stop state
     let hasSpoken = false;
@@ -58,6 +60,26 @@ window.VTC = window.VTC || {};
 
     function hideStatus() {
         if (statusBadge) statusBadge.classList.remove('visible');
+    }
+
+    let fallbackStatusTimer = null;
+
+    // Degraded-mode feedback after a Gemini fallback: persists until the next
+    // successful transcription or an 8s timeout, whichever comes first.
+    function setFallbackStatus(msg) {
+        setStatus('busy', msg);
+        if (fallbackStatusTimer) clearTimeout(fallbackStatusTimer);
+        fallbackStatusTimer = setTimeout(() => {
+            fallbackStatusTimer = null;
+            if (!isRecording && !isStartingRecording) hideStatus();
+        }, 8000);
+    }
+
+    function clearFallbackStatus() {
+        if (fallbackStatusTimer) {
+            clearTimeout(fallbackStatusTimer);
+            fallbackStatusTimer = null;
+        }
     }
 
     function isRetryableFailure(code) {
@@ -160,6 +182,28 @@ window.VTC = window.VTC || {};
         }
     }
 
+    function stopVadSampling() {
+        if (vadTimer) {
+            clearInterval(vadTimer);
+            vadTimer = null;
+        }
+        vadBuffer = null;
+    }
+
+    function startVadSampling() {
+        stopVadSampling();
+        if (!analyser) return;
+        vadBuffer = new Uint8Array(analyser.frequencyBinCount);
+        vadTimer = setInterval(() => {
+            if (!isRecording || !analyser) return;
+            if (vadBuffer.length !== analyser.frequencyBinCount) {
+                vadBuffer = new Uint8Array(analyser.frequencyBinCount);
+            }
+            analyser.getByteFrequencyData(vadBuffer);
+            processVadFrame(vadBuffer);
+        }, 40);
+    }
+
     async function startRecording() {
         if (isRecording || isStartingRecording || (micBtn && micBtn.classList.contains('transcribing'))) return;
         isStartingRecording = true;
@@ -231,6 +275,8 @@ window.VTC = window.VTC || {};
                 if (sessionId !== recordingSessionId) return;
                 cancelPending = true;
                 isRecording = false;
+                stopVadSampling();
+                window.VTC?.visualizer?.stopVisualizer();
                 isStartingRecording = false;
                 if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                     try { mediaRecorder.stop(); } catch (error) {}
@@ -330,6 +376,7 @@ window.VTC = window.VTC || {};
                             setTimeout(() => micBtn?.classList.remove('show-check'), 1400);
                         }
                         log(`[render] transcribe OK | engine: ${sttConfig?.sttEngine || '?'}`);
+                        clearFallbackStatus();
                         setStatus('done', result.typed ? '✓ TYPED' : '✓ COPIED');
                         setTimeout(hideStatus, 1600);
                         if (!sttConfig || sttConfig.playFinishSound !== false) window.VTC?.audio?.playFinishChime();
@@ -373,6 +420,8 @@ window.VTC = window.VTC || {};
             mediaRecorder.start();
             isStartingRecording = false;
             isRecording = true;
+            startVadSampling();
+            window.VTC?.visualizer?.startVisualizer();
             refreshRetranscribeBtn();
             recordStartTime = Date.now();
             document.body.classList.add('is-recording');
@@ -407,6 +456,8 @@ window.VTC = window.VTC || {};
             mediaRecorder.stop();
         }
         isRecording = false;
+        stopVadSampling();
+        window.VTC?.visualizer?.stopVisualizer();
         refreshRetranscribeBtn();
         document.body.classList.remove('is-recording');
         window.VTC.vad.smoothedSpeechVolume = 0;
@@ -448,6 +499,7 @@ window.VTC = window.VTC || {};
             if (micBtn) micBtn.classList.add('transcribing');
             if (micContainer) micContainer.classList.add('transcribing');
             setStatus('busy', 'TRANSCRIBING');
+            window.VTC?.visualizer?.startVisualizer();
         }
     }
 
@@ -470,6 +522,7 @@ window.VTC = window.VTC || {};
         if (micBtn) micBtn.classList.add('transcribing');
         if (micContainer) micContainer.classList.add('transcribing');
         setStatus('busy', 'TRANSCRIBING');
+        window.VTC?.visualizer?.startVisualizer();
         const t = window.VTC?.i18n?.t || ((k) => k);
 
         let result;
@@ -510,6 +563,7 @@ window.VTC = window.VTC || {};
                 micBtn.classList.add('show-check');
                 setTimeout(() => micBtn?.classList.remove('show-check'), 1400);
             }
+            clearFallbackStatus();
             log(`[render] transcribe OK | engine: ${window.VTC?.settings?.currentSttConfig?.sttEngine || '?'}`);
             setStatus('done', result?.typed ? '✓ TYPED' : '✓ COPIED');
             setTimeout(hideStatus, 1600);
@@ -554,6 +608,8 @@ window.VTC = window.VTC || {};
         retranscribeLast,
         setStatus,
         hideStatus,
+        setFallbackStatus,
+        clearFallbackStatus,
         showRetryButton,
         hideRetryButton,
         refreshRetranscribeBtn,

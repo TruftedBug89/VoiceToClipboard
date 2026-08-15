@@ -3,16 +3,17 @@
 
 const { BrowserWindow, screen, shell } = require('electron');
 const path = require('path');
-const { loadConfig, saveConfig, getSettingsSnapshot, getUiLanguage } = require('./config-store');
-const { L } = require('./i18n');
+const { loadConfig, saveConfig, getSettingsSnapshot } = require('./config-store');
 const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { logger } = require('../../logger');
 
 let mainWindow = null;
-let settingsWindow = null;
+let settingsRestoreBounds = null;
+let settingsExpanded = false;
 let dragState = null;
 let widgetHoverPoll = null;
 let lastWidgetHoverState = null;
+let lastWidgetNearState = null;
 let lastWidgetCursorX = null;
 let lastWidgetCursorY = null;
 
@@ -93,12 +94,16 @@ function createMainWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
-            backgroundThrottling: false
+            backgroundThrottling: true
         }
     });
 
     secureWebContents(mainWindow.webContents);
-    mainWindow.on('closed', () => { mainWindow = null; });
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+        settingsRestoreBounds = null;
+        settingsExpanded = false;
+    });
     mainWindow.loadFile(path.join(__dirname, '../../index.html'));
 
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
@@ -114,6 +119,7 @@ function createMainWindow() {
 
     let savePosTimer = null;
     mainWindow.on('moved', () => {
+        if (settingsExpanded) return;
         if (!mainWindow) return;
         clearTimeout(savePosTimer);
         savePosTimer = setTimeout(() => {
@@ -127,84 +133,93 @@ function createMainWindow() {
     return mainWindow;
 }
 
-function createSettingsWindow({ onCancelDownloads = () => {}, onSettleHotkeys = () => {} } = {}) {
-    if (settingsWindow && !settingsWindow.isDestroyed()) {
-        settingsWindow.show();
-        settingsWindow.focus();
-        return settingsWindow;
-    }
-
-    const lang = getUiLanguage();
-    settingsWindow = new BrowserWindow({
-        width: 400,
-        height: 700,
-        minWidth: 360,
-        minHeight: 520,
-        parent: mainWindow,
-        modal: false,
-        title: L('settingsWindow.title', null, lang),
-        frame: false,
-        backgroundColor: '#0e0f14',
-        autoHideMenuBar: true,
-        resizable: true,
-        webPreferences: {
-            preload: path.join(__dirname, '../../preload.js'),
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: false,
-            backgroundThrottling: true
-        }
+function settingsBoundsForWidget(bounds) {
+    const display = screen.getDisplayNearestPoint({
+        x: bounds.x + Math.round(bounds.width / 2),
+        y: bounds.y + Math.round(bounds.height / 2)
     });
-
-    secureWebContents(settingsWindow.webContents);
-    settingsWindow.loadFile(path.join(__dirname, '../../index.html'), { query: { settings: '1' } });
-    settingsWindow.on('closed', () => {
-        onCancelDownloads();
-        onSettleHotkeys();
-        settingsWindow = null;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('settings-window-closed');
-        }
-        ensureWidgetAlwaysOnTop();
-    });
-
-    return settingsWindow;
+    const workArea = display.workArea;
+    const width = Math.min(420, workArea.width);
+    const height = Math.min(720, workArea.height);
+    return {
+        width,
+        height,
+        x: Math.max(workArea.x, Math.min(bounds.x + Math.round((bounds.width - width) / 2), workArea.x + workArea.width - width)),
+        y: Math.max(workArea.y, Math.min(bounds.y + Math.round((bounds.height - height) / 2), workArea.y + workArea.height - height))
+    };
 }
 
-function showSettingsWindow(callbacks) {
-    createSettingsWindow(callbacks);
-    if (settingsWindow && !settingsWindow.isDestroyed()) {
-        settingsWindow.show();
-        settingsWindow.focus();
+// Settings stay in the widget's renderer as #settings-modal. Expanding the
+// existing window keeps focus ownership simple and avoids a second renderer
+// racing the widget's theme/config state.
+function createSettingsWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    if (!settingsExpanded) {
+        settingsRestoreBounds = mainWindow.getBounds();
+        settingsExpanded = true;
+        mainWindow.setIgnoreMouseEvents(false);
+        mainWindow.setBounds(settingsBoundsForWidget(settingsRestoreBounds), false);
     }
-    ensureWidgetAlwaysOnTop();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('open-settings');
+    return mainWindow;
+}
+
+function showSettingsWindow() {
+    return createSettingsWindow();
 }
 
 function closeSettingsWindow(onCancelDownloads) {
     if (onCancelDownloads) onCancelDownloads();
-    if (settingsWindow && !settingsWindow.isDestroyed()) {
-        settingsWindow.close();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (settingsExpanded && settingsRestoreBounds) {
+        const restoreBounds = settingsRestoreBounds;
+        settingsRestoreBounds = null;
+        settingsExpanded = false;
+        mainWindow.setBounds(restoreBounds, false);
     }
+    mainWindow.webContents.send('settings-layout-restored');
+    ensureWidgetAlwaysOnTop();
 }
+
+// Hysteresis margin for the click-through hover poll: once the cursor has left
+// the window rect, it stays "near" until it is this many px outside. 16px ≈ one
+// 200ms poll step at a slow (~80px/s) cursor, which kills the enter/leave
+// oscillation at the widget edge without making the dead zone feel sticky.
+const WIDGET_HOVER_HYSTERESIS_PX = 16;
 
 function initWidgetHoverPoll() {
     if (widgetHoverPoll) clearInterval(widgetHoverPoll);
+    // A fresh renderer must receive its first hover state even when the poll
+    // was stopped and restarted while the pointer did not move.
+    lastWidgetHoverState = null;
+    lastWidgetNearState = null;
+    lastWidgetCursorX = null;
+    lastWidgetCursorY = null;
     widgetHoverPoll = setInterval(() => {
         if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
         const cursor = screen.getCursorScreenPoint();
         const [wx, wy] = mainWindow.getPosition();
         const [ww, wh] = mainWindow.getSize();
         const inside = cursor.x >= wx && cursor.x <= wx + ww && cursor.y >= wy && cursor.y <= wy + wh;
+        // "near" covers the hysteresis band just outside the rect; the renderer
+        // holds its current interactive state while near so the ignore flag
+        // can't flap when the cursor grazes the edge.
+        const near = cursor.x >= wx - WIDGET_HOVER_HYSTERESIS_PX && cursor.x <= wx + ww + WIDGET_HOVER_HYSTERESIS_PX &&
+            cursor.y >= wy - WIDGET_HOVER_HYSTERESIS_PX && cursor.y <= wy + wh + WIDGET_HOVER_HYSTERESIS_PX;
         const relX = inside ? cursor.x - wx : 0;
         const relY = inside ? cursor.y - wy : 0;
-        if (inside !== lastWidgetHoverState || (inside && (relX !== lastWidgetCursorX || relY !== lastWidgetCursorY))) {
+        const stateChanged = inside !== lastWidgetHoverState || near !== lastWidgetNearState;
+        if (stateChanged || (inside && (relX !== lastWidgetCursorX || relY !== lastWidgetCursorY))) {
             lastWidgetHoverState = inside;
+            lastWidgetNearState = near;
             lastWidgetCursorX = relX;
             lastWidgetCursorY = relY;
             if (!mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('widget-hover', inside
-                    ? { inside: true, x: relX, y: relY }
-                    : { inside: false });
+                    ? { inside: true, x: relX, y: relY, near: true }
+                    : { inside: false, near });
             }
         }
     }, 200);
@@ -215,6 +230,10 @@ function stopWidgetHoverPoll() {
         clearInterval(widgetHoverPoll);
         widgetHoverPoll = null;
     }
+    lastWidgetHoverState = null;
+    lastWidgetNearState = null;
+    lastWidgetCursorX = null;
+    lastWidgetCursorY = null;
 }
 
 function handleDragStart() {
@@ -251,21 +270,19 @@ function handleDragEnd() {
 async function broadcastSettingsChanged(sttService, updateTray) {
     if (updateTray) updateTray();
     const snapshot = await getSettingsSnapshot(sttService);
-    for (const window of [mainWindow, settingsWindow]) {
-        if (window && !window.isDestroyed()) window.webContents.send('settings-changed', snapshot);
-    }
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings-changed', snapshot);
 }
 
 async function broadcastModelsChanged(sttService, updateTray) {
     await broadcastSettingsChanged(sttService, updateTray);
-    for (const window of [mainWindow, settingsWindow]) {
-        if (window && !window.isDestroyed()) window.webContents.send('models-changed');
-    }
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('models-changed');
 }
 
 module.exports = {
     get mainWindow() { return mainWindow; },
-    get settingsWindow() { return settingsWindow; },
+    // Kept as a null compatibility getter for IPC callers that select a
+    // dialog owner; settings are now the main widget's modal, not a window.
+    get settingsWindow() { return null; },
     createMainWindow,
     createSettingsWindow,
     showSettingsWindow,

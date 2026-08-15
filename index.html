@@ -5,6 +5,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';"/>
 <title>VoiceToClipboard</title>
+<script src="src/renderer/theme-bootstrap.js"></script>
 <link rel="stylesheet" href="styles/base.css"/>
 <link rel="stylesheet" href="styles/widget.css"/>
 <link rel="stylesheet" href="styles/settings.css"/>
@@ -43,6 +44,21 @@
 <div class="burst-ring"></div>
 </div>
 </div>
+<!-- First-run welcome tour: pointer-events none so it can never block
+     recording; only the card itself is interactive. -->
+<div class="first-run-tour" id="first-run-tour" hidden>
+<div class="first-run-card">
+<div class="first-run-title" data-i18n="welcome.title">Welcome to VoiceToClipboard</div>
+<div class="first-run-body" data-i18n="welcome.body">Tap the mic to record — tap again to transcribe. Or press your global hotkey anytime.</div>
+<ul class="first-run-steps">
+<li data-i18n="welcome.step1">Click the mic button to start and stop recording</li>
+<li data-i18n="welcome.step2">Use the gear button (top right) to open Settings</li>
+<li data-i18n="welcome.step3">Press Ctrl+Alt+V anywhere to record hands-free</li>
+</ul>
+<div class="first-run-model-hint" id="first-run-model-hint" hidden data-i18n="welcome.modelHint">Choose a local model in Settings, then download it before your first offline transcription.</div>
+<button class="btn-primary first-run-btn" id="first-run-dismiss" type="button" data-i18n="welcome.gotIt">Got it</button>
+</div>
+</div>
 <!-- Minimal Status Indicator -->
 <div aria-atomic="true" aria-live="polite" id="status-badge" role="status">
 <div class="rec-dot" id="status-dot"></div>
@@ -51,7 +67,7 @@
 <!-- Transcribe Again: appears only when the last transcription failed -->
 <button data-i18n="retry.btn" id="retry-btn" title="Transcribe the last recording again with the current engine" type="button">↻ Transcribe Again</button>
 <!-- In-App Settings Modal -->
-<div aria-labelledby="settings-title" aria-modal="true" id="settings-modal" role="dialog">
+<div aria-hidden="true" aria-labelledby="settings-title" aria-modal="true" id="settings-modal" role="dialog">
 <div class="modal-header">
 <div class="flex-row gap-8">
 <div class="flex-col lh-125">
@@ -70,27 +86,29 @@
             <div class="input-group">
                 <div class="flex-row gap-8">
                     <label for="ui-language-select" class="ui-lang-label" data-i18n="lang.label">UI Language</label>
+                    <span class="info-hint" tabindex="0" data-i18n-hint="lang.note">ⓘ</span>
                     <select id="ui-language-select" class="select-styled">
                         <option value="en" data-i18n="lang.en">English</option>
                         <option value="es" data-i18n="lang.es">Español</option>
                         <option value="zh" data-i18n="lang.zh">中文</option>
                     </select>
                 </div>
-                <div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="lang.note">ⓘ</span></div>
             </div>
             </div>
 <div class="settings-section">
 <div class="settings-section-title"><span data-i18n="settings.recording">Recording</span></div>
 <!-- Microphone Selector -->
 <div class="input-group">
+<div class="flex-row gap-8">
 <label data-i18n="mic.label" for="mic-select">Microphone</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="mic.note">ⓘ</span>
+</div>
 <div class="flex-row gap-8">
 <select id="mic-select" class="select-styled flex-1">
 <option value="" data-i18n="mic.default">System default (recommended)</option>
 </select>
 <button id="mic-test-btn" type="button" class="btn-secondary record-hotkey-btn" data-i18n="mic.test">⚡ Test Mic</button>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="mic.note">ⓘ</span></div>
 <div id="mic-test-meter-wrap" class="hidden-element noise-meter-wrap-box mt-6">
 <div class="flex-between-center text-dim-95 mb-3">
 <span data-i18n="mic.level">Live Mic Level</span>
@@ -123,13 +141,15 @@
 <!-- Finish Sound Toggle -->
 <div class="input-group">
 <div class="switch-row">
+<span class="switch-label-group">
 <label class="switch-label" data-i18n="finishSound" for="finish-sound-checkbox">🔔 Sound when transcription finishes</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="finishSound.note">ⓘ</span>
+</span>
 <label class="toggle-switch">
 <input checked="" id="finish-sound-checkbox" type="checkbox"/>
 <span class="slider"></span>
 </label>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="finishSound.note">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
@@ -188,20 +208,24 @@
 <!-- Local AI Memory Mode Toggle -->
 <div class="input-group hidden-element" id="eco-mode-group">
 <div class="switch-row">
+<span class="switch-label-group">
 <label class="switch-label" data-i18n="eco.label" for="eco-mode-checkbox">Power-Saving Mode</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="eco.note">ⓘ</span>
+</span>
 <label class="toggle-switch">
 <input checked="" id="eco-mode-checkbox" type="checkbox"/>
 <span class="slider"></span>
 </label>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="eco.note">ⓘ</span></div>
 </div>
 <!-- Gemini API Keys Input -->
 <div class="input-group" id="gemini-key-group">
-<label data-i18n="gemini.keys" for="api-key-input">Gemini API Keys </label>
+<div class="flex-row gap-8">
+<label data-i18n="gemini.keys" for="api-key-input">Gemini API Keys</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="gemini.note">ⓘ</span>
+</div>
 <input autocomplete="off" id="api-key-input" class="api-key-textarea" type="text" placeholder="Paste your Gemini API key" spellcheck="false" data-i18n-placeholder="gemini.placeholder" />
 <div id="api-key-note"></div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="gemini.note">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
@@ -286,25 +310,27 @@
 </div>
 <div id="autotype-method-row" class="flex-row gap-8 mt-6">
 <label data-i18n="output.method.label" for="autotype-method-select" class="paste-style-label">Injection method</label>
+<span id="autotype-note" class="info-hint" tabindex="0" data-i18n-hint="output.autotypeNote">ⓘ</span>
 <select id="autotype-method-select" class="select-styled">
 <option value="unicode" data-i18n="output.method.unicode">Unicode (direct caret)</option>
 <option value="paste" data-i18n="output.method.paste">Paste (Ctrl+V simulation)</option>
 </select>
 </div>
-<div id="autotype-note" class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="output.autotypeNote">ⓘ</span></div>
 </div>
 </div>
 <div class="settings-section">
 <div class="settings-section-title"><span data-i18n="settings.history">Transcription History</span></div>
 <div class="input-group">
 <div class="switch-row">
+<span class="switch-label-group">
 <label class="switch-label" data-i18n="history.toggleLabel" for="history-enabled-checkbox">Enable Transcription History</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="history.toggleNote">ⓘ</span>
+</span>
 <label class="toggle-switch">
-<input id="history-enabled-checkbox" type="checkbox" checked/>
+<input id="history-enabled-checkbox" type="checkbox"/>
 <span class="slider"></span>
 </label>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="history.toggleNote">ⓘ</span></div>
 </div>
 <div id="history-controls-group" class="input-group">
 <div class="flex-row gap-8 mb-8">
@@ -341,7 +367,7 @@
 <div class="input-group">
 <label class="switch-label widget-style-label" data-i18n="appearance.widgetStyle">Widget Style</label>
 <div class="style-picker" id="style-picker" role="radiogroup" data-i18n-aria-label="appearance.widgetStyle" data-i18n-title="appearance.widgetStyleTooltip" aria-label="Widget Style" title="Pick a widget style">
-<button class="style-swatch active" data-style="crimson" role="radio" aria-checked="true" tabindex="0" type="button">
+<button class="style-swatch" data-style="crimson" role="radio" aria-checked="false" tabindex="-1" type="button">
 <span class="style-swatch-dot swatch-crimson"></span>
 <span class="style-swatch-label" data-i18n="appearance.style.crimson">Crimson</span>
 </button>
@@ -365,20 +391,24 @@
 <div class="settings-section advanced-section">
 <div class="input-group" id="save-recordings-group">
 <div class="switch-row">
+<span class="switch-label-group">
 <label class="switch-label" data-i18n="recordings.toggleLabel" for="save-recordings-checkbox">💾 Save Audio Recordings Locally</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="recordings.toggleNote">ⓘ</span>
+</span>
 <label class="toggle-switch">
 <input id="save-recordings-checkbox" type="checkbox"/>
 <span class="slider"></span>
 </label>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="recordings.toggleNote">ⓘ</span></div>
 </div>
 <div class="input-group" id="recordings-folder-details">
 <div class="flex-between-center">
+<span class="switch-label-group">
 <label class="recordings-heading" data-i18n="recordings.label">Voice Recordings</label>
+<span class="info-hint" tabindex="0" data-i18n-hint="recordings.note">ⓘ</span>
+</span>
 <button class="btn-secondary btn-compact" id="open-recordings-btn" type="button" data-i18n="recordings.openFolder">📁 Open Recordings Folder</button>
 </div>
-<div class="hint-row"><span class="info-hint" tabindex="0" data-i18n-hint="recordings.note">ⓘ</span></div>
 <div id="recordings-path-display" class="recordings-path-display"></div>
 </div>
 </div>
@@ -389,7 +419,7 @@
 <div class="autosave-status">
 <span class="check-green">✓</span> <span data-i18n="footer.autosaved">Auto-saved</span>
 </div>
-<div class="app-version-badge" id="app-version-display">v4.1.3</div>
+<div class="app-version-badge" id="app-version-display">v4.1.5</div>
 <button class="btn-remove" data-i18n="footer.removeKey" id="remove-key-btn">Remove Key</button>
 </div>
 </div>

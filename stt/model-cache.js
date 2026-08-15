@@ -189,7 +189,12 @@ async function extractArchive(archivePath, destination, archiveType = 'tar', exp
         return expectedFiles.includes(String(entryPath || '').split('/').pop());
     } : undefined;
     if (archiveType === 'zip') {
-        const yauzl = require('yauzl');
+        let yauzl;
+        try {
+            yauzl = require('yauzl');
+        } catch (e) {
+            throw new Error('ZIP model support is not available in this build.');
+        }
         await new Promise((resolve, reject) => {
             if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
             yauzl.open(archivePath, { lazyEntries: true }, (error, zipFile) => {
@@ -287,6 +292,7 @@ class ModelCache {
     constructor(modelsDir) {
         this.modelsDir = path.resolve(modelsDir);
         this.locks = new Map();
+        this.verificationInflight = new Map();
     }
 
     getPath(modelKey) {
@@ -337,12 +343,36 @@ class ModelCache {
         return !!(await this.getInstalledPath(modelKey));
     }
 
-    async verifyInstalled(modelKey) {
+    async verifyInstalled(modelKey, { force = false } = {}) {
+        if (!force && this.verificationInflight.has(modelKey)) return this.verificationInflight.get(modelKey);
+        const operation = this._verifyInstalled(modelKey, { force }).finally(() => this.verificationInflight.delete(modelKey));
+        if (!force) this.verificationInflight.set(modelKey, operation);
+        return operation;
+    }
+
+    async _verifyInstalled(modelKey, { force = false } = {}) {
         const model = getModel(modelKey);
         const installedPath = await this.getInstalledPath(modelKey);
         if (!installedPath) return false;
         const manifest = await this.getManifest(modelKey);
         if (!manifest || manifest.modelKey !== model.key) return false;
+
+        const statMap = {};
+        for (const file of model.expectedFiles) {
+            const filePath = path.join(installedPath, file);
+            const stat = await fsp.stat(filePath).catch(() => null);
+            if (!stat || !stat.isFile() || stat.size <= 0) return false;
+            statMap[file] = { size: stat.size, mtimeMs: stat.mtimeMs };
+        }
+
+        if (!force && manifest.fileStats && model.expectedFiles.every(file => {
+            const expected = manifest.fileStats[file];
+            const actual = statMap[file];
+            return expected && expected.size === actual.size && expected.mtimeMs === actual.mtimeMs;
+        })) {
+            return true;
+        }
+
         const expectedHashes = manifest.fileHashes || model.fileHashes;
         if (!expectedHashes) return false;
         const actualHashes = {};
@@ -353,12 +383,14 @@ class ModelCache {
             if (actual.toLowerCase() !== String(expected).toLowerCase()) return false;
             actualHashes[file] = actual;
         }
-        if (!manifest.fileHashes) {
+
+        if (!manifest.fileHashes || !manifest.fileStats || force) {
             const upgradedManifest = {
                 ...manifest,
                 expectedFiles: model.expectedFiles,
                 fileHashes: actualHashes,
-                migratedAt: new Date().toISOString()
+                fileStats: statMap,
+                migratedAt: manifest.fileHashes ? manifest.migratedAt : new Date().toISOString()
             };
             const manifestPath = path.join(this.getPath(modelKey), MANIFEST_NAME);
             const tempPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
@@ -447,8 +479,12 @@ class ModelCache {
             }
             checkAbort();
             const fileHashes = {};
+            const fileStats = {};
             for (const file of model.expectedFiles) {
-                fileHashes[file] = await hashFile(path.join(stagedDir, file));
+                const filePath = path.join(stagedDir, file);
+                fileHashes[file] = await hashFile(filePath);
+                const stat = await fsp.stat(filePath);
+                fileStats[file] = { size: stat.size, mtimeMs: stat.mtimeMs };
                 checkAbort();
             }
             await fsp.writeFile(path.join(stagedDir, MANIFEST_NAME), JSON.stringify({
@@ -457,6 +493,7 @@ class ModelCache {
                 expectedFiles: model.expectedFiles,
                 sha256: model.sha256 || null,
                 fileHashes,
+                fileStats,
                 installedAt: new Date().toISOString()
             }, null, 2), 'utf8');
             await fsp.rm(archivePath, { force: true });

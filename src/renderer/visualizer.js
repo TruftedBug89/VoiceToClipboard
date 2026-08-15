@@ -23,7 +23,9 @@ window.VTC = window.VTC || {};
 
     let visualizerStartTime = 0;
     let animationFrameId = null;
+    let analyserDataArray = null;
     let vizErrLogged = false;
+    const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function getStyleColors(style) {
         switch (style) {
@@ -39,11 +41,46 @@ window.VTC = window.VTC || {};
         }
     }
 
+    function isRecordingNow() {
+        return !!window.VTC?.recording?.isRecording;
+    }
+
+    function isTranscribingState() {
+        return !!document.getElementById('mic-button')?.classList.contains('transcribing');
+    }
+
+    function scheduleFrame() {
+        if (animationFrameId || document.hidden || reducedMotion) return;
+        animationFrameId = setTimeout(() => {
+            animationFrameId = null;
+            drawVisualizer();
+            scheduleFrame();
+        }, 33);
+    }
+
+    function startVisualizer() {
+        if (isSettingsWindow || !canvasCtx) return;
+        if (!visualizerStartTime) visualizerStartTime = performance.now();
+        drawVisualizer();
+        scheduleFrame();
+    }
+
+    function stopVisualizer() {
+        if (animationFrameId) {
+            clearTimeout(animationFrameId);
+            animationFrameId = null;
+        }
+        if (!isSettingsWindow && canvasCtx) drawVisualizer();
+    }
+
     function drawVisualizer() {
         if (isSettingsWindow || !canvasCtx) return;
         try {
             if (!visualizerStartTime) visualizerStartTime = performance.now();
-            const elapsed = (performance.now() - visualizerStartTime) / 1000;
+            const rawElapsed = (performance.now() - visualizerStartTime) / 1000;
+            // Reduced motion: freeze every oscillation at a calm mid-phase so
+            // the ambient frame is static instead of animating.
+            const elapsed = reducedMotion ? 1.3 : rawElapsed;
 
             canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
             const centerX = canvas.width / 2;
@@ -56,14 +93,16 @@ window.VTC = window.VTC || {};
 
             if (analyser && isRecording) {
                 bufferLength = analyser.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
+                if (!analyserDataArray || analyserDataArray.length !== bufferLength) {
+                    analyserDataArray = new Uint8Array(bufferLength);
+                }
+                dataArray = analyserDataArray;
                 analyser.getByteFrequencyData(dataArray);
-
-                // Run VAD processing inside the recording controller
-                window.VTC?.recording?.processVadFrame?.(dataArray);
             }
 
             const isRecordingNow = !!(analyser && isRecording);
+            const isTranscribing = !isRecordingNow && isTranscribingState();
+            const isActiveNow = isRecordingNow || isTranscribing;
             const currentStyle = window.VTC?.settings?.currentWidgetStyle || 'crimson';
             const col = getStyleColors(currentStyle);
 
@@ -80,7 +119,7 @@ window.VTC = window.VTC || {};
                     const ampBack = (isRecordingNow && dataArray && bufferLength > 0)
                         ? (dataArray[Math.min(bufferLength - 1, Math.floor((i / wavePoints) * (bufferLength / 2)))] / 255) * 16
                         : Math.sin(elapsed * 1.5 + i * 0.2) * 3 * breath;
-                    const yBack = baseLine + 4 - Math.sin(elapsed * 2 + (i / wavePoints) * Math.PI * 3) * (4 + ampBack);
+                    const yBack = baseLine + 4 - Math.sin(elapsed * (isTranscribing ? 2.8 : 2) + (i / wavePoints) * Math.PI * 3) * (4 + ampBack + (isTranscribing ? 1.5 : 0));
                     if (i === 0) canvasCtx.moveTo(x, yBack);
                     else canvasCtx.lineTo(x, yBack);
                 }
@@ -88,7 +127,7 @@ window.VTC = window.VTC || {};
                 canvasCtx.lineTo(0, canvas.height);
                 canvasCtx.closePath();
                 const backGrad = canvasCtx.createLinearGradient(0, baseLine - 10, 0, canvas.height);
-                backGrad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.25 : 0.12})`);
+                backGrad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${isActiveNow ? 0.25 : 0.12})`);
                 backGrad.addColorStop(1, 'transparent');
                 canvasCtx.fillStyle = backGrad;
                 canvasCtx.fill();
@@ -102,9 +141,9 @@ window.VTC = window.VTC || {};
                         const bin = Math.min(bufferLength - 1, Math.floor((i / wavePoints) * (bufferLength / 2)));
                         amp = (dataArray[bin] / 255) * 26;
                     } else {
-                        amp = Math.sin(elapsed * 2.5 + i * 0.35) * 4.5 * breath;
+                        amp = Math.sin(elapsed * (isTranscribing ? 3.4 : 2.5) + i * 0.35) * (isTranscribing ? 5.5 : 4.5) * breath;
                     }
-                    const y = baseLine - Math.sin(elapsed * 3.2 + (i / wavePoints) * Math.PI * 4) * (5 + amp);
+                    const y = baseLine - Math.sin(elapsed * (isTranscribing ? 3.4 : 3.2) + (i / wavePoints) * Math.PI * 4) * (5 + amp);
                     if (i === 0) canvasCtx.moveTo(x, y);
                     else canvasCtx.lineTo(x, y);
                 }
@@ -113,26 +152,26 @@ window.VTC = window.VTC || {};
                 canvasCtx.closePath();
 
                 const grad = canvasCtx.createLinearGradient(0, baseLine - 20, 0, canvas.height);
-                const alpha = isRecordingNow ? 0.5 : 0.28;
+                const alpha = isActiveNow ? 0.5 : 0.28;
                 grad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`);
                 grad.addColorStop(1, `rgba(${col.r}, ${col.g}, ${col.b}, 0)`);
                 canvasCtx.fillStyle = grad;
                 canvasCtx.fill();
 
-                canvasCtx.lineWidth = isRecordingNow ? 2.5 : 1.6;
-                canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isRecordingNow ? 0.95 : 0.6})`;
+                canvasCtx.lineWidth = isActiveNow ? 2.5 : 1.6;
+                canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isActiveNow ? 0.95 : 0.6})`;
                 canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.75)`;
-                canvasCtx.shadowBlur = isRecordingNow ? 10 : 3;
+                canvasCtx.shadowBlur = isActiveNow ? 10 : 3;
                 canvasCtx.stroke();
                 canvasCtx.shadowBlur = 0;
 
             } else if (currentStyle === 'aurora') {
                 const smoothedVol = window.VTC?.vad?.smoothedSpeechVolume || 0;
-                const intensity = (isRecordingNow && dataArray) ? (smoothedVol / 100) : 0.3;
+                const intensity = (isRecordingNow && dataArray) ? (smoothedVol / 100) : (isTranscribing ? 0.5 : 0.3);
 
                 auroraParticles.forEach((p) => {
                     p.y += p.vy * (1 + intensity * 1.5);
-                    p.x += Math.sin(elapsed * 1.2 + p.phase) * 0.3;
+                    p.x += Math.sin(elapsed * (isTranscribing ? 1.7 : 1.2) + p.phase) * 0.3;
                     if (p.y < -60 || p.x < -60 || p.x > 60) {
                         p.x = (Math.random() - 0.5) * 80;
                         p.y = 40 + Math.random() * 20;
@@ -170,7 +209,9 @@ window.VTC = window.VTC || {};
                         const bin = Math.min(bufferLength - 1, Math.floor((i / barCount) * (bufferLength / 2)));
                         level = smoothValues[i] = (smoothValues[i] || 0) * 0.7 + (dataArray[bin] / 255) * 0.3;
                     } else {
-                        const wave = 0.2 + 0.15 * Math.sin(elapsed * 3 + i * 0.4);
+                        const wave = isTranscribing
+                            ? (0.3 + 0.22 * Math.sin(elapsed * 3.2 + i * 0.7) + 0.1 * Math.sin(elapsed * 5.1 - i * 0.4))
+                            : (0.2 + 0.15 * Math.sin(elapsed * 3 + i * 0.4));
                         level = wave;
                     }
 
@@ -190,12 +231,12 @@ window.VTC = window.VTC || {};
                         const isPeak = Math.floor(terminalPeaks[i]) === b && b > 0;
 
                         if (isActive || isPeak) {
-                            const alpha = isPeak ? 1.0 : (0.4 + (b / maxBlocks) * 0.6);
+                            const alpha = (isPeak ? 1.0 : (0.4 + (b / maxBlocks) * 0.6));
                             canvasCtx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`;
                             canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.8)`;
                             canvasCtx.shadowBlur = isPeak ? 6 : 2;
                         } else {
-                            canvasCtx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, 0.08)`;
+                            canvasCtx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${isTranscribing ? 0.16 : 0.08})`;
                             canvasCtx.shadowBlur = 0;
                         }
 
@@ -209,7 +250,7 @@ window.VTC = window.VTC || {};
                 const bars = 32;
                 const step = (Math.PI * 2) / bars;
                 const baseRadius = 29;
-                const rot = elapsed * 0.35;
+                const rot = elapsed * (isTranscribing ? 0.5 : 0.35);
                 const breath = isRecordingNow ? 1 : 0.55 + 0.45 * Math.sin(elapsed * 1.6);
 
                 canvasCtx.lineCap = 'round';
@@ -224,8 +265,10 @@ window.VTC = window.VTC || {};
                         barHeight = 6 + (val / 255) * 22;
                         intensity = val / 255;
                     } else {
-                        const wave = 0.5 + 0.5 * Math.sin(elapsed * 1.6 - i * 0.55);
-                        barHeight = 4 + wave * 5;
+                        const wave = isTranscribing
+                            ? (0.5 + 0.25 * Math.sin(elapsed * 3.4 - i * 0.6))
+                            : (0.5 + 0.5 * Math.sin(elapsed * 1.6 - i * 0.55));
+                        barHeight = (isTranscribing ? 6 : 4) + wave * (isTranscribing ? 7 : 5);
                         intensity = 0.35 + 0.25 * wave;
                     }
 
@@ -239,10 +282,10 @@ window.VTC = window.VTC || {};
                     const x2 = centerX + cos * h2;
                     const y2 = centerY + sin * h2;
 
-                    const alpha = isRecordingNow ? (0.7 + intensity * 0.3) : (0.35 + intensity * 0.25);
+                    const alpha = isActiveNow ? (0.7 + intensity * 0.3) : (0.35 + intensity * 0.25);
                     canvasCtx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${alpha})`;
-                    canvasCtx.lineWidth = isRecordingNow ? (2 + intensity * 2) : 1.6;
-                    if (isRecordingNow) {
+                    canvasCtx.lineWidth = isActiveNow ? (2 + intensity * 2) : 1.6;
+                    if (isActiveNow) {
                         canvasCtx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.55)`;
                         canvasCtx.shadowBlur = 6 + intensity * 6;
                     } else {
@@ -256,7 +299,7 @@ window.VTC = window.VTC || {};
                     canvasCtx.stroke();
                 }
 
-                canvasCtx.strokeStyle = isRecordingNow
+                canvasCtx.strokeStyle = isActiveNow
                     ? `rgba(${col.r}, ${col.g}, ${col.b}, 0.3)`
                     : `rgba(${col.r}, ${col.g}, ${col.b}, 0.22)`;
                 canvasCtx.lineWidth = 1;
@@ -270,17 +313,12 @@ window.VTC = window.VTC || {};
                 vizErrLogged = true;
                 window.VTC?.recording?.log(`[render] visualizer exception: ${String(vizErr && vizErr.stack ? vizErr.stack : vizErr).slice(0, 400)}`);
             }
-        } finally {
-            animationFrameId = requestAnimationFrame(drawVisualizer);
         }
     }
 
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
-        } else if (!animationFrameId) {
-            animationFrameId = requestAnimationFrame(drawVisualizer);
-        }
+        if (document.hidden) stopVisualizer();
+        else startVisualizer();
     });
 
     function resetVisualizer() {
@@ -291,6 +329,8 @@ window.VTC = window.VTC || {};
     window.VTC.visualizer = {
         getStyleColors,
         drawVisualizer,
+        startVisualizer,
+        stopVisualizer,
         resetVisualizer
     };
 })();

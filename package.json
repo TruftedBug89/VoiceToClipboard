@@ -1,6 +1,6 @@
 {
   "name": "voicetoclipboard",
-  "version": "4.1.4",
+  "version": "4.1.5",
   "description": "Lightweight, always-on-top Windows widget that transcribes your voice with Gemini AI and copies the text to your clipboard.",
   "main": "main.js",
   "author": "TruftedBug89",
@@ -26,7 +26,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node scripts/run-tests.js",
+    "run-tests": "node scripts/run-tests.js",
     "check": "node scripts/check-js.js",
+    "check-js": "node scripts/check-js.js",
     "build": "electron-builder --win",
     "pack": "electron-builder --dir",
     "clean:dist": "node scripts/clean-dist.js",
@@ -74,6 +76,7 @@
       "preload.js",
       "bubble-preload.js",
       "bubble-renderer.js",
+      "bubble-theme-bootstrap.js",
       "bubble.html",
       "logger.js",
       "src/**/*",

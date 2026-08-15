@@ -3,6 +3,8 @@
 
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { loadConfig, saveConfig } = require('./config-store');
+const { isCapturableKeyName, isModifierKeyName, isEscapeKeyName } = require('./hotkey-keys');
+const { logger } = require('../../logger');
 
 const reverseKeyMap = Object.entries(UiohookKey).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
 
@@ -10,6 +12,13 @@ let currentHotkeyConfig = null;
 let isRecordingHotkey = false;
 let hotkeyPromiseResolve = null;
 let hotkeyCaptureTimeout = null;
+
+const CAPTURE_RESULT = Object.freeze({
+    ok: 'ok',
+    cancelled: 'cancelled',
+    invalid: 'invalid',
+    timeout: 'timeout'
+});
 
 function applyHotkeyConfig(hk) {
     if (!hk) {
@@ -34,7 +43,11 @@ function formatHotkey(hk) {
     return parts.join(' + ');
 }
 
-function settleHotkeyCapture() {
+function currentHotkeyString() {
+    return formatHotkey(loadConfig().customHotkey || currentHotkeyConfig);
+}
+
+function finishCapture(result, hotkeyStr) {
     if (hotkeyCaptureTimeout) {
         clearTimeout(hotkeyCaptureTimeout);
         hotkeyCaptureTimeout = null;
@@ -43,28 +56,29 @@ function settleHotkeyCapture() {
     if (hotkeyPromiseResolve) {
         const finish = hotkeyPromiseResolve;
         hotkeyPromiseResolve = null;
-        finish(formatHotkey(loadConfig().customHotkey || currentHotkeyConfig));
+        finish({ result, hotkey: hotkeyStr });
     }
+}
+
+function settleHotkeyCapture() {
+    finishCapture(CAPTURE_RESULT.ok, currentHotkeyString());
 }
 
 function startRecordingHotkey() {
     settleHotkeyCapture();
     isRecordingHotkey = true;
     return new Promise((resolve) => {
-        hotkeyPromiseResolve = (hk) => {
-            if (hotkeyCaptureTimeout) { clearTimeout(hotkeyCaptureTimeout); hotkeyCaptureTimeout = null; }
-            applyHotkeyConfig(hk);
-            saveConfig({ customHotkey: hk });
-            resolve(formatHotkey(hk));
+        hotkeyPromiseResolve = (payload) => {
+            const { result, hotkey } = payload || {};
+            if (result === CAPTURE_RESULT.ok) {
+                const hk = result === CAPTURE_RESULT.ok ? loadConfig().customHotkey || currentHotkeyConfig : null;
+                applyHotkeyConfig(hk);
+            }
+            resolve(payload);
         };
         hotkeyCaptureTimeout = setTimeout(() => {
             hotkeyCaptureTimeout = null;
-            if (hotkeyPromiseResolve) {
-                const finish = hotkeyPromiseResolve;
-                hotkeyPromiseResolve = null;
-                isRecordingHotkey = false;
-                finish(formatHotkey(loadConfig().customHotkey || currentHotkeyConfig));
-            }
+            finishCapture(CAPTURE_RESULT.timeout, currentHotkeyString());
         }, 10000);
     });
 }
@@ -72,12 +86,29 @@ function startRecordingHotkey() {
 function initHotkeys({ onToggleRecording = () => {} } = {}) {
     uIOhook.on('keydown', (e) => {
         if (isRecordingHotkey) {
-            if ([UiohookKey.Ctrl, UiohookKey.Alt, UiohookKey.Shift, UiohookKey.CtrlRight, UiohookKey.AltRight, UiohookKey.ShiftRight, UiohookKey.Meta].includes(e.keycode)) return;
-            isRecordingHotkey = false;
+            const keyName = reverseKeyMap[e.keycode] || null;
+            // Modifiers alone are not a hotkey — wait for the trigger key.
+            if (keyName && isModifierKeyName(keyName)) return;
+            // Escape cancels capture instead of becoming the hotkey.
+            if (keyName && isEscapeKeyName(keyName)) {
+                finishCapture(CAPTURE_RESULT.cancelled, currentHotkeyString());
+                return;
+            }
+            // Non-US layouts / exotic keys can surface codes we can't reliably
+            // register; reject them instead of silently storing a dead hotkey.
+            if (!keyName || !isCapturableKeyName(keyName)) {
+                finishCapture(CAPTURE_RESULT.invalid, currentHotkeyString());
+                return;
+            }
             const hk = { type: 'keyboard', keycode: e.keycode, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+            if (hotkeyCaptureTimeout) { clearTimeout(hotkeyCaptureTimeout); hotkeyCaptureTimeout = null; }
+            isRecordingHotkey = false;
+            applyHotkeyConfig(hk);
+            saveConfig({ customHotkey: hk });
             if (hotkeyPromiseResolve) {
-                hotkeyPromiseResolve(hk);
+                const finish = hotkeyPromiseResolve;
                 hotkeyPromiseResolve = null;
+                finish({ result: CAPTURE_RESULT.ok, hotkey: formatHotkey(hk) });
             }
             return;
         }
@@ -95,11 +126,15 @@ function initHotkeys({ onToggleRecording = () => {} } = {}) {
     uIOhook.on('mousedown', (e) => {
         if (isRecordingHotkey) {
             if (e.button === 1 && !e.ctrlKey && !e.altKey && !e.shiftKey) return;
-            isRecordingHotkey = false;
             const hk = { type: 'mouse', button: e.button, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+            if (hotkeyCaptureTimeout) { clearTimeout(hotkeyCaptureTimeout); hotkeyCaptureTimeout = null; }
+            isRecordingHotkey = false;
+            applyHotkeyConfig(hk);
+            saveConfig({ customHotkey: hk });
             if (hotkeyPromiseResolve) {
-                hotkeyPromiseResolve(hk);
+                const finish = hotkeyPromiseResolve;
                 hotkeyPromiseResolve = null;
+                finish({ result: CAPTURE_RESULT.ok, hotkey: formatHotkey(hk) });
             }
             return;
         }
@@ -115,13 +150,30 @@ function initHotkeys({ onToggleRecording = () => {} } = {}) {
     });
 
     const config = loadConfig();
-    applyHotkeyConfig(config.customHotkey);
+    // Reject a persisted custom hotkey whose trigger key is no longer
+    // capturable (e.g. saved by an older version with a layout-specific
+    // keycode): fall back to the default instead of a dead hotkey.
+    if (config.customHotkey && config.customHotkey.type === 'keyboard') {
+        const keyName = reverseKeyMap[config.customHotkey.keycode] || null;
+        if (!keyName || !isCapturableKeyName(keyName)) {
+            logger.warn(`[hotkeys] stored hotkey uses uncapturable key ${keyName || config.customHotkey.keycode} — resetting to default`);
+            saveConfig({ customHotkey: null });
+        }
+    }
+    applyHotkeyConfig(loadConfig().customHotkey);
     uIOhook.start();
 }
 
 function stopHotkeys() {
     try {
         uIOhook.stop();
+    } catch (e) {}
+    // Drop the keydown/mousedown listeners too: stop() only pauses the hook
+    // thread, and a leftover listener that fires during shutdown can call
+    // into a destroyed window.
+    try {
+        uIOhook.removeAllListeners('keydown');
+        uIOhook.removeAllListeners('mousedown');
     } catch (e) {}
 }
 

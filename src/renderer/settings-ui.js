@@ -4,7 +4,6 @@
 window.VTC = window.VTC || {};
 
 (function () {
-    const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
 
     const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
     const MODEL_TIER_LABELS = Object.freeze({
@@ -17,6 +16,12 @@ window.VTC = window.VTC || {};
     });
 
     let currentWidgetStyle = 'crimson';
+    // Set by theme-bootstrap.js only when it read a valid appearance before
+    // first paint. The first async snapshot consumes this marker instead of
+    // repainting a conflicting theme; user-initiated changes clear it.
+    let bootstrapStylePending = document.documentElement.getAttribute('data-bootstrap-widget-style');
+    let refreshRequestId = 0;
+    let lastFocusedBeforeSettings = null;
     let selectedEngine = 'local';
     let modelCatalog = [];
     let modelStatusRequestId = 0;
@@ -92,7 +97,7 @@ window.VTC = window.VTC || {};
 
     function modelForSelection() {
         const tier = localTierSelect?.value || 'light';
-        return modelCatalog.find(model => model.tier === tier) || null;
+        return (Array.isArray(modelCatalog) ? modelCatalog : []).find(model => model.tier === tier) || null;
     }
 
     function getSelectedModelKey() {
@@ -246,7 +251,11 @@ window.VTC = window.VTC || {};
         }
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modelDropdown?.classList.contains('open')) closeModelDropdown();
+        if (e.key === 'Escape' && modelDropdown?.classList.contains('open')) {
+            closeModelDropdown();
+            e.stopPropagation();
+            return;
+        }
     });
 
     async function loadModelCatalog() {
@@ -286,7 +295,6 @@ window.VTC = window.VTC || {};
         const backendLabels = {
             moonshine: 'Moonshine',
             whisper: 'Whisper',
-            'nemo-ctc': 'FastConformer CTC',
             'nemo-transducer': 'FastConformer Transducer',
             'sense-voice': 'SenseVoice',
             'fire-red-asr-ctc': 'FireRedASR2'
@@ -501,14 +509,10 @@ window.VTC = window.VTC || {};
             updateLocalModelUi();
             buildModelDropdown();
             renderModelCard();
-            if (isSettingsWindow) {
-                setTimeout(() => {
-                    if (modelDownloadProgress) modelDownloadProgress.style.display = 'none';
-                    if (modelDownloadBar) modelDownloadBar.style.width = '0%';
-                }, 1600);
-            } else {
-                setTimeout(closeSettings, 1200);
-            }
+            setTimeout(() => {
+                if (modelDownloadProgress) modelDownloadProgress.style.display = 'none';
+                if (modelDownloadBar) modelDownloadBar.style.width = '0%';
+            }, 1600);
         } else {
             removeDownloadSpinner();
             if (modelDownloadBar) {
@@ -564,7 +568,24 @@ window.VTC = window.VTC || {};
 
     function applyWidgetStyle(style) {
         const s = WIDGET_STYLES.includes(style) ? style : 'crimson';
+        // THEME DATA FLOW (regressed twice — read before touching):
+        // 1. theme-bootstrap.js applies data-widget-style synchronously in <head>
+        //    via getInitialAppearance() (sendSync → config.json) BEFORE first paint.
+        // 2. initializeRenderer() later fetches getSttConfig() and calls
+        //    applyAppearanceSnapshot(), which lands here with the same config.
+        // Re-setting the attribute (and toggling .theme-switching) restarts CSS
+        // animations — the visible post-paint "morph". So when the attribute
+        // already matches we skip the DOM write entirely; the bootstrap value
+        // painted first and therefore wins on any disagreement. Real style
+        // changes (user clicks a swatch) still take the full path below.
+        if (document.documentElement.getAttribute('data-widget-style') === s) {
+            const picker = document.getElementById('style-picker');
+            if (picker) markActiveSwatch(picker, s);
+            return;
+        }
+        document.documentElement.classList.add('theme-switching');
         document.documentElement.setAttribute('data-widget-style', s);
+        requestAnimationFrame(() => document.documentElement.classList.remove('theme-switching'));
         const picker = document.getElementById('style-picker');
         if (picker) markActiveSwatch(picker, s);
     }
@@ -580,6 +601,8 @@ window.VTC = window.VTC || {};
 
     function setWidgetStyle(style, { save = true } = {}) {
         const s = WIDGET_STYLES.includes(style) ? style : 'crimson';
+        bootstrapStylePending = null;
+        document.documentElement.removeAttribute('data-bootstrap-widget-style');
         currentWidgetStyle = s;
         applyWidgetStyle(s);
         if (save) autoSaveSettings();
@@ -606,6 +629,17 @@ window.VTC = window.VTC || {};
         if (!snapshot) return;
         const idleOpacity = typeof snapshot.idleOpacity === 'number' ? Math.round(snapshot.idleOpacity * 100) : 60;
         applyIdleFadeState(snapshot.idleFadeEnabled, idleOpacity);
+        if (WIDGET_STYLES.includes(bootstrapStylePending)) {
+            // Theme bootstrap ran before first paint. Treat it as the startup
+            // source of truth even if a queued config write makes this later
+            // snapshot differ; otherwise the widget visibly morphs at boot.
+            currentWidgetStyle = bootstrapStylePending;
+            const picker = document.getElementById('style-picker');
+            if (picker) markActiveSwatch(picker, currentWidgetStyle);
+            bootstrapStylePending = null;
+            document.documentElement.removeAttribute('data-bootstrap-widget-style');
+            return;
+        }
         if (typeof snapshot.widgetStyle === 'string') {
             currentWidgetStyle = WIDGET_STYLES.includes(snapshot.widgetStyle) ? snapshot.widgetStyle : 'crimson';
             applyWidgetStyle(currentWidgetStyle);
@@ -621,20 +655,41 @@ window.VTC = window.VTC || {};
 
         if (pasteKeyRow) pasteKeyRow.style.display = val === 'bubble' ? 'flex' : 'none';
         if (autotypeMethodRow) autotypeMethodRow.style.display = val === 'autotype' ? 'flex' : 'none';
-        if (autotypeNote) autotypeNote.style.display = val === 'autotype' ? 'block' : 'none';
+        if (autotypeNote) autotypeNote.style.display = val === 'autotype' ? 'inline-flex' : 'none';
     }
+
+    let historyRenderSeq = 0;
 
     async function renderHistoryList(query = '') {
         if (!historyListContainer) return;
         const t = window.VTC?.i18n?.t || ((k) => k);
+        const requestSeq = ++historyRenderSeq;
         try {
             const items = await window.api?.history.list(query);
+            if (requestSeq !== historyRenderSeq) return; // a newer query superseded this one
             historyListContainer.replaceChildren();
 
             if (!items || items.length === 0) {
                 const emptyEl = document.createElement('div');
                 emptyEl.className = 'history-empty-msg';
-                emptyEl.textContent = t('history.empty');
+                if (query && query.trim()) {
+                    const icon = document.createElement('span');
+                    icon.className = 'history-empty-icon history-empty-icon-search';
+                    icon.setAttribute('aria-hidden', 'true');
+                    const label = document.createElement('span');
+                    label.textContent = t('history.emptySearch', { q: query.trim() });
+                    emptyEl.append(icon, label);
+                } else {
+                    const icon = document.createElement('span');
+                    icon.className = 'history-empty-icon history-empty-icon-mic';
+                    icon.setAttribute('aria-hidden', 'true');
+                    const label = document.createElement('span');
+                    label.textContent = t('history.empty');
+                    const hint = document.createElement('span');
+                    hint.className = 'history-empty-hint';
+                    hint.textContent = t('history.emptyHint');
+                    emptyEl.append(icon, label, hint);
+                }
                 historyListContainer.appendChild(emptyEl);
                 return;
             }
@@ -763,7 +818,7 @@ window.VTC = window.VTC || {};
                     saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false,
                     micDeviceId,
                     micDeviceLabel,
-                    historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : true
+                    historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : false
                 });
                 if (!saved?.success) return;
 
@@ -799,6 +854,18 @@ window.VTC = window.VTC || {};
             } else if (statusBadge && (statusBadge.textContent.includes('API KEY REQUIRED') || statusBadge.textContent.includes('NO API KEY'))) {
                 window.VTC?.recording?.hideStatus();
             }
+            const cooldowns = await window.api?.getGeminiCooldowns?.() || {};
+            const keyNote = document.getElementById('api-key-note');
+            const activeKeys = Number(cooldowns.keysActive) || 0;
+            const activeModels = Number(cooldowns.modelsActive) || 0;
+            if (keyNote && (activeKeys > 0 || activeModels > 0)) {
+                const t = window.VTC?.i18n?.t || ((k, v) => k);
+                keyNote.textContent = t('gemini.cooldownState', {
+                    keys: activeKeys,
+                    models: activeModels,
+                    s: cooldowns.nextRetryInSec || cooldowns.retryInSec || 0
+                });
+            }
         } else {
             if (!sttConfig?.isDownloaded) {
                 window.VTC?.recording?.setStatus('err', 'DOWNLOAD MODEL');
@@ -810,8 +877,10 @@ window.VTC = window.VTC || {};
     }
 
     async function refreshSettingsUi(snapshot = null) {
+        const requestId = ++refreshRequestId;
         const t = window.VTC?.i18n?.t || ((k) => k);
         const sttConfig = snapshot || await window.api?.getSttConfig();
+        if (requestId !== refreshRequestId) return;
         applyAppearanceSnapshot(sttConfig);
         currentSttConfig = sttConfig;
         window.VTC?.i18n?.applyI18n(sttConfig?.uiLanguage || 'en');
@@ -821,8 +890,10 @@ window.VTC = window.VTC || {};
         const recPathDisplay = document.getElementById('recordings-path-display');
         if (recPathDisplay && sttConfig?.recordingsPath) recPathDisplay.textContent = sttConfig.recordingsPath;
         const apiStatus = await window.api?.getApiKeyStatus();
+        if (requestId !== refreshRequestId) return;
 
         await window.VTC?.interaction?.loadHotkey();
+        if (requestId !== refreshRequestId) return;
         applyModelRecommendation(sttConfig);
         setEngine(sttConfig?.sttEngine || 'local');
         if (localTierSelect) localTierSelect.value = sttConfig?.localTier || recommendedTier;
@@ -885,10 +956,12 @@ window.VTC = window.VTC || {};
         }
 
         if (historyEnabledCheckbox) {
-            historyEnabledCheckbox.checked = sttConfig?.historyEnabled !== false;
-            if (historyControlsGroup) historyControlsGroup.style.display = sttConfig?.historyEnabled !== false ? 'block' : 'none';
+            historyEnabledCheckbox.checked = sttConfig?.historyEnabled === true;
+            if (historyControlsGroup) historyControlsGroup.style.display = sttConfig?.historyEnabled === true ? 'block' : 'none';
         }
+        if (requestId !== refreshRequestId) return;
         await renderHistoryList(historySearchInput ? historySearchInput.value : '');
+        if (requestId !== refreshRequestId) return;
 
         if (removeKeyBtn) {
             removeKeyBtn.style.display = (apiStatus?.source === 'config' || (apiStatus?.count || 0) > 0) ? 'inline-block' : 'none';
@@ -912,19 +985,56 @@ window.VTC = window.VTC || {};
 
         const appVersionDisplay = document.getElementById('app-version-display');
         if (appVersionDisplay) {
-            const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.3';
+            const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.5';
             appVersionDisplay.textContent = `v${ver}`;
         }
 
+        // Keep the cooldown note honest on every settings open: cooldown
+        // writes in gemini.js don't broadcast, so refresh it here directly.
+        if (sttConfig?.sttEngine === 'gemini') {
+            const cooldowns = await window.api?.getGeminiCooldowns?.() || {};
+            const keyNote = document.getElementById('api-key-note');
+            const activeKeys = Number(cooldowns.keysActive) || 0;
+            const activeModels = Number(cooldowns.modelsActive) || 0;
+            if (keyNote && (activeKeys > 0 || activeModels > 0)) {
+                keyNote.textContent = t('gemini.cooldownState', {
+                    keys: activeKeys,
+                    models: activeModels,
+                    s: cooldowns.nextRetryInSec || cooldowns.retryInSec || 0
+                });
+            }
+        }
+
+        if (requestId !== refreshRequestId) return;
         await checkModelStatus();
     }
 
-    function openSettings() {
-        if (isSettingsWindow) return;
-        window.api?.showSettingsWindow();
+    function openSettings(fromMain = false) {
+        // The main process expands the existing widget first, then sends the
+        // open-settings event back. Keeping that boundary here prevents a
+        // tiny 232px widget from trying to render the full modal.
+        if (!fromMain && window.api?.showSettingsWindow) {
+            window.api.showSettingsWindow();
+            return;
+        }
+        if (!settingsModal) return;
+        if (settingsModal.classList.contains('active')) {
+            closeModalBtn?.focus();
+            return;
+        }
+        lastFocusedBeforeSettings = document.activeElement;
+        settingsModal.classList.add('active');
+        settingsModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('settings-active');
+        window.VTC?.interaction?.refreshMouseIgnore();
+        // Refreshing fields does not change modal-body.scrollTop, so users can
+        // interact with controls without being bounced back to the beginning.
+        refreshSettingsUi().catch(() => {});
+        requestAnimationFrame(() => closeModalBtn?.focus());
     }
 
     function closeSettings() {
+        if (!settingsModal || !settingsModal.classList.contains('active')) return;
         window.VTC?.vad?.stopSettingsMicPreview();
         window.VTC?.audio?.stopMicTest();
         if (activeDownloadKey) {
@@ -932,14 +1042,58 @@ window.VTC = window.VTC || {};
             activeDownloadKey = null;
             window.api?.cancelLocalModelDownload(downloadingKey).catch(() => {});
         }
-        if (isSettingsWindow) {
-            window.api?.closeSettingsWindow();
-            return;
-        }
-        if (settingsModal) settingsModal.classList.remove('active');
+        settingsModal.classList.remove('active');
+        settingsModal.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('settings-active');
         window.VTC?.interaction?.refreshMouseIgnore();
+        window.api?.closeSettingsWindow();
+        // Restore keyboard focus to whatever opened the settings UI.
+        if (lastFocusedBeforeSettings && lastFocusedBeforeSettings.focus) {
+            try { lastFocusedBeforeSettings.focus(); } catch (e) {}
+        }
+        lastFocusedBeforeSettings = null;
     }
+
+    // Keyboard support: ESC closes settings once; Tab is trapped inside the
+    // modal so focus can never land on the widget behind it.
+    document.addEventListener('keydown', (e) => {
+        const modalActive = settingsModal && settingsModal.classList.contains('active');
+        if (!modalActive) return;
+        if (e.key === 'Escape') {
+            if (modelDropdown?.classList.contains('open')) return; // dropdown owns ESC
+            e.preventDefault();
+            e.stopPropagation();
+            closeSettings();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        const root = settingsModal;
+        if (!root.contains(document.activeElement)) {
+            // Focus escaped to the top bar behind the modal (e.g. the gear
+            // button) — pull it back inside and let the normal trap continue.
+            e.preventDefault();
+            const focusables = [...root.querySelectorAll(
+                'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )].filter(el => el.offsetParent !== null || el === document.activeElement);
+            if (focusables.length) {
+                (e.shiftKey ? focusables[focusables.length - 1] : focusables[0]).focus();
+            }
+            return;
+        }
+        const focusables = [...root.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.offsetParent !== null || el === document.activeElement);
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
 
     // Attach form event listeners
     if (closeModalBtn) closeModalBtn.addEventListener('click', closeSettings);
@@ -1038,8 +1192,14 @@ window.VTC = window.VTC || {};
     }
 
     if (historySearchInput) {
+        // Debounced search: one IPC round-trip per pause, with a request
+        // sequence guard so a slow response can never overwrite a newer one.
+        let historySearchDebounce = null;
         historySearchInput.addEventListener('input', () => {
-            renderHistoryList(historySearchInput.value);
+            clearTimeout(historySearchDebounce);
+            historySearchDebounce = setTimeout(() => {
+                renderHistoryList(historySearchInput.value);
+            }, 180);
         });
     }
     if (historyEnabledCheckbox) {

@@ -43,15 +43,27 @@ let cachedConfig = null;
 let writeQueue = Promise.resolve();
 let saveDebounceTimer = null;
 
-async function migrateLegacyUserData() {
+// Captured before main.js calls saveConfig({}) during boot. A legacy config
+// also means this is an existing user: migrate it before the first write and
+// never re-show the welcome tour just because its data location changed.
+const configFileExistedAtBoot = fs.existsSync(configPath)
+    || legacyUserDataPaths.some(legacyPath => fs.existsSync(path.join(legacyPath, 'config.json')));
+
+async function migrateLegacyConfig() {
     await fs.promises.mkdir(canonicalUserDataPath, { recursive: true });
     for (const legacyPath of legacyUserDataPaths) {
         if (path.resolve(legacyPath) === path.resolve(canonicalUserDataPath) || !fs.existsSync(legacyPath)) continue;
-
         const legacyConfigPath = path.join(legacyPath, 'config.json');
         if (!fs.existsSync(configPath) && fs.existsSync(legacyConfigPath)) {
             await fs.promises.copyFile(legacyConfigPath, configPath);
         }
+    }
+}
+
+async function migrateLegacyUserData() {
+    await migrateLegacyConfig();
+    for (const legacyPath of legacyUserDataPaths) {
+        if (path.resolve(legacyPath) === path.resolve(canonicalUserDataPath) || !fs.existsSync(legacyPath)) continue;
 
         const legacyModelsPath = path.join(legacyPath, 'models');
         if (!fs.existsSync(legacyModelsPath)) continue;
@@ -133,6 +145,18 @@ function saveConfig(data) {
     }
 }
 
+function getInitialAppearance() {
+    const config = loadConfig();
+    return {
+        widgetStyle: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson',
+        idleFadeEnabled: config.idleFadeEnabled !== false,
+        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
+        uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage]
+            ? config.uiLanguage
+            : mapUiLanguage(getSystemLocale())
+    };
+}
+
 function getUiLanguage() {
     const c = loadConfig();
     if (c && typeof c.uiLanguage === 'string' && LOCALES[c.uiLanguage]) return c.uiLanguage;
@@ -144,7 +168,7 @@ function getApiKeys() {
     const envKey = process.env.GEMINI_API_KEY;
     if (envKey && envKey.trim()) keys.push(envKey.trim());
     const config = loadConfig();
-    if (config.apiKey && config.apiKey.trim()) keys.push(config.apiKey.trim());
+    if (typeof config.apiKey === 'string' && config.apiKey.trim()) keys.push(config.apiKey.trim());
     if (Array.isArray(config.apiKeys)) {
         for (const k of config.apiKeys) {
             if (typeof k === 'string' && k.trim()) keys.push(k.trim());
@@ -198,7 +222,10 @@ async function getSettingsSnapshot(sttService) {
         micDeviceId: config.micDeviceId || '',
         micDeviceLabel: config.micDeviceLabel || '',
         historyEnabled: config.historyEnabled === true,
-        historyLimit: typeof config.historyLimit === 'number' ? Math.max(10, Math.min(500, Math.round(config.historyLimit))) : 50
+        historyLimit: typeof config.historyLimit === 'number' ? Math.max(10, Math.min(500, Math.round(config.historyLimit))) : 50,
+        // First-run flag: config file didn't exist at boot AND the user never
+        // dismissed the tour. The renderer calls mark-first-run-done once.
+        firstRun: !configFileExistedAtBoot && config.firstRunDone !== true
     };
 }
 
@@ -208,10 +235,12 @@ module.exports = {
     modelsDir,
     recordingsDir,
     historyPath,
+    migrateLegacyConfig,
     migrateLegacyUserData,
     loadConfig,
     saveConfig,
     flushConfigImmediately,
+    getInitialAppearance,
     getUiLanguage,
     getApiKeys,
     getApiKey,

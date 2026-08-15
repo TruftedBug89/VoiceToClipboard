@@ -9,6 +9,21 @@ window.VTC = window.VTC || {};
     let locale = LOCALES.en || {};
 
     /**
+     * Looks up a (possibly dotted) key in a locale dictionary.
+     * @param {object} dict
+     * @param {string} key
+     * @returns {string|undefined}
+     */
+    function lookup(dict, key) {
+        let v = dict;
+        for (const part of String(key).split('.')) {
+            if (v && typeof v === 'object' && part in v) v = v[part];
+            else return undefined;
+        }
+        return typeof v === 'string' ? v : undefined;
+    }
+
+    /**
      * Translates a key with optional template variable replacements.
      * @param {string} key
      * @param {Record<string, string|number>} [vars]
@@ -16,9 +31,9 @@ window.VTC = window.VTC || {};
      * @returns {string}
      */
     function t(key, vars, fallback) {
-        let v = locale[key];
-        if (v === undefined || v === null) v = LOCALES.en[key];
-        if (v === undefined || v === null) v = (fallback !== undefined ? fallback : key);
+        let v = lookup(locale, key);
+        if (v === undefined) v = lookup(LOCALES.en, key);
+        if (v === undefined) v = (fallback !== undefined ? fallback : key);
         v = String(v);
         if (vars) {
             for (const k of Object.keys(vars)) v = v.split('{' + k + '}').join(String(vars[k]));
@@ -113,6 +128,9 @@ window.VTC = window.VTC || {};
             const label = t(el.getAttribute('data-i18n-title'));
             el.setAttribute('title', label);
             el.setAttribute('aria-label', label);
+        });
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+            el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
         });
         document.querySelectorAll('[data-i18n-hint]').forEach(el => {
             const hint = t(el.getAttribute('data-i18n-hint'));

@@ -11,6 +11,7 @@ const {
     loadConfig,
     saveConfig,
     flushConfigImmediately,
+    migrateLegacyConfig,
     migrateLegacyUserData
 } = require('./src/main/config-store');
 const { createGeminiTranscriber } = require('./src/main/gemini');
@@ -30,7 +31,7 @@ const {
     broadcastSettingsChanged
 } = windows;
 const { createTray, updateTrayMenu } = require('./src/main/tray');
-const { initHotkeys, stopHotkeys, settleHotkeyCapture } = require('./src/main/hotkeys');
+const { initHotkeys, stopHotkeys } = require('./src/main/hotkeys');
 const { cleanupJunk } = require('./src/main/hygiene');
 const { registerIpcHandlers } = require('./src/main/ipc');
 
@@ -71,10 +72,7 @@ if (!gotTheLock) {
             if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
         },
         onResetPosition: () => resetWidgetPosition(),
-        onShowSettings: () => showSettingsWindow({
-            onCancelDownloads: () => sttService.cancelAllDownloads(),
-            onSettleHotkeys: () => settleHotkeyCapture()
-        }),
+        onShowSettings: () => showSettingsWindow(),
         onAlwaysOnTopChange: (checked) => {
             saveConfig({ alwaysOnTop: checked });
             if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(checked);
@@ -93,13 +91,12 @@ if (!gotTheLock) {
     registerIpcHandlers({ sttService, updateTray });
 
     app.whenReady().then(async () => {
+        // Resolve a legacy config before the first default write. This keeps
+        // portable/older installs intact and makes first-run detection honest.
         try {
-            await migrateLegacyUserData();
-            await sttService.prepare();
-            await cleanupJunk(sttService);
+            await migrateLegacyConfig();
         } catch (error) {
-            const message = sanitizeErrorMessage(error);
-            logger.error(`[main] startup preparation failed | ${message}`);
+            logger.error(`[main] config migration failed | ${sanitizeErrorMessage(error)}`);
         }
         saveConfig({});
 
@@ -112,10 +109,7 @@ if (!gotTheLock) {
                 if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
             },
             onResetPosition: () => resetWidgetPosition(),
-            onShowSettings: () => showSettingsWindow({
-                onCancelDownloads: () => sttService.cancelAllDownloads(),
-                onSettleHotkeys: () => settleHotkeyCapture()
-            }),
+            onShowSettings: () => showSettingsWindow(),
             onAlwaysOnTopChange: (checked) => {
                 saveConfig({ alwaysOnTop: checked });
                 if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(checked);
@@ -146,9 +140,33 @@ if (!gotTheLock) {
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
         });
+
+        // Background preparation. Runs AFTER the widget is visible so startup
+        // stays fast; each step degrades gracefully and can never block the UI.
+        const backgroundPrepare = async () => {
+            try {
+                // Model-file migration can be substantial, so keep it off the
+                // launch path after the config-only migration above.
+                await migrateLegacyUserData();
+                await sttService.prepare();
+                await cleanupJunk(sttService);
+            } catch (error) {
+                const message = sanitizeErrorMessage(error);
+                logger.error(`[main] startup preparation failed | ${message}`);
+            }
+            await broadcastSettingsChanged(sttService, updateTray);
+        };
+        backgroundPrepare();
     });
 
     let isQuitting = false;
+    // Shutdown contract: before-quit preventDefaults exactly once, runs the
+    // synchronous config flush FIRST, then best-effort async teardown with a
+    // 1500ms watchdog. If the native sherpa unload hangs, app.exit(0) kills
+    // every child process (GPU/renderers) immediately — no zombie lingering.
+    // The isQuitting guard makes the app.quit() inside .finally() re-enter
+    // before-quit and fall straight through without preventDefault, so quit
+    // can never loop or race window-all-closed.
     app.on('before-quit', (event) => {
         if (isQuitting) return;
         event.preventDefault();
@@ -158,9 +176,16 @@ if (!gotTheLock) {
         stopWidgetHoverPoll();
         stopHotkeys();
         sttService.cancelAllDownloads();
+        const shutdownWatchdog = setTimeout(() => {
+            logger.error('[main] graceful shutdown stalled for 1500ms — forcing exit (config already flushed)');
+            app.exit(0);
+        }, 1500);
         sttService.unloadAll()
             .catch(error => logger.error(`[main] shutdown cleanup failed | ${sanitizeErrorMessage(error)}`))
-            .finally(() => app.quit());
+            .finally(() => {
+                clearTimeout(shutdownWatchdog);
+                app.quit();
+            });
     });
 
     app.on('window-all-closed', () => {

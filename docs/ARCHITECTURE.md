@@ -69,13 +69,17 @@
 
 | Channel | Direction | Request Payload | Return Value / Behavior |
 | :--- | :--- | :--- | :--- |
+| `get-initial-appearance` | SendSync | none | Synchronously returns `{ widgetStyle, idleFadeEnabled, idleOpacity, uiLanguage }` for pre-paint theme bootstrap. |
 | `get-stt-config` | Invoke | none | Returns current settings snapshot object. |
 | `save-stt-config` | Invoke | `settings: object` | Persists config, broadcasts updates, returns `{ success }`. |
 | `get-model-catalog` | Invoke | none | Returns array of 6 offline models with status and sizes. |
 | `download-local-model`| Invoke | `modelKey: string` | Downloads and verifies model archive atomically. |
 | `cancel-local-model-download` | Invoke | `modelKey?: string` | Cancels in-flight download stream. |
 | `remove-local-model` | Invoke | `modelKey: string` | Deletes local model files from disk. |
+| `check-model-downloaded` | Invoke | `modelKey: string` | Returns whether the given model is installed and verified. |
 | `get-api-key-status` | Invoke | none | Returns `{ hasKey, count, source }`. |
+| `get-gemini-cooldowns` | Invoke | none | Returns `{ keysActive, modelsActive, nextRetryInSec, retryInSec }` (counts only, never key material). |
+| `mark-first-run-done` | Invoke | none | Persists `firstRunDone` so the welcome tour never reappears. |
 | `save-api-key` | Invoke | `key: string \| string[]` | Saves API key to config. |
 | `remove-api-key` | Invoke | none | Clears API key from config. |
 | `transcribe-audio` | Invoke | `{ engine, modelKey, pcm, arrayBuffer, mimeType, uiLanguage }` | Returns `{ success: true, text, model, typed }` or error. |
@@ -88,8 +92,25 @@
 | `paste-text` | Invoke | `text: string` | Copies to clipboard and pastes to active window. |
 | `copy-diagnostics` | Invoke | none | Redacts secrets and copies system diagnostics to clipboard. |
 | `open-recordings-folder` | Invoke | none | Opens the recordings folder in Windows Explorer. |
+| `renderer-log` | Send | `msg: string` | Redaction-safe renderer log line → `logger.js`. |
+| `show-settings-window` | Send | none | Expands the widget window and opens the settings modal. |
+| `close-settings-window` | Send | none | Restores widget geometry after the settings modal closes. |
 | `bubble-paste` | Send | none | Triggers paste into target window and closes bubble. |
 | `bubble-dismiss` | Send | none | Dismisses paste bubble without pasting. |
 | `set-ignore-mouse` | Send | `ignore: boolean` | Enables/disables mouse click-through on transparent areas. |
 | `drag-start`/`move`/`end` | Send | none | Native window dragging deltas. |
 | `widget-raise` | Send | none | Restores always-on-top order for the widget. |
+
+### Main → renderer push channels
+
+| Channel | Payload | Purpose |
+| :--- | :--- | :--- |
+| `settings-changed` | settings snapshot | Config updated (any source) — renderer refreshes. |
+| `models-changed` | model status list | Model download/install state changed. |
+| `settings-layout-restored` | none | Widget geometry restored after settings closed — re-sync click-through. |
+| `toggle-recording` | none | Global hotkey fired — toggle the recording state machine. |
+| `open-settings` | none | Main requested the settings modal (after window expansion). |
+| `download-progress` | `{ modelKey, percent, … }` | Live model download progress. |
+| `gemini-fallback` | `{ model, keyIndex }` | Gemini failover: the active model/key index after a fallback. |
+| `widget-hover` | `{ inside, near, x, y }` | Cursor position relative to the widget window (click-through poll). |
+| `bubble-set-text` | `{ text, key, keyLabel, title, style }` | Bubble window: clipped transcript + theme + paste key. |

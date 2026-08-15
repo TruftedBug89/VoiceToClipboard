@@ -23,6 +23,41 @@ function isAuthError(err) {
     return status === 400 && /api key|unauthorized|forbidden|permission|invalid.?key|authentication/i.test(msg);
 }
 
+/**
+ * Pure cooldown arithmetic (unit-tested). Returns ms until the earliest
+ * still-active cooldown in the map expires, or 0 when everything is free.
+ */
+function remainingCooldownMs(cooldownMap, now = Date.now()) {
+    let min = 0;
+    for (const until of Object.values(cooldownMap || {})) {
+        if (typeof until !== 'number') continue;
+        const remain = until - now;
+        if (remain > 0 && (min === 0 || remain < min)) min = remain;
+    }
+    return min;
+}
+
+/**
+ * Pure summary of the key/model cooldown state for the settings UI.
+ * Only counts are returned — never key material or hashes.
+ */
+function cooldownSummary({ keyCooldowns = {}, modelCooldowns = {}, now = Date.now() } = {}) {
+    const keysActive = Object.values(keyCooldowns).filter(v => typeof v === 'number' && v > now).length;
+    const modelsActive = Object.values(modelCooldowns).filter(v => typeof v === 'number' && v > now).length;
+    const keyRetryInMs = remainingCooldownMs(keyCooldowns, now);
+    const modelRetryInMs = remainingCooldownMs(modelCooldowns, now);
+    const nextRetryInMs = [keyRetryInMs, modelRetryInMs].filter(Boolean).sort((a, b) => a - b)[0] || 0;
+    return {
+        keysActive,
+        modelsActive,
+        // The next cooldown expiry is useful feedback when only one fallback
+        // is degraded; retryInMs remains the time until every active cooldown
+        // is clear for callers that need the fully healthy state.
+        nextRetryInMs,
+        retryInMs: Math.max(keyRetryInMs, modelRetryInMs)
+    };
+}
+
 function getPromptForLang(lang) {
     if (lang === 'es') {
         return 'Transcripción estricta de voz a texto. Devuelve SOLO las palabras exactas del audio, palabra por palabra, manteniendo los préstamos de otros idiomas (por ejemplo, palabras en español dentro de una frase en inglés) tal cual. Nunca añadas, corrijas, expliques ni respondas. Si no hay voz, no devuelvas nada.';
@@ -64,7 +99,11 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
         const preferred = loadConfig().geminiModel || 'gemini-2.5-flash';
         const chain = [preferred, ...GEMINI_MODEL_LADDER.filter(m => m !== preferred)]
             .filter(m => !(modelCds[m] && modelCds[m] > now));
-        const usableKeys = keys.filter(k => !(keyCds[cooldownKey(k)] && keyCds[cooldownKey(k)] > now));
+        // Retain each original (one-based) position so the UI can honestly say
+        // which configured key is active without exposing any key material.
+        const usableKeys = keys
+            .map((key, index) => ({ key, index }))
+            .filter(({ key }) => !(keyCds[cooldownKey(key)] && keyCds[cooldownKey(key)] > now));
 
         if (usableKeys.length === 0 || chain.length === 0) {
             const why = usableKeys.length === 0 && chain.length === 0
@@ -80,7 +119,7 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
         const keyRateHits = {};
 
         outer:
-        for (const key of usableKeys) {
+        for (const { key, index: keyIndex } of usableKeys) {
             const ai = new GoogleGenAI({ apiKey: key });
             for (const model of chain) {
                 for (let attempt = 0; attempt < 2; attempt++) {
@@ -104,9 +143,11 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
                         const ck = cooldownKey(key);
                         if (kd[ck]) { delete kd[ck]; saveConfig({ keyCooldowns: kd }); }
 
-                        if (model !== preferred) {
-                            saveConfig({ geminiModel: model });
-                            onFallback(model);
+                        if (model !== preferred || keyIndex > 0) {
+                            // keyIndex+1 is an original configured position,
+                            // never key material. Keep the user's preferred
+                            // model intact so cooldown recovery is automatic.
+                            onFallback({ model, keyIndex: keyIndex + 1 });
                         }
 
                         const del = onDeliver(transcript);
@@ -149,5 +190,7 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
 module.exports = {
     GEMINI_MODEL_LADDER,
     GEMINI_COOLDOWN_MS,
-    createGeminiTranscriber
+    createGeminiTranscriber,
+    remainingCooldownMs,
+    cooldownSummary
 };
