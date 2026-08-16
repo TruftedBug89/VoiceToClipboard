@@ -15,8 +15,16 @@ window.VTC = window.VTC || {};
      * @returns {string|undefined}
      */
     function lookup(dict, key) {
+        const k = String(key);
+        // Locale files are flat (dots embedded in key names, e.g. "mic.default"),
+        // with a few nested objects (e.g. appearance.style.crimson). Prefer the
+        // exact flat key, then fall back to dotted traversal for nested dicts.
+        if (dict && typeof dict === 'object' && Object.prototype.hasOwnProperty.call(dict, k)) {
+            const v = dict[k];
+            return typeof v === 'string' ? v : undefined;
+        }
         let v = dict;
-        for (const part of String(key).split('.')) {
+        for (const part of k.split('.')) {
             if (v && typeof v === 'object' && part in v) v = v[part];
             else return undefined;
         }
