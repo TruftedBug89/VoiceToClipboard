@@ -1074,7 +1074,7 @@ window.VTC = window.VTC || {};
 
     // Attach form event listeners
     if (closeModalBtn) closeModalBtn.addEventListener('click', closeSettings);
-    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openSettings());
     if (closeBtn) closeBtn.addEventListener('click', () => window.close());
     if (engineBtnGemini) engineBtnGemini.addEventListener('click', () => { setEngine('gemini'); autoSaveSettings(); });
     if (engineBtnLocal) engineBtnLocal.addEventListener('click', () => { setEngine('local'); autoSaveSettings(); });

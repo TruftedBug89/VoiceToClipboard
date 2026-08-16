@@ -72,21 +72,30 @@ test('foreground polling supports every target-dependent output mode', () => {
     assert.match(deliverySource, /config\.outputMode === 'toast'/);
 });
 
-test('visualizer is demand-driven and VAD is not coupled to canvas frames', () => {
+test('visualizer is v4.1.1 always-on and VAD is not coupled to canvas frames', () => {
     const visualizerSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'visualizer.js'), 'utf8');
     const recordingSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'recording.js'), 'utf8');
     assert.match(visualizerSource, /function startVisualizer\(\)/);
     assert.match(visualizerSource, /function stopVisualizer\(\)/);
+    // v4.1.1 visualizer neither drives VAD nor special-cases transcribing/reduced-motion.
     assert.doesNotMatch(visualizerSource, /processVadFrame/);
+    assert.doesNotMatch(visualizerSource, /isTranscribingState/);
+    assert.doesNotMatch(visualizerSource, /reducedMotion/);
+    // Always-on loop via requestAnimationFrame(drawVisualizer) in finally.
+    assert.match(visualizerSource, /animationFrameId = requestAnimationFrame\(drawVisualizer\)/);
+    // VAD lives in recording.js, not the canvas loop (modular wiring preserved).
     assert.match(recordingSource, /setInterval\(\(\) => \{/);
     assert.match(recordingSource, /processVadFrame\(vadBuffer\)/);
 });
 
-test('transcribing state does not shadow the state helper (no TDZ draw failure)', () => {
+test('visualizer uses the v4.1.1 palette (no 4.1.5 hues)', () => {
     const visualizerSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'visualizer.js'), 'utf8');
-    assert.match(visualizerSource, /function isTranscribingState\(\)/);
-    assert.match(visualizerSource, /const isTranscribing = !isRecordingNow && isTranscribingState\(\)/);
-    assert.doesNotMatch(visualizerSource, /const isTranscribingNow = !isRecordingNow && isTranscribingNow\(\)/);
+    assert.match(visualizerSource, /#0ea5e9/);   // ocean
+    assert.match(visualizerSource, /#a855f7/);   // aurora
+    assert.match(visualizerSource, /#00ff66/);   // terminal
+    assert.match(visualizerSource, /#e63946/);   // crimson
+    assert.doesNotMatch(visualizerSource, /#06b6d4/); // not 4.1.5 ocean
+    assert.doesNotMatch(visualizerSource, /#ff3b4e/); // not 4.1.5 crimson
 });
 
 test('widget boot shows busy feedback and main window is created before model preparation', () => {
