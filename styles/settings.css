@@ -495,9 +495,6 @@
             margin: 4px 0 14px;
         }
         .settings-section-title {
-            position: sticky;
-            top: -1px;
-            z-index: 4;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -507,9 +504,8 @@
             text-transform: uppercase;
             color: var(--text-dim);
             margin-bottom: 8px;
-            padding: 5px 2px;
+            padding-bottom: 5px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-            background: #15161b;
         }
         .settings-section-title::after {
             content: '';
@@ -1094,75 +1090,11 @@
         }
 
         .history-empty-msg {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
             font-size: 11px;
             color: var(--text-dim);
             text-align: center;
-            padding: 22px 8px;
-            border: 1px dashed var(--border-muted, rgba(255, 255, 255, 0.12));
-            border-radius: 10px;
-            background: color-mix(in srgb, var(--surface, #15161b) 55%, transparent);
-        }
-        .history-empty-icon {
-            position: relative;
-            display: inline-block;
-            width: 32px;
-            height: 32px;
-            border-radius: 10px;
-            border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
-            background: color-mix(in srgb, var(--primary) 9%, var(--surface-raised, #1a1c22));
-            opacity: 0.9;
-        }
-        .history-empty-icon-search::before {
-            content: '';
-            position: absolute;
-            width: 11px;
-            height: 11px;
-            top: 7px;
-            left: 7px;
-            border: 2px solid var(--primary);
-            border-radius: 50%;
-        }
-        .history-empty-icon-search::after {
-            content: '';
-            position: absolute;
-            width: 8px;
-            height: 2px;
-            right: 6px;
-            bottom: 7px;
-            border-radius: 2px;
-            background: var(--primary);
-            transform: rotate(45deg);
-            transform-origin: center;
-        }
-        .history-empty-icon-mic::before {
-            content: '';
-            position: absolute;
-            width: 8px;
-            height: 14px;
-            top: 5px;
-            left: 10px;
-            border: 2px solid var(--primary);
-            border-radius: 7px;
-            box-sizing: border-box;
-        }
-        .history-empty-icon-mic::after {
-            content: '';
-            position: absolute;
-            width: 15px;
-            height: 8px;
-            left: 7px;
-            top: 15px;
-            border: solid var(--primary);
-            border-width: 0 2px 2px;
-            border-radius: 0 0 10px 10px;
-        }
-        .history-empty-hint {
-            font-size: 10px;
-            opacity: 0.7;
+            padding: 16px 8px;
+            font-style: italic;
         }
 
         .history-card {
@@ -1248,34 +1180,6 @@
             padding: 3px 8px !important;
             font-size: 10px !important;
             border-radius: 6px !important;
-        }
-
-        /* ── 4.1.5 additions (kept, styled to match the old settings look) ── */
-        .mo-chip-fast {
-            color: #7cc7ff;
-            background: rgba(124, 199, 255, 0.10);
-            border-color: rgba(124, 199, 255, 0.3);
-        }
-        /* Compact ⓘ info hints — inline next to their label, hover/focus opens a tooltip */
-        .switch-label-group { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
-        .info-hint {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 15px; height: 15px; border-radius: 50%;
-            border: 1px solid var(--border-glass, rgba(255,255,255,0.22));
-            background: rgba(255,255,255,0.05);
-            color: var(--text-dim, #9a9aa6);
-            font-size: 10px; font-weight: 700; line-height: 1;
-            cursor: help; position: relative; flex-shrink: 0; user-select: none; vertical-align: middle;
-        }
-        .info-hint:hover, .info-hint:focus-visible { color: var(--primary); border-color: var(--primary); outline: none; }
-        #hint-tooltip {
-            position: fixed; z-index: 9999; max-width: 240px; padding: 8px 10px;
-            border-radius: 8px; background: #17181f;
-            border: 1px solid var(--border-glass, rgba(255,255,255,0.16));
-            color: var(--text-main, #e9e9f0); font-size: 11px; line-height: 1.45;
-            text-align: left; white-space: normal;
-            opacity: 0; visibility: hidden; transition: opacity 0.15s ease;
-            pointer-events: none; box-shadow: 0 10px 28px rgba(0,0,0,0.5);
         }
 
 

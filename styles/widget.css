@@ -52,10 +52,7 @@
             border: 1.5px solid rgba(255, 255, 255, 0.3);
             border-top-color: var(--primary);
             box-shadow: none;
-            /* Dedicated spinner keyframe: the shared `spin` keyframe includes a
-               translate(-50%,-50%) meant for the mic spin-ring and would drag
-               this dot off-center. */
-            animation: status-spin 0.7s linear infinite;
+            animation: spin 0.7s linear infinite;
         }
 
         #status-badge.done .rec-dot {
@@ -85,8 +82,4 @@
         @keyframes rec-blink {
             0%, 100% { opacity: 1; }
             50%      { opacity: 0.2; }
-        }
-
-        @keyframes status-spin {
-            to { transform: rotate(360deg); }
         }

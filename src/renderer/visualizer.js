@@ -30,11 +30,11 @@ window.VTC = window.VTC || {};
     function getStyleColors(style) {
         switch (style) {
             case 'ocean':
-                return { r: 6, g: 182, b: 212, hex: '#06b6d4', hover: '#38bdf8' };
+                return { r: 14, g: 165, b: 233, hex: '#0ea5e9', hover: '#38bdf8' };
             case 'aurora':
-                return { r: 192, g: 132, b: 252, hex: '#c084fc', hover: '#e879f9' };
+                return { r: 168, g: 85, b: 247, hex: '#a855f7', hover: '#c084fc' };
             case 'terminal':
-                return { r: 0, g: 255, b: 102, hex: '#00ff66', hover: '#39ff14' };
+                return { r: 0, g: 255, b: 102, hex: '#00ff66', hover: '#55ff99' };
             case 'crimson':
             default:
                 return { r: 255, g: 59, b: 78, hex: '#ff3b4e', hover: '#ff6b7a' };

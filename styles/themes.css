@@ -2,13 +2,6 @@
     --mic-width: 60px;
     --mic-height: 60px;
     --mic-radius: 50%;
-    /* Settings surface defaults (v4.1.5 settings.css relies on these) */
-    --canvas: #0c0d12;
-    --surface: #15161b;
-    --surface-raised: #1a1c22;
-    --border-strong: rgba(255, 255, 255, 0.22);
-    --border-muted: rgba(255, 255, 255, 0.1);
-    --focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 :root[data-widget-style="crimson"] {
@@ -54,33 +47,6 @@
     border-radius: 50%;
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, background 0.35s ease;
 }
-:root[data-widget-style="crimson"] #mic-button.recording {
-    background: linear-gradient(145deg, #ff3b4e, #e11d48);
-    border-color: #ff6b7a;
-    box-shadow: 0 0 24px rgba(255, 59, 78, 0.55), 0 0 8px rgba(255, 107, 122, 0.45), 0 8px 25px rgba(0,0,0,0.5);
-}
-:root[data-widget-style="crimson"] #mic-button.recording #submit-icon,
-:root[data-widget-style="crimson"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-:root[data-widget-style="crimson"] #mic-button:hover {
-    border-color: #ff6b7a;
-    background: rgba(30, 18, 24, 0.96);
-}
-:root[data-widget-style="crimson"] #mic-button:focus-visible {
-    outline: 2px solid #ff6b7a;
-    outline-offset: 3px;
-}
-:root[data-widget-style="crimson"] #mic-button.show-check {
-    background: rgba(255, 59, 78, 0.16);
-    border-color: #ff6b7a;
-}
-:root[data-widget-style="crimson"] #mic-button.show-error {
-    border-color: #ff6b7a;
-    background: rgba(255, 59, 78, 0.12);
-}
 
 /* Ocean — Tide Bar (Capsule/Pill shape & smooth sway glide) */
 :root[data-widget-style="ocean"] #mic-button {
@@ -88,32 +54,7 @@
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-radius 0.4s ease;
 }
 :root[data-widget-style="ocean"] #mic-button.recording {
-    background: linear-gradient(145deg, #06b6d4, #0284c7);
-    border-color: #67e8f9;
-    box-shadow: 0 0 26px rgba(6, 182, 212, 0.5), 0 0 8px rgba(103, 232, 249, 0.4), 0 8px 25px rgba(0,0,0,0.5);
     animation: ocean-tide-sway 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-}
-:root[data-widget-style="ocean"] #mic-button:hover {
-    border-color: #67e8f9;
-    background: rgba(8, 38, 52, 0.96);
-}
-:root[data-widget-style="ocean"] #mic-button:focus-visible {
-    outline: 2px solid #67e8f9;
-    outline-offset: 3px;
-}
-:root[data-widget-style="ocean"] #mic-button.show-check {
-    background: rgba(6, 182, 212, 0.16);
-    border-color: #67e8f9;
-}
-:root[data-widget-style="ocean"] #mic-button.show-error {
-    border-color: #67e8f9;
-    background: rgba(6, 182, 212, 0.12);
-}
-:root[data-widget-style="ocean"] #mic-button.recording #submit-icon,
-:root[data-widget-style="ocean"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 :root[data-widget-style="ocean"] #mic-aura,
 :root[data-widget-style="ocean"] .sonar-ring,
@@ -139,36 +80,8 @@
     animation: aurora-blob-morph 9s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
 }
-:root[data-widget-style="aurora"] #mic-button.transcribing {
-    animation: aurora-blob-morph 9s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, transcribing-breathe 2.2s ease-in-out infinite;
-}
 :root[data-widget-style="aurora"] #mic-button.recording {
-    background: linear-gradient(145deg, #a855f7, #ec4899);
-    border-color: #f0abfc;
-    box-shadow: 0 0 26px rgba(192, 132, 252, 0.55), 0 0 10px rgba(240, 171, 252, 0.45), 0 8px 25px rgba(0,0,0,0.5);
     animation: aurora-blob-morph 4.5s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate, mic-live 2.2s ease-in-out infinite;
-}
-:root[data-widget-style="aurora"] #mic-button:hover {
-    border-color: #f0abfc;
-    background: rgba(42, 22, 64, 0.96);
-}
-:root[data-widget-style="aurora"] #mic-button:focus-visible {
-    outline: 2px solid #f0abfc;
-    outline-offset: 3px;
-}
-:root[data-widget-style="aurora"] #mic-button.show-check {
-    background: rgba(192, 132, 252, 0.16);
-    border-color: #f0abfc;
-}
-:root[data-widget-style="aurora"] #mic-button.show-error {
-    border-color: #f0abfc;
-    background: rgba(192, 132, 252, 0.12);
-}
-:root[data-widget-style="aurora"] #mic-button.recording #submit-icon,
-:root[data-widget-style="aurora"] #mic-button.recording #mic-icon {
-    stroke: #ffffff !important;
-    fill: #ffffff !important;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 :root[data-widget-style="aurora"] #mic-aura,
 :root[data-widget-style="aurora"] .sonar-ring,
@@ -188,47 +101,14 @@
 /* Terminal — Neon Terminal (Sharp panel with scanline sweep & CRT glow) */
 :root[data-widget-style="terminal"] #mic-button {
     border-radius: var(--mic-radius);
-    border-width: 2px;
-    box-shadow: 0 0 16px rgba(0, 255, 102, 0.4), inset 0 0 10px rgba(0, 255, 102, 0.2);
+    border-width: 1.5px;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent), inset 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
     overflow: hidden;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
 }
-:root[data-widget-style="terminal"] #mic-button:not(.recording) #mic-icon {
-    fill: #00ff66 !important;
-    filter: drop-shadow(0 0 4px rgba(0, 255, 102, 0.7));
-}
-:root[data-widget-style="terminal"] #mic-button.recording {
-    background: linear-gradient(145deg, #00ff66, #00dd55);
-    border-color: #7cffb0;
-    box-shadow: 0 0 30px rgba(0, 255, 102, 0.8), 0 0 8px rgba(124, 255, 176, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.4);
-}
-:root[data-widget-style="terminal"] #mic-button:hover {
-    border-color: #7cffb0;
-    background: rgba(6, 34, 14, 0.96);
-}
-:root[data-widget-style="terminal"] #mic-button:focus-visible {
-    outline: 2px solid #7cffb0;
-    outline-offset: 3px;
-}
-:root[data-widget-style="terminal"] #mic-button.show-check {
-    background: rgba(0, 255, 102, 0.14);
-    border-color: #7cffb0;
-}
-:root[data-widget-style="terminal"] #mic-button.show-error {
-    border-color: #7cffb0;
-    background: rgba(0, 255, 102, 0.1);
-}
-:root[data-widget-style="terminal"] #mic-button.recording #submit-icon {
-    stroke: #041208 !important;
-    stroke-width: 3.2px !important;
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
-}
-:root[data-widget-style="terminal"] #mic-button.recording #mic-icon {
-    fill: #041208 !important;
-}
 :root[data-widget-style="terminal"] #mic-aura {
     border-radius: 12px;
-    background: rgba(0, 255, 102, 0.25);
+    background: rgba(0, 255, 102, 0.18);
     filter: blur(6px);
 }
 :root[data-widget-style="terminal"] .sonar-ring,
@@ -240,9 +120,9 @@
     border-radius: 12px;
     -webkit-mask: none;
     mask: none;
-    border: 1.5px dashed rgba(0, 255, 102, 0.8);
+    border: 1.5px dashed rgba(0, 255, 102, 0.7);
     background: transparent;
-    box-shadow: 0 0 14px rgba(0, 255, 102, 0.5);
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.4);
 }
 :root[data-widget-style="terminal"] #mic-button::after {
     content: '';
@@ -251,7 +131,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(180deg, transparent 0%, rgba(0, 255, 102, 0.28) 50%, transparent 100%);
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--primary) 22%, transparent) 50%, transparent 100%);
     pointer-events: none;
     animation: terminal-scanline 3.5s linear infinite;
 }
@@ -264,12 +144,9 @@
     font-family: 'Consolas', 'Courier New', monospace;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #00ff66;
 }
 :root[data-widget-style="terminal"] .rec-dot {
     border-radius: 2px;
-    background: #00ff66;
-    box-shadow: 0 0 8px rgba(0, 255, 102, 0.8);
 }
 
 /* ─── Widget Style picker (Settings) ─── */

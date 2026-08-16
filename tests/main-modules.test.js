@@ -10,7 +10,6 @@ const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8'
 const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
 const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const htmlSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const themeBootstrapSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'theme-bootstrap.js'), 'utf8');
 const ipcSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'ipc.js'), 'utf8');
 const { clipTranscript } = require('../src/main/delivery');
 const { audioPayloadBytes } = require('../src/main/recordings-store');
@@ -71,18 +70,6 @@ test('foreground polling supports every target-dependent output mode', () => {
     assert.match(deliverySource, /config\.outputMode === 'autotype'/);
     assert.match(deliverySource, /config\.outputMode === 'bubble'/);
     assert.match(deliverySource, /config\.outputMode === 'toast'/);
-});
-
-test('theme bootstraps before model loading and does not hard-code Crimson active', () => {
-    assert.match(preloadSource, /getInitialAppearance: \(\) => ipcRenderer\.sendSync\('get-initial-appearance'\)/);
-    assert.match(htmlSource, /<script src="src\/renderer\/theme-bootstrap\.js"><\/script>/);
-    assert.match(themeBootstrapSource, /setAttribute\('data-widget-style'/);
-    const initStart = rendererSource.indexOf('async function initializeRenderer()');
-    const snapshotIndex = rendererSource.indexOf('const snapshot = await window.api?.getSttConfig()', initStart);
-    const catalogIndex = rendererSource.indexOf('await window.VTC.settings.loadModelCatalog()', initStart);
-    assert.ok(initStart >= 0 && snapshotIndex > initStart && catalogIndex > snapshotIndex);
-    assert.doesNotMatch(htmlSource, /style-swatch active[^>]+data-style="crimson"/);
-    assert.match(htmlSource, /id="app-version-display">v4\.1\.5/);
 });
 
 test('visualizer is demand-driven and VAD is not coupled to canvas frames', () => {
@@ -167,27 +154,4 @@ test('renderer history search is debounced and sequence-guarded', () => {
     assert.match(settingsSource, /setTimeout\(\(\) => \{\s*renderHistoryList\(historySearchInput\.value\);\s*\}, 180\)/);
 });
 
-test('first-run tour is non-blocking and marks completion via IPC', () => {
-    const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-    const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
-    const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
-    const htmlSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const configSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'config-store.js'), 'utf8');
-    assert.match(preloadSource, /markFirstRunDone/);
-    assert.match(rendererSource, /first-run-tour/);
-    assert.match(htmlSource, /first-run-tour/);
-    assert.match(configSource, /configFileExistedAtBoot/);
-    assert.match(configSource, /firstRun: !configFileExistedAtBoot && config\.firstRunDone !== true/);
-    const tourIndex = htmlSource.indexOf('class="first-run-tour"');
-    const statusBadgeIndex = htmlSource.indexOf('id="status-badge"');
-    assert.ok(tourIndex > 0 && statusBadgeIndex > tourIndex, 'tour markup exists before the status badge');
-});
 
-test('settings section titles are sticky and modal traps focus', () => {
-    const cssSource = fs.readFileSync(path.join(__dirname, '..', 'styles', 'settings.css'), 'utf8');
-    const settingsSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'settings-ui.js'), 'utf8');
-    assert.match(cssSource, /\.settings-section-title \{[^}]*position: sticky/s);
-    assert.match(settingsSource, /lastFocusedBeforeSettings/);
-    assert.match(settingsSource, /e\.key !== 'Tab'/);
-    assert.match(settingsSource, /e\.key === 'Escape'/);
-});

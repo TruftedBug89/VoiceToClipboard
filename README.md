@@ -8,7 +8,7 @@
 
 > A lightweight, always-on-top Windows widget that turns microphone speech into clipboard text.
 
-![Version](https://img.shields.io/badge/version-4.1.5-blue.svg)
+![Version](https://img.shields.io/badge/version-4.1.6-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![Electron](https://img.shields.io/badge/Electron-v43.2.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
