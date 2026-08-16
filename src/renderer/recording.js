@@ -254,6 +254,7 @@ window.VTC = window.VTC || {};
                 }
             }
 
+            window.VTC?.audio?.playBeep(880, 0.08);
             stream = await window.VTC?.audio?.getMicStream();
 
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();

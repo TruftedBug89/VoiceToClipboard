@@ -627,7 +627,7 @@ window.VTC = window.VTC || {};
 
     function applyAppearanceSnapshot(snapshot) {
         if (!snapshot) return;
-        const idleOpacity = typeof snapshot.idleOpacity === 'number' ? Math.round(snapshot.idleOpacity * 100) : 60;
+        const idleOpacity = typeof snapshot.idleOpacity === 'number' ? Math.round(snapshot.idleOpacity * 100) : 65;
         applyIdleFadeState(snapshot.idleFadeEnabled, idleOpacity);
         if (WIDGET_STYLES.includes(bootstrapStylePending)) {
             // Theme bootstrap ran before first paint. Treat it as the startup
@@ -933,7 +933,7 @@ window.VTC = window.VTC || {};
         if (alwaysOnTopCheckbox) alwaysOnTopCheckbox.checked = sttConfig?.alwaysOnTop !== false;
 
         const idleFadeEnabled = !!sttConfig?.idleFadeEnabled;
-        const idleOpacity = typeof sttConfig?.idleOpacity === 'number' ? Math.round(sttConfig.idleOpacity * 100) : 60;
+        const idleOpacity = typeof sttConfig?.idleOpacity === 'number' ? Math.round(sttConfig.idleOpacity * 100) : 65;
         if (idleFadeCheckbox) idleFadeCheckbox.checked = idleFadeEnabled;
         if (idleFadeOptions) idleFadeOptions.style.display = idleFadeEnabled ? 'flex' : 'none';
         if (idleOpacitySlider) idleOpacitySlider.value = idleOpacity;

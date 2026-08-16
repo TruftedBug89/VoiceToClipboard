@@ -100,8 +100,6 @@ function createMainWindow() {
     secureWebContents(mainWindow.webContents);
     mainWindow.on('closed', () => {
         mainWindow = null;
-        settingsRestoreBounds = null;
-        settingsExpanded = false;
     });
     mainWindow.loadFile(path.join(__dirname, '../../index.html'));
 
@@ -118,7 +116,6 @@ function createMainWindow() {
 
     let savePosTimer = null;
     mainWindow.on('moved', () => {
-        if (settingsExpanded) return;
         if (!mainWindow) return;
         clearTimeout(savePosTimer);
         savePosTimer = setTimeout(() => {

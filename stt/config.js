@@ -87,11 +87,11 @@ function migrateConfig(input = {}) {
         config.localModelKey = deriveLocalModelKey(localTier);
         delete config.localModel;
 
-        // v2.1.0: idle transparency is ON by default at 60% for everyone
+        // v2.1.0: idle transparency is ON by default at 65% for everyone
         // (old configs predate this feature, so apply the new defaults).
         if (version < 2) {
             config.idleFadeEnabled = true;
-            config.idleOpacity = 0.6;
+            config.idleOpacity = 0.65;
         }
 
         // v2.2+: eco (power-saving) mode ON by default — the model is loaded

@@ -57,6 +57,7 @@ window.VTC = window.VTC || {};
 
     function updateMeterUI(vol, threshold) {
         if (!noiseMeterBar || !noiseThresholdMarker || !noiseMeterStatus) return;
+        const t = window.VTC?.i18n?.t || ((k) => k);
         const pct = Math.min(100, Math.max(0, Math.round((vol / METER_MAX) * 100)));
         const threshPct = Math.min(100, Math.max(0, Math.round((threshold / METER_MAX) * 100)));
 
@@ -65,13 +66,13 @@ window.VTC = window.VTC || {};
 
         const ratio = threshold > 0 ? vol / threshold : 0;
         if (ratio > 1.15) {
-            noiseMeterStatus.textContent = `Speech · ${Math.round(vol)}`;
+            noiseMeterStatus.textContent = t('meter.speechVal', { v: Math.round(vol) });
             noiseMeterStatus.style.color = '#ef4444';
         } else if (ratio > 0.85) {
-            noiseMeterStatus.textContent = `Near threshold · ${Math.round(vol)}`;
+            noiseMeterStatus.textContent = t('meter.nearThreshold', { v: Math.round(vol) });
             noiseMeterStatus.style.color = '#f59e0b';
         } else {
-            noiseMeterStatus.textContent = `Silent · ${Math.round(vol)}`;
+            noiseMeterStatus.textContent = t('meter.silentVal', { v: Math.round(vol) });
             noiseMeterStatus.style.color = '#10b981';
         }
     }
@@ -180,7 +181,7 @@ window.VTC = window.VTC || {};
             tempStream = settingsPreviewStream || await window.VTC.audio.getMicStream().catch(() => null);
             ownsStream = !settingsPreviewStream;
             if (!tempStream) {
-                if (calibrateFeedback) calibrateFeedback.textContent = 'Microphone access is unavailable — check your mic permissions.';
+                if (calibrateFeedback) calibrateFeedback.textContent = t('autostop.calibrate.noAccess');
                 return;
             }
 
@@ -200,7 +201,7 @@ window.VTC = window.VTC || {};
             if (calibrateFeedback) calibrateFeedback.textContent = t('autostop.calibrate.dontTalk', { s: durationSec });
             countdown = setInterval(() => {
                 sec--;
-                if (sec > 0) autoCalibrateBtn.textContent = `🤫 Listening… (${sec}s)`;
+                if (sec > 0) autoCalibrateBtn.textContent = t('autostop.calibrate.listening', { s: sec });
             }, 1000);
             sampleLoop = setInterval(() => {
                 const dataArr = new Uint8Array(tempAnalyser.frequencyBinCount);
@@ -223,7 +224,7 @@ window.VTC = window.VTC || {};
             if (!noiseSamples.length || Math.max(...noiseSamples) < 1) {
                 if (calibrateFeedback) {
                     calibrateFeedback.style.color = '#ef4444';
-                    calibrateFeedback.textContent = 'No sound detected — check that the microphone is connected, unmuted, and allowed in Windows privacy settings, then try again.';
+                    calibrateFeedback.textContent = t('autostop.calibrate.noSound');
                 }
                 return;
             }
@@ -239,12 +240,12 @@ window.VTC = window.VTC || {};
             }
 
             completed = true;
-            autoCalibrateBtn.textContent = `✓ Set ${newThresh}`;
+            autoCalibrateBtn.textContent = t('autostop.calibrate.done', { n: newThresh });
             setTimeout(resetUi, 2500);
         } catch (error) {
             if (calibrateFeedback) {
                 calibrateFeedback.style.color = '#ef4444';
-                calibrateFeedback.textContent = 'Microphone calibration failed — check the device and try again.';
+                calibrateFeedback.textContent = t('autostop.calibrate.failed');
             }
         } finally {
             cleanup();

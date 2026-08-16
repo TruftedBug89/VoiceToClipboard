@@ -107,7 +107,7 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         const effectiveEcoMode = settings.ecoMode !== undefined ? settings.ecoMode !== false : existing.ecoMode !== false;
         const autoStopSeconds = Math.max(1.5, Math.min(5, Number(settings.autoStopSeconds ?? existing.autoStopSeconds) || 3.5));
         const silenceThreshold = Math.max(2, Math.min(100, Number(settings.silenceThreshold ?? existing.silenceThreshold) || 12));
-        const idleOpacity = Math.max(0.1, Math.min(0.9, Number(settings.idleOpacity ?? existing.idleOpacity) || 0.6));
+        const idleOpacity = Math.max(0.1, Math.min(0.9, Number(settings.idleOpacity ?? existing.idleOpacity) || 0.65));
         const alwaysOnTop = settings.alwaysOnTop !== undefined ? settings.alwaysOnTop !== false : existing.alwaysOnTop !== false;
         const success = saveConfig({
             ...stt,

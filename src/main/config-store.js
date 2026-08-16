@@ -150,7 +150,7 @@ function getInitialAppearance() {
     return {
         widgetStyle: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson',
         idleFadeEnabled: config.idleFadeEnabled !== false,
-        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
+        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.65,
         uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage]
             ? config.uiLanguage
             : mapUiLanguage(getSystemLocale())
@@ -210,7 +210,7 @@ async function getSettingsSnapshot(sttService) {
         ecoMode: config.ecoMode !== false,
         alwaysOnTop: typeof config.alwaysOnTop === 'boolean' ? config.alwaysOnTop : true,
         idleFadeEnabled: config.idleFadeEnabled !== false,
-        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.6,
+        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.65,
         geminiModel: config.geminiModel || 'gemini-2.5-flash',
         uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage] ? config.uiLanguage : mapUiLanguage(getSystemLocale()),
         widgetStyle: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson',

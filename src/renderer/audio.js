@@ -228,7 +228,7 @@ window.VTC = window.VTC || {};
                         micTestMeterStatus.textContent = `${t('meter.speech')} ${Math.round(vol)}`;
                         micTestMeterStatus.style.color = '#10b981';
                     } else if (vol === 0 && performance.now() - lastNonZeroAt > 2000) {
-                        micTestMeterStatus.textContent = 'No signal detected — check the mic is unmuted & connected';
+                        micTestMeterStatus.textContent = t('mic.noSignal');
                         micTestMeterStatus.style.color = '#ef4444';
                     } else {
                         micTestMeterStatus.textContent = `${t('meter.silent')} ${Math.round(vol)}`;
