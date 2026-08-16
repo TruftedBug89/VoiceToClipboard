@@ -1,8 +1,8 @@
-# Long-Horizon Development Plan — VoiceToClipboard (post-4.1.6)
+# Long-Horizon Development Plan — VoiceToClipboard (post-4.2.0)
 
-Authored by the future-task planning agent, 4.1.6 baseline.
+Authored by the future-task planning agent, 4.2.0 baseline.
 
-## Current verified state (4.1.6 @ de7155d, branch v4.1.6)
+## Current verified state (4.2.0, branch v4.1.6)
 - Frontend visuals restored to v4.1.1 (CSS/bubble/markup byte-identical; animations v4.1.1;
   modular visualizer palette). Modular renderer wiring preserved for the modular backend.
 - Backend = new modular (single Gemini key, model hash integrity, auto-stop fix, hotkey UX, etc.).

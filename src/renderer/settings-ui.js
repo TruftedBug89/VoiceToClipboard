@@ -962,7 +962,7 @@ window.VTC = window.VTC || {};
 
         const appVersionDisplay = document.getElementById('app-version-display');
         if (appVersionDisplay) {
-            const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.1.5';
+            const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.2.0';
             appVersionDisplay.textContent = `v${ver}`;
         }
 
