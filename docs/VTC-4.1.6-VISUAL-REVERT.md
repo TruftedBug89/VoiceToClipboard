@@ -45,6 +45,10 @@ reverted to v4.1.1:
 
 ### Settings window
 - 4.1.5 compact ⓘ info-hint tooltips replacing the helper text paragraphs.
+- 4.1.5 '⚡ Fast' model chip and removal of the '⭐' prefix on the Recommended chip
+  (restored v4.1.1 star + Best-quality chip only).
+- 4.1.5 history empty-state icons/search-hint — restored v4.1.1's plain
+  `.history-empty-msg` text (`history.empty` / `history.emptySearch`).
 - 4.1.5 `switch-label-group` inline layout.
 - 4.1.5 sticky `.settings-section-title`.
 - 4.1.5 modal focus-trap + `lastFocusedBeforeSettings` keyboard handling.

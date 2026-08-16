@@ -175,19 +175,13 @@ window.VTC = window.VTC || {};
             if (model.tier === recommendedTier) {
                 const chip = document.createElement('span');
                 chip.className = 'mo-chip';
-                chip.textContent = t('models.recommended', null, 'Recommended');
+                chip.textContent = '⭐ ' + t('models.recommended', null, 'Recommended');
                 name.appendChild(chip);
             }
             if (model.tier === 'big' || model.tier === 'zh-big') {
                 const chip = document.createElement('span');
                 chip.className = 'mo-chip mo-chip-best';
                 chip.textContent = '🏆 ' + t('models.bestQuality', null, 'Best quality');
-                name.appendChild(chip);
-            }
-            if (model.fast) {
-                const chip = document.createElement('span');
-                chip.className = 'mo-chip mo-chip-fast';
-                chip.textContent = '⚡ ' + t('models.fast', null, 'Fast');
                 name.appendChild(chip);
             }
             const sub = document.createElement('span');
@@ -302,7 +296,7 @@ window.VTC = window.VTC || {};
         const backendLabel = backendLabels[model.backend] || model.name;
         if (modelCardMeta) {
             modelCardMeta.textContent = t('model.cardMeta', { backend: backendLabel, lang: t('model.language.auto'), size: formatDownloadSize(model.downloadBytes), ram: model.ramEstimate || '' });
-            if (model.fast) modelCardMeta.textContent += ' · ⚡ ' + t('models.fast', null, 'Fast');
+
         }
         if (modelCardDesc) modelCardDesc.textContent = model.description;
         if (modelCardLicense) modelCardLicense.textContent = `License: ${model.license}`;
@@ -672,24 +666,7 @@ window.VTC = window.VTC || {};
             if (!items || items.length === 0) {
                 const emptyEl = document.createElement('div');
                 emptyEl.className = 'history-empty-msg';
-                if (query && query.trim()) {
-                    const icon = document.createElement('span');
-                    icon.className = 'history-empty-icon history-empty-icon-search';
-                    icon.setAttribute('aria-hidden', 'true');
-                    const label = document.createElement('span');
-                    label.textContent = t('history.emptySearch', { q: query.trim() });
-                    emptyEl.append(icon, label);
-                } else {
-                    const icon = document.createElement('span');
-                    icon.className = 'history-empty-icon history-empty-icon-mic';
-                    icon.setAttribute('aria-hidden', 'true');
-                    const label = document.createElement('span');
-                    label.textContent = t('history.empty');
-                    const hint = document.createElement('span');
-                    hint.className = 'history-empty-hint';
-                    hint.textContent = t('history.emptyHint');
-                    emptyEl.append(icon, label, hint);
-                }
+                emptyEl.textContent = t(query && query.trim() ? 'history.emptySearch' : 'history.empty', query && query.trim() ? { q: query.trim() } : null);
                 historyListContainer.appendChild(emptyEl);
                 return;
             }
