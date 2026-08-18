@@ -51,6 +51,7 @@
 | [`src/main/delivery.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/delivery.js) | Output router: clipboard copy, Space-to-paste bubble, toast notification, and `win32.typeUnicodeText` autotype. |
 | [`src/main/hygiene.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/hygiene.js) | Startup cleanup for stale model caches, orphaned archives, Electron caches >200MB, and logs >5MB / 7 days. |
 | [`src/main/ipc.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/ipc.js) | Typed IPC handler registration connecting renderer calls to backend services. |
+| [`src/main/env-refresh.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/env-refresh.js) | Re-reads `GEMINI_API_KEY` from the live Windows registry (HKCU/HKLM) and refreshes `process.env` without exposing key material. |
 
 ### Renderer Process (`src/renderer/`)
 | Module | Responsibility |
@@ -78,6 +79,7 @@
 | `remove-local-model` | Invoke | `modelKey: string` | Deletes local model files from disk. |
 | `check-model-downloaded` | Invoke | `modelKey: string` | Returns whether the given model is installed and verified. |
 | `get-api-key-status` | Invoke | none | Returns `{ hasKey, count, source }`. |
+| `refresh-env-api-key` | Invoke | none | Re-reads `GEMINI_API_KEY` from the Windows registry into `process.env`; returns `{ changed, found }` (booleans only, never key material). |
 | `get-gemini-cooldowns` | Invoke | none | Returns `{ keysActive, modelsActive, nextRetryInSec, retryInSec }` (counts only, never key material). |
 | `mark-first-run-done` | Invoke | none | Persists `firstRunDone` so the welcome tour never reappears. |
 | `save-api-key` | Invoke | `key: string \| string[]` | Saves API key to config. |

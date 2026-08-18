@@ -1,7 +1,7 @@
 // main.js
 // Lean entry point orchestrating Electron lifecycle, subsystems, and window services.
 
-const { app, BrowserWindow, screen } = require('electron');
+const { app, BrowserWindow, screen, Menu } = require('electron');
 const { SttService } = require('./stt');
 const { logger } = require('./logger');
 const { sanitizeErrorMessage } = require('./stt/error-sanitizer');
@@ -36,6 +36,9 @@ const { cleanupJunk } = require('./src/main/hygiene');
 const { registerIpcHandlers } = require('./src/main/ipc');
 
 app.disableHardwareAcceleration();
+// The widget/settings are frameless and never show a menu bar, so drop the
+// default application menu entirely — it trims a little main-process memory.
+Menu.setApplicationMenu(null);
 app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=256');
 app.setAppUserModelId('com.voicetoclipboard.app');
 app.setPath('userData', canonicalUserDataPath);

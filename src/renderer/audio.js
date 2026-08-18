@@ -151,7 +151,7 @@ window.VTC = window.VTC || {};
             audioInputs.forEach((dev, idx) => {
                 const opt = document.createElement('option');
                 opt.value = dev.deviceId;
-                opt.textContent = dev.label || `Microphone ${idx + 1}`;
+                opt.textContent = dev.label || t('mic.unnamed', { n: idx + 1 });
                 if (dev.deviceId === currentVal) foundCurrent = true;
                 micSelect.appendChild(opt);
             });
@@ -161,7 +161,8 @@ window.VTC = window.VTC || {};
             } else if (currentVal && micDeviceLabel) {
                 const unpluggedOpt = document.createElement('option');
                 unpluggedOpt.value = currentVal;
-                unpluggedOpt.textContent = `${micDeviceLabel} (Disconnected)`;
+                unpluggedOpt.dataset.rawLabel = micDeviceLabel;
+                unpluggedOpt.textContent = t('mic.disconnected', { label: micDeviceLabel });
                 micSelect.appendChild(unpluggedOpt);
                 micSelect.value = currentVal;
             } else {
@@ -182,7 +183,7 @@ window.VTC = window.VTC || {};
         micSelect.addEventListener('change', () => {
             micDeviceId = micSelect.value;
             const selectedOpt = micSelect.options[micSelect.selectedIndex];
-            micDeviceLabel = micDeviceId ? (selectedOpt ? selectedOpt.textContent.replace(' (Disconnected)', '') : '') : '';
+            micDeviceLabel = micDeviceId ? (selectedOpt ? (selectedOpt.dataset.rawLabel || selectedOpt.textContent) : '') : '';
             window.VTC?.settings?.autoSaveSettings?.();
             if (isTestingMic) {
                 stopMicTest();

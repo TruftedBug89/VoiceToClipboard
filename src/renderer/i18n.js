@@ -58,6 +58,7 @@ window.VTC = window.VTC || {};
         if (typeof msg !== 'string') return msg;
         if (msg === '✓ COPIED') return t('status.COPIED');
         if (msg === '✓ TYPED') return t('status.TYPED');
+        if (msg === '✓ MODEL READY') return t('status.MODEL_READY');
         const norm = msg.trim().replace(/\s+/g, '_');
         const m = locale['status.' + norm];
         if (m !== undefined) return m;
@@ -120,6 +121,7 @@ window.VTC = window.VTC || {};
         uiLang = lang || 'en';
         locale = LOCALES[uiLang] || LOCALES.en;
         document.documentElement.lang = uiLang === 'zh' ? 'zh-CN' : (uiLang === 'es' ? 'es' : 'en');
+        document.title = t('app.name');
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
             const val = t(key, null, el.textContent.trim());
@@ -149,8 +151,11 @@ window.VTC = window.VTC || {};
         const recoNote = document.getElementById('model-reco-note');
         if (recoNote) {
             const reco = '<span class="text-gold">' + t('models.recommended') + '</span>';
-            const ram = window.VTC?.settings?.systemRamGB ? `(${window.VTC.settings.systemRamGB} GB)` : '';
-            recoNote.innerHTML = t('models.note', { reco, ram });
+            // Keep the RAM span alive (applyModelRecommendation fills it after
+            // systemRamGB is known) and re-append the quality note so it isn't
+            // destroyed when models.note is re-rendered here.
+            const ram = '<span id="model-reco-ram"></span>';
+            recoNote.innerHTML = t('models.note', { reco, ram }) + ' <span>' + t('models.qualityNote') + '</span>';
         }
 
         if (window.VTC?.settings?.applyModelRecommendation) {
@@ -165,6 +170,14 @@ window.VTC = window.VTC || {};
         applyI18n(lang);
         if (window.VTC?.settings?.applyModelRecommendation) {
             window.VTC.settings.applyModelRecommendation(null);
+        }
+        // Dynamic-DOM views have no data-i18n bindings, so re-render them on
+        // language switch: history cards and the mic device dropdown.
+        if (window.VTC?.settings?.renderHistoryList) {
+            window.VTC.settings.renderHistoryList();
+        }
+        if (window.VTC?.audio?.populateMicDevices) {
+            window.VTC.audio.populateMicDevices();
         }
     }
 

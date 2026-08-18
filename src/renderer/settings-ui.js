@@ -137,7 +137,7 @@ window.VTC = window.VTC || {};
             if (key) {
                 const model = (modelCatalog || []).find(m => m.key === key);
                 const name = model ? t('model.' + key + '.name', null, model.name) : key;
-                const langName = { es: 'Español', zh: '中文', en: 'English' }[uiLang] || 'English';
+                const langName = t('lang.' + uiLang, null, 'English');
                 langNote.textContent = t('models.langNote', { lang: langName, model: name });
                 langNote.style.display = 'block';
             } else {
@@ -205,8 +205,9 @@ window.VTC = window.VTC || {};
         if (!modelDropdownCurrent) return;
         const tier = localTierSelect?.value || recommendedTier;
         const model = modelCatalog.find(m => m.tier === tier);
+        const t = window.VTC?.i18n?.t || ((k) => k);
         const lbl = MODEL_TIER_LABELS[tier] || { name: model?.name || 'Light' };
-        modelDropdownCurrent.textContent = lbl.name;
+        modelDropdownCurrent.textContent = t('models.tier.' + tier, null, lbl.name);
         if (modelDropdownChip) modelDropdownChip.style.display = tier === recommendedTier ? 'inline-flex' : 'none';
         for (const row of modelDropdownPanel?.querySelectorAll('.model-option') || []) {
             row.classList.toggle('selected', row.dataset.tier === tier);
@@ -285,7 +286,7 @@ window.VTC = window.VTC || {};
             return;
         }
         modelCard.style.display = 'block';
-        if (modelCardName) modelCardName.textContent = model.name;
+        if (modelCardName) modelCardName.textContent = t('model.' + model.key + '.name', null, model.name);
         const backendLabels = {
             moonshine: 'Moonshine',
             whisper: 'Whisper',
@@ -298,8 +299,8 @@ window.VTC = window.VTC || {};
             modelCardMeta.textContent = t('model.cardMeta', { backend: backendLabel, lang: t('model.language.auto'), size: formatDownloadSize(model.downloadBytes), ram: model.ramEstimate || '' });
 
         }
-        if (modelCardDesc) modelCardDesc.textContent = model.description;
-        if (modelCardLicense) modelCardLicense.textContent = `License: ${model.license}`;
+        if (modelCardDesc) modelCardDesc.textContent = t('model.' + model.key + '.desc', null, model.description);
+        if (modelCardLicense) modelCardLicense.textContent = t('model.licensePrefix', { license: model.license });
         if (modelCardStatus) {
             if (model.verified === false) {
                 modelCardStatus.textContent = t('model.pending');
@@ -371,11 +372,12 @@ window.VTC = window.VTC || {};
 
     function friendlyDownloadError(msg) {
         msg = String(msg || 'Unknown error');
-        if (/base256|checksum|archive|tar|bzip/i.test(msg)) return 'The model archive could not be opened. Please try again.';
-        if (/timed out|timeout/i.test(msg)) return 'Download timed out. Check your connection and retry.';
-        if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|network|socket|getaddrinfo/i.test(msg)) return 'Network error — check your internet connection.';
-        if (/HTTP \d{3}/i.test(msg)) return 'The server returned an error while downloading. Try again later.';
-        if (/missing required files/i.test(msg)) return 'The downloaded model was incomplete. Try again.';
+        const t = window.VTC?.i18n?.t || ((k) => k);
+        if (/base256|checksum|archive|tar|bzip/i.test(msg)) return t('model.errorArchive');
+        if (/timed out|timeout/i.test(msg)) return t('model.errorTimeout');
+        if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|network|socket|getaddrinfo/i.test(msg)) return t('model.errorNetwork');
+        if (/HTTP \d{3}/i.test(msg)) return t('model.errorServer');
+        if (/missing required files/i.test(msg)) return t('model.errorIncomplete');
         return msg;
     }
 
@@ -654,8 +656,9 @@ window.VTC = window.VTC || {};
 
     let historyRenderSeq = 0;
 
-    async function renderHistoryList(query = '') {
+    async function renderHistoryList(query) {
         if (!historyListContainer) return;
+        if (typeof query !== 'string') query = historySearchInput ? historySearchInput.value : '';
         const t = window.VTC?.i18n?.t || ((k) => k);
         const requestSeq = ++historyRenderSeq;
         try {
@@ -680,13 +683,13 @@ window.VTC = window.VTC || {};
 
                 const engineBadge = document.createElement('span');
                 engineBadge.className = `history-engine-badge ${item.engine === 'gemini' ? 'gemini' : 'local'}`;
-                engineBadge.textContent = item.engine === 'gemini' ? 'Gemini' : 'Offline';
+                engineBadge.textContent = item.engine === 'gemini' ? t('engine.gemini') : t('engine.offline');
 
                 const metaText = document.createElement('span');
                 metaText.className = 'history-card-meta';
                 const dateStr = item.ts ? new Date(item.ts).toLocaleString() : '';
                 const modelStr = item.model || '';
-                const charsStr = item.chars ? `${item.chars} chars` : '';
+                const charsStr = item.chars ? t('history.chars', { n: item.chars }) : '';
                 const durStr = item.durationMs ? `${(item.durationMs / 1000).toFixed(1)}s` : '';
                 metaText.textContent = [dateStr, modelStr, charsStr, durStr].filter(Boolean).join(' · ');
 
@@ -823,12 +826,13 @@ window.VTC = window.VTC || {};
     async function checkApiKeyStatus() {
         const sttConfig = await window.api?.getSttConfig();
         currentSttConfig = sttConfig;
+        const tr = window.VTC?.i18n?.tr || ((m) => m);
         const statusBadge = document.getElementById('status-badge');
         if (sttConfig?.sttEngine === 'gemini') {
             const status = await window.api?.getApiKeyStatus();
             if (!status?.hasKey) {
                 window.VTC?.recording?.setStatus('err', 'API KEY REQUIRED');
-            } else if (statusBadge && (statusBadge.textContent.includes('API KEY REQUIRED') || statusBadge.textContent.includes('NO API KEY'))) {
+            } else if (statusBadge && (statusBadge.textContent.includes(tr('API KEY REQUIRED')) || statusBadge.textContent.includes(tr('NO API KEY')))) {
                 window.VTC?.recording?.hideStatus();
             }
             const cooldowns = await window.api?.getGeminiCooldowns?.() || {};
@@ -846,7 +850,7 @@ window.VTC = window.VTC || {};
         } else {
             if (!sttConfig?.isDownloaded) {
                 window.VTC?.recording?.setStatus('err', 'DOWNLOAD MODEL');
-            } else if (statusBadge && (statusBadge.textContent.includes('DOWNLOAD MODEL') || statusBadge.textContent.includes('MODEL NOT DOWNLOADED') || statusBadge.textContent.includes('MODEL UNAVAILABLE'))) {
+            } else if (statusBadge && (statusBadge.textContent.includes(tr('DOWNLOAD MODEL')) || statusBadge.textContent.includes(tr('MODEL NOT DOWNLOADED')) || statusBadge.textContent.includes(tr('MODEL UNAVAILABLE')))) {
                 window.VTC?.recording?.setStatus('done', '✓ MODEL READY');
                 setTimeout(() => window.VTC?.recording?.hideStatus(), 2000);
             }
@@ -950,17 +954,17 @@ window.VTC = window.VTC || {};
             removeKeyBtn.style.display = (apiStatus?.source === 'config' || (apiStatus?.count || 0) > 0) ? 'inline-block' : 'none';
             const envKeyConfigured = apiStatus?.source === 'env';
             removeKeyBtn.disabled = envKeyConfigured;
-            removeKeyBtn.title = envKeyConfigured ? 'Set via GEMINI_API_KEY environment variable — not stored in the app.' : '';
+            removeKeyBtn.title = envKeyConfigured ? t('gemini.envKeyTitle') : '';
             if (envKeyConfigured) {
                 if (geminiKeyGroup) geminiKeyGroup.style.display = 'none';
-                if (apiKeyNote) apiKeyNote.innerHTML = 'Key set via <code>GEMINI_API_KEY</code> environment variable. Remove it from Windows to enter a key here.';
+                if (apiKeyNote) apiKeyNote.innerHTML = t('gemini.envKeyNote');
             } else {
                 const nKeys = apiStatus?.count || 0;
                 if (apiKeyNote) {
                     if (nKeys > 0) {
-                        apiKeyNote.textContent = '✓ Key saved in app config.';
+                        apiKeyNote.textContent = t('gemini.keySaved');
                     } else {
-                        apiKeyNote.innerHTML = 'No key yet — get one at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.';
+                        apiKeyNote.innerHTML = t('gemini.noKey', { url: 'https://aistudio.google.com/apikey' });
                     }
                 }
             }
