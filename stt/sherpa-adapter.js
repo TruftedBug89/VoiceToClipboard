@@ -8,6 +8,61 @@ function getRequiredPath(root, fileName) {
     return path.join(root, fileName);
 }
 
+// Whisper decodes a single continuous segment per call and its decoder caps
+// the output at n_text_ctx (~448) tokens, so a long dictation gets truncated
+// mid-sentence even though the recording is complete. Splitting the clip into
+// ~28 s chunks (safely under Whisper's 30 s window) gives every chunk its own
+// token budget; the results are then stitched back together. Other backends
+// (transducer/CTC/moonshine/sense-voice) decode arbitrary-length audio and
+// are never chunked.
+const WHISPER_CHUNK_SECONDS = 28;
+const WHISPER_OVERLAP_SECONDS = 1;
+
+/**
+ * Pure chunk plan for Whisper long-audio handling (unit-tested). Returns
+ * [start, end) sample ranges covering the whole buffer with a 1 s overlap so
+ * no words are lost at the seams.
+ * @param {number} sampleCount
+ * @param {number} [sampleRate]
+ * @returns {Array<{start: number, end: number}>}
+ */
+function whisperChunkPlan(sampleCount, sampleRate = 16000) {
+    const chunkLen = Math.round(WHISPER_CHUNK_SECONDS * sampleRate);
+    const step = Math.round((WHISPER_CHUNK_SECONDS - WHISPER_OVERLAP_SECONDS) * sampleRate);
+    if (sampleCount <= chunkLen) return [{ start: 0, end: sampleCount }];
+    const ranges = [];
+    for (let start = 0; start < sampleCount; start += step) {
+        const end = Math.min(start + chunkLen, sampleCount);
+        ranges.push({ start, end });
+        if (end >= sampleCount) break;
+    }
+    return ranges;
+}
+
+/**
+ * Removes a duplicated overlap prefix from `currText` when it exactly matches
+ * the tail of `prevText` (the 1 s of audio that both chunks decoded). Falls
+ * back to returning `currText` unchanged when no clean match is found.
+ * @param {string} prevText
+ * @param {string} currText
+ * @returns {string}
+ */
+function dedupeWhisperOverlap(prevText, currText) {
+    const prev = String(prevText || '').trim();
+    const curr = String(currText || '').trim();
+    if (!prev || !curr) return curr;
+    const words = curr.split(/\s+/);
+    // Overlap is ~1 s of speech (~2–4 words); try up to 12 to be safe.
+    const max = Math.min(words.length, 12);
+    for (let n = max; n >= 2; n--) {
+        const candidate = words.slice(0, n).join(' ');
+        if (prev.endsWith(candidate)) {
+            return words.slice(n).join(' ').trim();
+        }
+    }
+    return curr;
+}
+
 // sherpa-onnx-node exposes explicit release handles on newer builds, but older
 // ones only free the native recognizer when V8 garbage-collects its wrapper.
 // We do both: call any explicit releaser that exists, then schedule a forced
@@ -119,10 +174,8 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, tokFile)
                 },
-                // Whisper/large batch models decode the whole log-mel window at once.
-                // Cap the analysis window so a multi-minute clip is chunked to ~30 s
-                // segments — far faster wall-clock on CPU with no RAM penalty.
-                maxModelSec: 30,
+                // sherpa-onnx removed Whisper's 30-second constraint, so the
+                // full clip is decoded in one pass regardless of length.
                 numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',
                 debug: 0
@@ -176,15 +229,40 @@ class SherpaAdapter {
         }
         const samples = validatePcm(pcm, sampleRate);
         const loaded = await this.load(modelKey);
-        const stream = loaded.recognizer.createStream();
-        try {
-            stream.acceptWaveform({ sampleRate, samples });
-            const result = await loaded.recognizer.decodeAsync(stream);
-            return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
-        } finally {
-            freeNativeMemory(stream);
+
+        const decodeChunk = async (chunkSamples) => {
+            const stream = loaded.recognizer.createStream();
+            try {
+                stream.acceptWaveform({ sampleRate, samples: chunkSamples });
+                const result = await loaded.recognizer.decodeAsync(stream);
+                return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
+            } finally {
+                freeNativeMemory(stream);
+            }
+        };
+
+        // Whisper caps each decode at n_text_ctx (~448) tokens, truncating long
+        // dictations. Split long clips into overlapping ~28 s chunks so every
+        // chunk gets its own token budget, then stitch with overlap dedup.
+        const registryModel = getModel(modelKey);
+        if (registryModel.backend === 'whisper' && samples.length > Math.round(WHISPER_CHUNK_SECONDS * sampleRate)) {
+            const parts = [];
+            for (const { start, end } of whisperChunkPlan(samples.length, sampleRate)) {
+                const text = await decodeChunk(samples.subarray(start, end));
+                if (!text) continue;
+                const stitched = parts.length ? dedupeWhisperOverlap(parts[parts.length - 1], text) : text;
+                if (stitched) parts.push(stitched);
+            }
+            return parts.join(' ').replace(/\s+/g, ' ').trim();
         }
+        return decodeChunk(samples);
     }
 }
 
-module.exports = { SherpaAdapter };
+module.exports = {
+    SherpaAdapter,
+    whisperChunkPlan,
+    dedupeWhisperOverlap,
+    WHISPER_CHUNK_SECONDS,
+    WHISPER_OVERLAP_SECONDS
+};

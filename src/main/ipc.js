@@ -51,6 +51,7 @@ const { validateSttConfig, WIDGET_STYLES } = require('../../stt/config');
 const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { mapUiLanguage, LOCALES, L } = require('./i18n');
 const { cooldownSummary } = require('./gemini');
+const { refreshGeminiApiKeyFromEnvironment } = require('./env-refresh');
 const { logger } = require('../../logger');
 const win32 = require('../../win32');
 
@@ -185,6 +186,19 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     });
 
     // ─── API Key Persistence ────────────────────────────────────────────────
+    // Re-reads GEMINI_API_KEY from the live Windows environment (registry)
+    // and refreshes process.env, so a key changed in System Properties while
+    // the app runs is picked up the next time settings opens. The renderer
+    // calls this at the top of every settings refresh. Returns booleans only.
+    ipcMain.handle('refresh-env-api-key', () => {
+        const result = refreshGeminiApiKeyFromEnvironment();
+        if (result.changed) {
+            // No key material is logged — just the fact that the source moved.
+            logger.info(`[main] env GEMINI_API_KEY refreshed | found: ${result.found}`);
+        }
+        return result;
+    });
+
     ipcMain.handle('save-api-key', async (event, newKey) => {
         const list = (Array.isArray(newKey) ? newKey : [newKey])
             .map(k => String(k || '').trim())

@@ -856,6 +856,12 @@ window.VTC = window.VTC || {};
     async function refreshSettingsUi(snapshot = null) {
         const requestId = ++refreshRequestId;
         const t = window.VTC?.i18n?.t || ((k) => k);
+        // Re-read GEMINI_API_KEY from the live Windows environment first so a
+        // key changed in System Properties while the app runs is reflected in
+        // the status badge and the next Gemini transcription.
+        if (window.api?.refreshEnvApiKey) {
+            await window.api.refreshEnvApiKey().catch(() => {});
+        }
         const sttConfig = snapshot || await window.api?.getSttConfig();
         if (requestId !== refreshRequestId) return;
         applyAppearanceSnapshot(sttConfig);

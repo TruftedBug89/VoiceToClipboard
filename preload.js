@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // invoke (request/response)
     getApiKeyStatus: () => ipcRenderer.invoke('get-api-key-status'),
+    refreshEnvApiKey: () => ipcRenderer.invoke('refresh-env-api-key'),
     getGeminiCooldowns: () => ipcRenderer.invoke('get-gemini-cooldowns'),
     getSttConfig: () => ipcRenderer.invoke('get-stt-config'),
     markFirstRunDone: () => ipcRenderer.invoke('mark-first-run-done'),
