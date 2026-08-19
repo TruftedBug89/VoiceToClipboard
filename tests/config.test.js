@@ -3,11 +3,11 @@ const test = require('node:test');
 const { migrateConfig, validateSttConfig, recommendedTierForRam, WIDGET_STYLES } = require('../stt/config');
 
 test('recommendedTierForRam maps memory to tiers monotonically', () => {
+    assert.equal(recommendedTierForRam(2), 'tiny');
     assert.equal(recommendedTierForRam(4), 'tiny');
     assert.equal(recommendedTierForRam(8), 'mini');
-    assert.equal(recommendedTierForRam(12), 'light');
-    assert.equal(recommendedTierForRam(16), 'light');
-    assert.equal(recommendedTierForRam(32), 'big');
+    assert.equal(recommendedTierForRam(16), 'mini');
+    assert.equal(recommendedTierForRam(32), 'mini');
 });
 
 test('WIDGET_STYLES single source of truth exports expected four styles', () => {

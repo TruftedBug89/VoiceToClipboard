@@ -47,12 +47,30 @@
             transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
         }
 
+        #status-badge.busy {
+            border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px color-mix(in srgb, var(--primary) 30%, transparent);
+        }
+
         #status-badge.busy .rec-dot {
-            background: transparent;
-            border: 1.5px solid rgba(255, 255, 255, 0.3);
-            border-top-color: var(--primary);
-            box-shadow: none;
-            animation: spin 0.7s linear infinite;
+            width: 10px;
+            height: 10px;
+            box-sizing: border-box;
+            display: inline-block;
+            background: transparent !important;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: var(--primary-hover, #ff5468) !important;
+            border-right-color: var(--primary, #e63946) !important;
+            border-radius: 50% !important;
+            box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 60%, transparent);
+            transform-origin: center center;
+            animation: dot-spin 0.65s linear infinite !important;
+            flex-shrink: 0;
+        }
+
+        @keyframes dot-spin {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         #status-badge.done .rec-dot {

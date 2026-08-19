@@ -62,6 +62,7 @@ window.VTC = window.VTC || {};
     const modelCardAction = document.getElementById('model-card-action');
     const modelDownloadProgress = document.getElementById('model-download-progress');
     const modelDownloadStatus = document.getElementById('model-download-status');
+    const modelDownloadSpinner = document.getElementById('model-download-spinner');
     const modelDownloadPct = document.getElementById('model-download-pct');
     const modelDownloadBar = document.getElementById('model-download-bar');
     const autoStopCheckbox = document.getElementById('auto-stop-checkbox');
@@ -105,11 +106,8 @@ window.VTC = window.VTC || {};
     }
 
     function tierForLanguage(lang) {
-        if (lang === 'es') {
-            return (systemRamGB !== null && systemRamGB <= 4) ? 'tiny' : 'mini';
-        }
         if (lang === 'zh') return 'zh-light';
-        return null;
+        return (systemRamGB !== null && systemRamGB <= 4) ? 'tiny' : 'mini';
     }
 
     function langRecoModelKey() {
@@ -273,7 +271,10 @@ window.VTC = window.VTC || {};
         if (localModelGroup) localModelGroup.style.display = isGemini ? 'none' : 'flex';
         const ecoGroup = document.getElementById('eco-mode-group');
         if (ecoGroup) ecoGroup.style.display = isGemini ? 'none' : 'flex';
-        if (geminiKeyGroup) geminiKeyGroup.style.display = isGemini ? 'flex' : 'none';
+        if (geminiKeyGroup) {
+            const hasEnv = removeKeyBtn && removeKeyBtn.disabled && removeKeyBtn.title;
+            geminiKeyGroup.style.display = (isGemini && !hasEnv) ? 'flex' : 'none';
+        }
         updateLocalModelUi();
     }
 
@@ -382,17 +383,11 @@ window.VTC = window.VTC || {};
     }
 
     function addDownloadSpinner() {
-        if (!modelDownloadStatus || downloadSpinnerEl) return;
-        downloadSpinnerEl = document.createElement('span');
-        downloadSpinnerEl.className = 'download-spinner';
-        downloadSpinnerEl.setAttribute('aria-hidden', 'true');
-        modelDownloadStatus.appendChild(downloadSpinnerEl);
+        if (modelDownloadSpinner) modelDownloadSpinner.style.display = 'inline-block';
     }
 
     function removeDownloadSpinner() {
-        if (!downloadSpinnerEl) return;
-        downloadSpinnerEl.remove();
-        downloadSpinnerEl = null;
+        if (modelDownloadSpinner) modelDownloadSpinner.style.display = 'none';
     }
 
     async function startModelDownload(modelKey, triggerBtn) {
@@ -445,7 +440,7 @@ window.VTC = window.VTC || {};
                         modelDownloadBar.classList.remove('extracting');
                         modelDownloadBar.style.width = `${pct}%`;
                     }
-                    removeDownloadSpinner();
+                    addDownloadSpinner();
                     if (modelDownloadPct) modelDownloadPct.textContent = `${pct}%`;
                     let statusText = t('model.downloading2', { a: (totalLoaded / 1048576).toFixed(1), b: (totalSize / 1048576).toFixed(1) });
                     const elapsedSec = (Date.now() - downloadStartedAt) / 1000;
@@ -488,7 +483,11 @@ window.VTC = window.VTC || {};
                 autoStopEnabled: autoStopCheckbox?.checked || false,
                 autoStopSeconds: parseFloat(autoStopSecondsSelect?.value || '3.5'),
                 silenceThreshold: parseInt(silenceThresholdSlider ? silenceThresholdSlider.value : 12) || 12,
-                ecoMode: ecoModeCheckbox ? ecoModeCheckbox.checked : true
+                ecoMode: ecoModeCheckbox ? ecoModeCheckbox.checked : true,
+                outputMode: outputModeSelectEl ? outputModeSelectEl.value : (currentSttConfig?.outputMode || 'clipboard'),
+                autotypeMethod: autotypeMethodSelectEl ? autotypeMethodSelectEl.value : (currentSttConfig?.autotypeMethod || 'unicode'),
+                historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : false,
+                saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
             });
             removeDownloadSpinner();
             if (modelDownloadBar) {
@@ -765,7 +764,7 @@ window.VTC = window.VTC || {};
                 if (apiKeyInput && apiKeyInput.value) {
                     const keyLines = apiKeyInput.value.split('\n').map(s => s.trim()).filter(Boolean);
                     if (keyLines.length) {
-                        await window.api?.saveApiKey(keyLines.slice(0, 1));
+                        await window.api?.saveApiKey(keyLines);
                         apiKeyInput.value = '';
                         await checkApiKeyStatus();
                     }
@@ -1086,8 +1085,18 @@ window.VTC = window.VTC || {};
     if (closeModalBtn) closeModalBtn.addEventListener('click', closeSettings);
     if (settingsBtn) settingsBtn.addEventListener('click', () => openSettings());
     if (closeBtn) closeBtn.addEventListener('click', () => window.close());
-    if (engineBtnGemini) engineBtnGemini.addEventListener('click', () => { setEngine('gemini'); autoSaveSettings(); });
-    if (engineBtnLocal) engineBtnLocal.addEventListener('click', () => { setEngine('local'); autoSaveSettings(); });
+    if (engineBtnGemini) {
+        engineBtnGemini.addEventListener('click', () => { setEngine('gemini'); autoSaveSettings(); });
+        engineBtnGemini.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEngine('gemini'); autoSaveSettings(); }
+        });
+    }
+    if (engineBtnLocal) {
+        engineBtnLocal.addEventListener('click', () => { setEngine('local'); autoSaveSettings(); });
+        engineBtnLocal.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEngine('local'); autoSaveSettings(); }
+        });
+    }
 
     if (localTierSelect) {
         localTierSelect.addEventListener('change', () => {
@@ -1127,6 +1136,7 @@ window.VTC = window.VTC || {};
     }
     if (pasteKeyInputEl) {
         pasteKeyInputEl.addEventListener('keydown', (e) => {
+            if (['Tab', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
             e.preventDefault();
             pasteKeyVal = e.key;
             pasteKeyInputEl.value = e.key === ' ' ? 'SPACE' : e.key.toUpperCase();

@@ -175,7 +175,10 @@
 <div id="model-card-action" class="model-card-action-box"></div>
 <div id="model-download-progress" class="hidden-element model-download-progress-box">
 <div class="flex-between text-dim-10 mb-3">
+<div class="flex-row items-center gap-6">
 <span data-i18n="model.downloading" id="model-download-status">Downloading…</span>
+<span class="download-spinner hidden-element" id="model-download-spinner" aria-hidden="true"></span>
+</div>
 <span id="model-download-pct">0%</span>
 </div>
 <div class="progress-bar-bg mt-0">
@@ -300,7 +303,7 @@
 <div class="switch-row">
 <label class="switch-label" data-i18n="history.toggleLabel" for="history-enabled-checkbox">Enable Transcription History</label>
 <label class="toggle-switch">
-<input id="history-enabled-checkbox" type="checkbox" checked/>
+<input id="history-enabled-checkbox" type="checkbox"/>
 <span class="slider"></span>
 </label>
 </div>

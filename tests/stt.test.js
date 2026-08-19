@@ -30,8 +30,8 @@ test('migrates legacy per-language config to the multilingual registry', () => {
         alwaysOnTop: false
     });
     assert.equal(migrated.configVersion, 6);
-    assert.equal(migrated.localTier, 'light');
-    assert.equal(migrated.localModelKey, 'omni-multilingual');
+    assert.equal(migrated.localTier, 'mini');
+    assert.equal(migrated.localModelKey, 'mini-multilingual');
     assert.equal(migrated.localLanguage, 'auto');
     assert.equal(migrated.autoStopSeconds, 4);
     assert.equal(migrated.alwaysOnTop, false);
@@ -93,12 +93,12 @@ test('normalizes invalid STT settings to a safe multilingual selection', () => {
         historyLimit: 50,
         widgetStyle: 'crimson'
     });
-    // On a 32 GB machine the same invalid tier resolves to Big (tier above default).
+    // On a 32 GB machine the invalid tier resolves to Mini (the recommended fast default).
     assert.deepEqual(withRamGB(32, () => validateSttConfig({ sttEngine: 'other', localTier: 'huge' })), {
         sttEngine: 'local',
-        localTier: 'big',
+        localTier: 'mini',
         localLanguage: 'auto',
-        localModelKey: 'big-multilingual',
+        localModelKey: 'mini-multilingual',
         geminiModel: 'gemini-2.5-flash',
         ecoMode: true,
         playFinishSound: true,
@@ -139,11 +139,11 @@ test('recommends the model tier matching the PC RAM', () => {
     assert.equal(recommendedTierForRam(4), 'tiny');
     assert.equal(recommendedTierForRam(6), 'mini');
     assert.equal(recommendedTierForRam(8), 'mini');
-    assert.equal(recommendedTierForRam(12), 'light');
-    assert.equal(recommendedTierForRam(16), 'light');
-    assert.equal(recommendedTierForRam(24), 'big');
-    assert.equal(recommendedTierForRam(32), 'big');
-    assert.equal(recommendedTierForRam(64), 'big');
+    assert.equal(recommendedTierForRam(12), 'mini');
+    assert.equal(recommendedTierForRam(16), 'mini');
+    assert.equal(recommendedTierForRam(24), 'mini');
+    assert.equal(recommendedTierForRam(32), 'mini');
+    assert.equal(recommendedTierForRam(64), 'mini');
 });
 
 test('defaults a fresh config to the LOCAL engine and finish-sound on', () => {

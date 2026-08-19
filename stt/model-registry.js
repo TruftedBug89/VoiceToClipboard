@@ -46,8 +46,8 @@ const MODEL_REGISTRY = Object.freeze({
         backend: 'nemo-transducer',
         modelType: 'nemo_transducer',
         language: 'auto',
-        name: 'FastConformer Transducer · 10 languages',
-        description: 'Mini NVIDIA NeMo FastConformer Transducer. Auto English, German, Spanish, French, Italian, Polish, Russian, Ukrainian, Croatian, Belgian — light multilingual pick.',
+        name: 'FastConformer Transducer · Ultra-Fast (Recommended)',
+        description: 'NVIDIA NeMo FastConformer Transducer INT8 (~102 MB). Ultra-fast, highly accurate for English, Spanish, German, French, Italian, and 10 languages. Recommended default.',
         downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-fast-conformer-transducer-be-de-en-es-fr-hr-it-pl-ru-uk-20k-int8.tar.bz2',
         archiveName: 'sherpa-onnx-nemo-fast-conformer-transducer-be-de-en-es-fr-hr-it-pl-ru-uk-20k-int8.tar.bz2',
         archiveType: 'tar.bz2',
@@ -58,6 +58,8 @@ const MODEL_REGISTRY = Object.freeze({
         sourceUrl: 'https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer.html',
         license: 'NVIDIA model release (CC-BY-4.0)',
         verified: true,
+        recommended: true,
+        fast: true,
         notes: 'NeMo FastConformer Transducer int8 (20k vocab, 10 languages). Verified live on EN/ES/DE/FR/IT/PL samples.'
     },
     'zh-en-light': {

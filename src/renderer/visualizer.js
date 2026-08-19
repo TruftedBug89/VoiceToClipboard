@@ -228,7 +228,7 @@ window.VTC = window.VTC || {};
                 // Crimson mode (default)
                 const bars = 32;
                 const step = (Math.PI * 2) / bars;
-                const baseRadius = 29;
+                const baseRadius = 33.5;
                 const rot = elapsed * 0.35;
                 const breath = isRecordingNow ? 1 : 0.55 + 0.45 * Math.sin(elapsed * 1.6);
 
@@ -277,11 +277,11 @@ window.VTC = window.VTC || {};
                 }
 
                 canvasCtx.strokeStyle = isRecordingNow
-                    ? `rgba(${col.r}, ${col.g}, ${col.b}, 0.3)`
-                    : `rgba(${col.r}, ${col.g}, ${col.b}, 0.22)`;
+                    ? `rgba(${col.r}, ${col.g}, ${col.b}, 0.25)`
+                    : `rgba(${col.r}, ${col.g}, ${col.b}, 0.18)`;
                 canvasCtx.lineWidth = 1;
                 canvasCtx.beginPath();
-                canvasCtx.arc(centerX, centerY, baseRadius + 1, 0, Math.PI * 2);
+                canvasCtx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
                 canvasCtx.stroke();
             }
 

@@ -47,15 +47,11 @@ function systemRamGB() {
 }
 
 // RAM-based recommendation ladder (multilingual registry backends):
-//   ≤ 4 GB  -> Tiny        (moonshine, ~290 MB RAM)
-//   ≤ 8 GB  -> Mini        (nemo-transducer, ~270 MB RAM)
-//   ≤ 16 GB -> Light       (whisper-small, ~550 MB RAM) — current default pick
-//   > 16 GB -> Big         (whisper-turbo, ~950 MB RAM) — one tier above the default
+//   ≤ 4 GB -> Tiny (moonshine, ~290 MB RAM)
+//   > 4 GB -> Mini (FastConformer Transducer, ~270 MB RAM) — ultra-fast recommended default
 function recommendedTierForRam(ramGB) {
     if (ramGB <= 4) return 'tiny';
-    if (ramGB <= 8) return 'mini';
-    if (ramGB <= 16) return 'light';
-    return 'big';
+    return 'mini';
 }
 
 // Multilingual-only registry: tiers map 1:1 to models, no language selection.
@@ -76,7 +72,7 @@ function migrateConfig(input = {}) {
         // v1 -> v4: legacy Whisper-era config (localModel string).
         // v2 -> v4: per-language model keys (tiny-en/tiny-es/base-en/base-es)
         //           are replaced by the multilingual registry (light/big).
-        let localTier = 'light';
+        let localTier = 'mini';
         if (config.localModelKey === 'big-multilingual') {
             localTier = 'big';
         } else if (typeof config.localModel === 'string' && config.localModel.includes('large')) {

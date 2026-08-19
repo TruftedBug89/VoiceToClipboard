@@ -104,7 +104,8 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
 
     ipcMain.handle('save-stt-config', async (event, settings = {}) => {
         const existing = loadConfig();
-        const stt = validateSttConfig(settings);
+        const mergedSettings = { ...existing, ...settings };
+        const stt = validateSttConfig(mergedSettings);
         const effectiveEcoMode = settings.ecoMode !== undefined ? settings.ecoMode !== false : existing.ecoMode !== false;
         const autoStopSeconds = Math.max(1.5, Math.min(5, Number(settings.autoStopSeconds ?? existing.autoStopSeconds) || 3.5));
         const silenceThreshold = Math.max(2, Math.min(100, Number(settings.silenceThreshold ?? existing.silenceThreshold) || 12));
@@ -112,6 +113,8 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         const alwaysOnTop = settings.alwaysOnTop !== undefined ? settings.alwaysOnTop !== false : existing.alwaysOnTop !== false;
         const success = saveConfig({
             ...stt,
+            outputMode: stt.outputMode || existing.outputMode || 'clipboard',
+            autotypeMethod: stt.autotypeMethod || existing.autotypeMethod || 'unicode',
             autoStopEnabled: settings.autoStopEnabled !== undefined ? !!settings.autoStopEnabled : !!existing.autoStopEnabled,
             autoStopSeconds,
             silenceThreshold,
@@ -202,9 +205,9 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
     ipcMain.handle('save-api-key', async (event, newKey) => {
         const list = (Array.isArray(newKey) ? newKey : [newKey])
             .map(k => String(k || '').trim())
-            .filter(k => k.length > 0 && k.length <= 512)
-            .slice(0, 1);
-        const success = saveConfig({ apiKey: list[0] || '', apiKeys: list });
+            .filter(k => k.length > 0 && k.length <= 512);
+        const uniqueKeys = [...new Set(list)];
+        const success = saveConfig({ apiKey: uniqueKeys[0] || '', apiKeys: uniqueKeys });
         if (success) await broadcastSettingsChanged(sttService, updateTray);
         return { success };
     });
