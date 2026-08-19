@@ -108,16 +108,21 @@ class SherpaAdapter {
         const registryModel = getModel(modelKey);
 
         let config;
-        if (registryModel.backend === 'nemo-transducer') {
+        if (registryModel.backend === 'nemo-transducer' || registryModel.backend === 'zipformer') {
+            const ef = registryModel.expectedFiles || [];
+            const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
+            const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
+            const joinFile = ef.find(f => f.includes('joiner')) || 'joiner.int8.onnx';
+            const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
             config = {
                 featConfig: { sampleRate: 16000, featureDim: 80 },
                 modelConfig: {
                     transducer: {
-                        encoder: getRequiredPath(modelPath, 'encoder.int8.onnx'),
-                        decoder: getRequiredPath(modelPath, 'decoder.int8.onnx'),
-                        joiner: getRequiredPath(modelPath, 'joiner.int8.onnx')
+                        encoder: getRequiredPath(modelPath, encFile),
+                        decoder: getRequiredPath(modelPath, decFile),
+                        joiner: getRequiredPath(modelPath, joinFile)
                     },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
+                    tokens: getRequiredPath(modelPath, tokFile)
                 },
                 numThreads: numThreadsFor(modelKey),
                 provider: 'cpu',

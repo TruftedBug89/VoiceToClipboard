@@ -163,7 +163,7 @@ test('registry contains the six verified multilingual models', () => {
     ]);
     assert.equal(getModel('omni-multilingual').backend, 'whisper');
     assert.equal(getModel('big-multilingual').backend, 'whisper');
-    assert.equal(getModel('tiny-multilingual').backend, 'moonshine');
+    assert.equal(getModel('tiny-multilingual').backend, 'zipformer');
     assert.equal(getModel('mini-multilingual').backend, 'nemo-transducer');
     assert.equal(getModel('zh-en-light').backend, 'sense-voice');
     assert.equal(getModel('zh-en-big').backend, 'fire-red-asr-ctc');

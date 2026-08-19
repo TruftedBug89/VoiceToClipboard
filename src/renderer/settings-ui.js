@@ -5,14 +5,22 @@ window.VTC = window.VTC || {};
 
 (function () {
 
-    const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
+    const MODEL_TIER_FLAGS = Object.freeze({
+        tiny: '🇺🇸',
+        mini: '🇺🇸 🇪🇸',
+        'zh-light': '🇨🇳 🇺🇸',
+        light: '🇺🇸 🇪🇸 🇨🇳',
+        big: '🇺🇸 🇪🇸 🇨🇳',
+        'zh-big': '🇨🇳 🇺🇸'
+    });
+
     const MODEL_TIER_LABELS = Object.freeze({
-        tiny: { name: 'Tiny' },
-        mini: { name: 'Mini' },
-        'zh-light': { name: 'Chinese + English (Light)' },
-        light: { name: 'Light' },
-        big: { name: 'Big' },
-        'zh-big': { name: 'Chinese + English (Big)' }
+        tiny: { name: 'Tiny · 🇺🇸' },
+        mini: { name: 'Mini · 🇺🇸 🇪🇸' },
+        'zh-light': { name: 'Chinese + English (Light) · 🇨🇳 🇺🇸' },
+        light: { name: 'Light · 🇺🇸 🇪🇸 🇨🇳' },
+        big: { name: 'Big · 🇺🇸 🇪🇸 🇨🇳' },
+        'zh-big': { name: 'Chinese + English (Big) · 🇨🇳 🇺🇸' }
     });
 
     let currentWidgetStyle = 'crimson';
@@ -174,7 +182,7 @@ window.VTC = window.VTC || {};
             if (model.tier === recommendedTier) {
                 const chip = document.createElement('span');
                 chip.className = 'mo-chip';
-                chip.textContent = '⭐ ' + t('models.recommended', null, 'Recommended');
+                chip.textContent = t('models.recommended', null, '⭐ Recommended');
                 name.appendChild(chip);
             }
             if (model.tier === 'big' || model.tier === 'zh-big') {
