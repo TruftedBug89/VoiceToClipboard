@@ -406,6 +406,7 @@ window.VTC = window.VTC || {};
             modelDownloadBar.classList.add('extracting');
         }
         addDownloadSpinner();
+        window.VTC?.recording?.setStatus('busy', 'DOWNLOADING');
         if (triggerBtn) triggerBtn.disabled = true;
         if (modelCardStatus) {
             modelCardStatus.textContent = '⬇ ' + t('model.downloading');
@@ -423,6 +424,7 @@ window.VTC = window.VTC || {};
                     modelDownloadBar.style.width = '100%';
                 }
                 addDownloadSpinner();
+                window.VTC?.recording?.setStatus('busy', 'DOWNLOADING');
                 if (modelDownloadPct) modelDownloadPct.textContent = '0%';
                 if (modelDownloadStatus) modelDownloadStatus.textContent = t('model.downloading');
                 return;
@@ -460,6 +462,7 @@ window.VTC = window.VTC || {};
             } else if (data.status === 'extracting') {
                 if (modelDownloadStatus) modelDownloadStatus.textContent = t('model.extracting');
                 addDownloadSpinner();
+                window.VTC?.recording?.setStatus('busy', 'INSTALLING');
                 if (modelDownloadBar) {
                     modelDownloadBar.classList.add('extracting');
                     modelDownloadBar.style.width = '100%';
@@ -487,6 +490,7 @@ window.VTC = window.VTC || {};
                 ecoMode: ecoModeCheckbox ? ecoModeCheckbox.checked : true,
                 outputMode: outputModeSelectEl ? outputModeSelectEl.value : (currentSttConfig?.outputMode || 'clipboard'),
                 autotypeMethod: autotypeMethodSelectEl ? autotypeMethodSelectEl.value : (currentSttConfig?.autotypeMethod || 'unicode'),
+                alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                 historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : false,
                 saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
             });
@@ -498,7 +502,7 @@ window.VTC = window.VTC || {};
             if (modelDownloadStatus) modelDownloadStatus.textContent = t('model.installed');
             if (modelDownloadPct) modelDownloadPct.textContent = '100%';
             window.VTC?.recording?.setStatus('done', '✓ MODEL READY');
-            setTimeout(() => window.VTC?.recording?.hideStatus(), 2000);
+            setTimeout(() => window.VTC?.recording?.hideStatus(), 2500);
 
             await loadModelCatalog();
             await checkModelStatus();
@@ -511,6 +515,7 @@ window.VTC = window.VTC || {};
             }, 1600);
         } else {
             removeDownloadSpinner();
+            window.VTC?.recording?.hideStatus();
             if (modelDownloadBar) {
                 modelDownloadBar.classList.remove('extracting');
                 modelDownloadBar.style.width = '0%';

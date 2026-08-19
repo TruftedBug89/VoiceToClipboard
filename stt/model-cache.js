@@ -43,7 +43,15 @@ function findModelRoot(directory, expectedFiles) {
     return null;
 }
 
-function downloadFile(url, destination, onProgress, redirectCount = 0, abortSignal = null) {
+function setLowPriority(enable) {
+    try {
+        const os = require('os');
+        const target = enable ? (os.constants?.priority?.PRIORITY_BELOW_NORMAL || 10) : (os.constants?.priority?.PRIORITY_NORMAL || 0);
+        os.setPriority(target);
+    } catch (e) { /* ignore on unsupported platforms */ }
+}
+
+function downloadFile(url, destination, onProgress, redirectCount = 0, abortSignal = null, inFlightHasher = null) {
     // HTTPS-only: model archives are consumed by native code, so a cleartext
     // download (or an https→http redirect) would be a supply-chain risk.
     // The recursive redirect handling below re-enters this function, so any
@@ -98,7 +106,7 @@ function downloadFile(url, destination, onProgress, redirectCount = 0, abortSign
                 try {
                     if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
                     const targetUrl = new URL(response.headers.location, url).toString();
-                    downloadFile(targetUrl, destination, onProgress, redirectCount + 1, abortSignal).then(resolve, cleanupAndReject);
+                    downloadFile(targetUrl, destination, onProgress, redirectCount + 1, abortSignal, inFlightHasher).then(resolve, cleanupAndReject);
                 } catch (e) {
                     cleanupAndReject(e);
                 }
@@ -112,11 +120,15 @@ function downloadFile(url, destination, onProgress, redirectCount = 0, abortSign
 
             const total = Number(response.headers['content-length']) || 0;
             let loaded = 0;
-            output = fs.createWriteStream(destination);
+            // 256 KiB buffer minimizes syscall overhead and disk thrashing
+            output = fs.createWriteStream(destination, { highWaterMark: 256 * 1024 });
             response.on('data', chunk => {
                 loaded += chunk.length;
+                if (inFlightHasher) {
+                    inFlightHasher.update(chunk);
+                }
                 const now = Date.now();
-                if (now - lastEmit >= 80 || (total > 0 && loaded >= total)) {
+                if (now - lastEmit >= 64 || (total > 0 && loaded >= total)) {
                     lastEmit = now;
                     onProgress?.({ loaded, total });
                 }
@@ -132,7 +144,7 @@ function downloadFile(url, destination, onProgress, redirectCount = 0, abortSign
                         try { if (fs.existsSync(destination)) fs.unlinkSync(destination); } catch (e) {}
                         reject(new Error('Download cancelled.'));
                     } else {
-                        resolve();
+                        resolve({ loaded, total });
                     }
                 });
             });
@@ -181,82 +193,91 @@ function headRemoteSize(url, redirectCount = 0, abortSignal = null) {
 
 async function extractArchive(archivePath, destination, archiveType = 'tar', expectedFiles = null, abortSignal = null) {
     if (abortSignal?.aborted) throw new Error('Download cancelled.');
-    // Only extract what the model actually loads. Whisper-style archives bundle
-    // fp32 copies of every weight (~1 GB of files we never use); skipping them
-    // makes extraction ~3× faster and keeps the installed size honest.
-    const filter = expectedFiles && expectedFiles.length ? (entryPath, entry) => {
-        if (entry && entry.type === 'Directory') return true;
-        return expectedFiles.includes(String(entryPath || '').split('/').pop());
-    } : undefined;
-    if (archiveType === 'zip') {
-        let yauzl;
-        try {
-            yauzl = require('yauzl');
-        } catch (e) {
-            throw new Error('ZIP model support is not available in this build.');
-        }
-        await new Promise((resolve, reject) => {
-            if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
-            yauzl.open(archivePath, { lazyEntries: true }, (error, zipFile) => {
-                if (error) return reject(error);
-                zipFile.readEntry();
-                zipFile.on('entry', entry => {
-                    if (abortSignal?.aborted) {
-                        zipFile.close();
-                        return reject(new Error('Download cancelled.'));
-                    }
-                    const normalized = path.normalize(entry.fileName);
-                    if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
-                        zipFile.close();
-                        reject(new Error('Model archive contains an unsafe path.'));
-                        return;
-                    }
-                    const outputPath = path.join(destination, normalized);
-                    if (/\/$/.test(entry.fileName)) {
-                        fsp.mkdir(outputPath, { recursive: true }).then(() => zipFile.readEntry(), reject);
-                        return;
-                    }
-                    fsp.mkdir(path.dirname(outputPath), { recursive: true }).then(() => {
-                        zipFile.openReadStream(entry, (streamError, stream) => {
-                            if (streamError) return reject(streamError);
-                            const output = fs.createWriteStream(outputPath);
-                            output.on('error', reject);
-                            output.on('finish', () => zipFile.readEntry());
-                            stream.on('error', reject);
-                            stream.pipe(output);
-                        });
-                    }, reject);
+    setLowPriority(true);
+    try {
+        // Only extract what the model actually loads. Whisper-style archives bundle
+        // fp32 copies of every weight (~1 GB of files we never use); skipping them
+        // makes extraction ~3× faster and keeps the installed size honest.
+        const filter = expectedFiles && expectedFiles.length ? (entryPath, entry) => {
+            if (entry && entry.type === 'Directory') return true;
+            return expectedFiles.includes(String(entryPath || '').split('/').pop());
+        } : undefined;
+        if (archiveType === 'zip') {
+            let yauzl;
+            try {
+                yauzl = require('yauzl');
+            } catch (e) {
+                throw new Error('ZIP model support is not available in this build.');
+            }
+            await new Promise((resolve, reject) => {
+                if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
+                yauzl.open(archivePath, { lazyEntries: true }, (error, zipFile) => {
+                    if (error) return reject(error);
+                    zipFile.readEntry();
+                    zipFile.on('entry', entry => {
+                        if (abortSignal?.aborted) {
+                            zipFile.close();
+                            return reject(new Error('Download cancelled.'));
+                        }
+                        const normalized = path.normalize(entry.fileName);
+                        if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+                            zipFile.close();
+                            reject(new Error('Model archive contains an unsafe path.'));
+                            return;
+                        }
+                        const outputPath = path.join(destination, normalized);
+                        if (/\/$/.test(entry.fileName)) {
+                            fsp.mkdir(outputPath, { recursive: true }).then(() => {
+                                setImmediate(() => zipFile.readEntry());
+                            }, reject);
+                            return;
+                        }
+                        fsp.mkdir(path.dirname(outputPath), { recursive: true }).then(() => {
+                            zipFile.openReadStream(entry, (streamError, stream) => {
+                                if (streamError) return reject(streamError);
+                                const output = fs.createWriteStream(outputPath, { highWaterMark: 256 * 1024 });
+                                output.on('error', reject);
+                                output.on('finish', () => {
+                                    setImmediate(() => zipFile.readEntry());
+                                });
+                                stream.on('error', reject);
+                                stream.pipe(output);
+                            });
+                        }, reject);
+                    });
+                    zipFile.on('end', resolve);
+                    zipFile.on('error', reject);
                 });
-                zipFile.on('end', resolve);
-                zipFile.on('error', reject);
             });
-        });
-        return;
+            return;
+        }
+        const tar = require('tar');
+        if (archiveType === 'tar.bz2' || /\.tar\.bz2$/i.test(archivePath)) {
+            // npm tar has no bzip2 support; decompress the bz2 stream first,
+            // then feed the plain tar stream into tar.Unpack.
+            const bz2 = require('unbzip2-stream');
+            await new Promise((resolve, reject) => {
+                if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
+                const source = fs.createReadStream(archivePath, { highWaterMark: 256 * 1024 });
+                const unpack = new tar.Unpack({ cwd: destination, strict: true, filter });
+                source.on('error', reject);
+                unpack.on('error', reject);
+                unpack.on('finish', resolve);
+                source.pipe(bz2()).pipe(unpack);
+            });
+            return;
+        }
+        if (abortSignal?.aborted) throw new Error('Download cancelled.');
+        await tar.x({ file: archivePath, cwd: destination, strict: true, filter });
+    } finally {
+        setLowPriority(false);
     }
-    const tar = require('tar');
-    if (archiveType === 'tar.bz2' || /\.tar\.bz2$/i.test(archivePath)) {
-        // npm tar has no bzip2 support; decompress the bz2 stream first,
-        // then feed the plain tar stream into tar.Unpack.
-        const bz2 = require('unbzip2-stream');
-        await new Promise((resolve, reject) => {
-            if (abortSignal?.aborted) return reject(new Error('Download cancelled.'));
-            const source = fs.createReadStream(archivePath);
-            const unpack = new tar.Unpack({ cwd: destination, strict: true, filter });
-            source.on('error', reject);
-            unpack.on('error', reject);
-            unpack.on('finish', resolve);
-            source.pipe(bz2()).pipe(unpack);
-        });
-        return;
-    }
-    if (abortSignal?.aborted) throw new Error('Download cancelled.');
-    await tar.x({ file: archivePath, cwd: destination, strict: true, filter });
 }
 
 async function hashFile(filePath) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash('sha256');
-        const input = fs.createReadStream(filePath);
+        const input = fs.createReadStream(filePath, { highWaterMark: 256 * 1024 });
         input.on('error', reject);
         input.on('data', chunk => hash.update(chunk));
         input.on('end', () => resolve(hash.digest('hex')));
@@ -445,14 +466,22 @@ class ModelCache {
             onProgress?.({ status: 'initiate', file: model.archiveName });
             let mirrorMode = false;
             try {
+                const inFlightHasher = crypto.createHash('sha256');
                 await downloadFile(model.downloadUrl, archivePath, data => onProgress?.({
                     status: 'progress',
                     file: model.archiveName,
                     loaded: data.loaded,
                     total: data.total || model.downloadBytes || 0
-                }), 0, abortSignal);
+                }), 0, abortSignal, inFlightHasher);
                 checkAbort();
-                await verifyArchiveIntegrity(model, archivePath);
+                const inFlightDigest = inFlightHasher.digest('hex');
+                if (model.sha256 && SHA256_RE.test(String(model.sha256))) {
+                    if (inFlightDigest.toLowerCase() !== String(model.sha256).toLowerCase()) {
+                        throw new Error('Downloaded model archive failed integrity verification.');
+                    }
+                } else {
+                    await verifyArchiveIntegrity(model, archivePath);
+                }
                 checkAbort();
                 onProgress?.({ status: 'extracting', file: model.archiveName });
                 await extractArchive(archivePath, extractedDir, model.archiveType, model.expectedFiles, abortSignal);
@@ -480,12 +509,18 @@ class ModelCache {
             checkAbort();
             const fileHashes = {};
             const fileStats = {};
-            for (const file of model.expectedFiles) {
-                const filePath = path.join(stagedDir, file);
-                fileHashes[file] = await hashFile(filePath);
-                const stat = await fsp.stat(filePath);
-                fileStats[file] = { size: stat.size, mtimeMs: stat.mtimeMs };
-                checkAbort();
+            setLowPriority(true);
+            try {
+                for (const file of model.expectedFiles) {
+                    const filePath = path.join(stagedDir, file);
+                    fileHashes[file] = await hashFile(filePath);
+                    const stat = await fsp.stat(filePath);
+                    fileStats[file] = { size: stat.size, mtimeMs: stat.mtimeMs };
+                    checkAbort();
+                    await new Promise(r => setImmediate(r));
+                }
+            } finally {
+                setLowPriority(false);
             }
             await fsp.writeFile(path.join(stagedDir, MANIFEST_NAME), JSON.stringify({
                 modelKey: model.key,

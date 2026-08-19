@@ -578,24 +578,26 @@
             transition: width 0.2s ease;
         }
 
-        /* Indeterminate spinner shown while the downloaded archive is being
-           extracted/verifying — extraction can take several seconds with no
-           byte progress, so the bar alone looks frozen. */
+        /* Indeterminate spinner shown while downloading or extracting models */
         .download-spinner {
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 13px;
+            height: 13px;
             box-sizing: border-box;
             vertical-align: -2px;
-            border: 2px solid rgba(255, 255, 255, 0.25);
-            border-top-color: var(--primary);
+            margin-left: 4px;
+            border: 2px solid rgba(255, 255, 255, 0.18);
+            border-top-color: var(--primary, #00f0ff);
+            border-right-color: var(--primary, #00f0ff);
             border-radius: 50%;
             transform-origin: center center;
-            animation: v2c-spin 0.75s linear infinite;
+            box-shadow: 0 0 6px color-mix(in srgb, var(--primary, #00f0ff) 50%, transparent);
+            will-change: transform;
+            animation: v2c-spin 0.65s linear infinite;
         }
         @keyframes v2c-spin {
-            0%   { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
         }
         /* Extraction phase: pulse the progress bar so it's obviously alive. */
         .progress-bar-fill.extracting {
