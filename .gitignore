@@ -56,7 +56,6 @@ coverage/
 .node_repl_history
 *.tsbuildinfo
 *.tgz
-/.commandcode
 
 # Local tutorial screenshots (never committed)
 tutorial-assets/
@@ -64,6 +63,39 @@ tutorial-assets/
 # Local Postman workspace infrastructure (never committed)
 .postman/
 postman/
+
+# ─── AI Agents, Assistants & IDE State ──────────────────────────────
+.commandcode/
+commandcode/
+.prime-agent/
+prime-agent/
+primeagent/
+.claude/
+.claude-code/
+claude-code/
+.gemini/
+.agent/
+agent/
+.opencode/
+opencode/
+.cursor/
+.cursorrules
+.cline/
+.roo/
+.chatgpt/
+.aider*
+.agy/
+.antigravity/
+.jules/
+.Jules/
+.qwen/
+.deepseek/
+.copilot/
+.continue/
+.windsurf/
+brain/
+.system_generated/
+*.agent.log
 
 # ─── Scratch / clutter (one-off agent artifacts) ─────────────
 tmp_lines.txt
@@ -79,4 +111,3 @@ recordings/
 *.wav
 *.webm
 plan.md
-/.opencode
