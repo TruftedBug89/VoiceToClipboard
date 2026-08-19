@@ -46,24 +46,27 @@ test('migrateConfig fills defaults and preserves the api key out of band', () =>
     assert.equal(m.historyLimit, 50);
     assert.equal(m.outputMode, 'clipboard');
     assert.equal(m.autotypeMethod, 'unicode');
+    assert.equal(m.alwaysCopyToClipboard, true);
 
-    const m2 = migrateConfig({ saveRecordings: true, micDeviceId: 'mic-123', micDeviceLabel: 'USB Mic', historyEnabled: true, historyLimit: 25, spacePaste: true, pasteStyle: 'toast' });
+    const m2 = migrateConfig({ saveRecordings: true, micDeviceId: 'mic-123', micDeviceLabel: 'USB Mic', historyEnabled: true, historyLimit: 25, spacePaste: true, pasteStyle: 'toast', alwaysCopyToClipboard: false });
     assert.equal(m2.saveRecordings, true);
     assert.equal(m2.micDeviceId, 'mic-123');
     assert.equal(m2.micDeviceLabel, 'USB Mic');
     assert.equal(m2.historyEnabled, true);
     assert.equal(m2.historyLimit, 25);
     assert.equal(m2.outputMode, 'toast');
+    assert.equal(m2.alwaysCopyToClipboard, false);
 });
 
 test('validateSttConfig includes mic, history, outputMode, and autotypeMethod settings', () => {
-    const v = validateSttConfig({ micDeviceId: 'dev-1', micDeviceLabel: 'My Mic', historyEnabled: true, historyLimit: 600, outputMode: 'autotype', autotypeMethod: 'paste' });
+    const v = validateSttConfig({ micDeviceId: 'dev-1', micDeviceLabel: 'My Mic', historyEnabled: true, historyLimit: 600, outputMode: 'autotype', autotypeMethod: 'paste', alwaysCopyToClipboard: true });
     assert.equal(v.micDeviceId, 'dev-1');
     assert.equal(v.micDeviceLabel, 'My Mic');
     assert.equal(v.historyEnabled, true);
     assert.equal(v.historyLimit, 500); // clamped to 500
     assert.equal(v.outputMode, 'autotype');
     assert.equal(v.autotypeMethod, 'paste');
+    assert.equal(v.alwaysCopyToClipboard, true);
 });
 
 test('win32 module exports typeUnicodeText function', () => {

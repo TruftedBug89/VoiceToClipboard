@@ -202,6 +202,12 @@ function deliverTranscriptionOutput(text) {
 
     const config = loadConfig();
     const mode = config.outputMode || 'clipboard';
+    const shouldSaveToClipboard = config.alwaysCopyToClipboard !== false || mode === 'clipboard';
+
+    // Always keep transcript in clipboard so Ctrl+V is ready as fallback
+    if (shouldSaveToClipboard && clipboard && typeof clipboard.writeText === 'function') {
+        clipboard.writeText(clean);
+    }
 
     if (mode === 'autotype') {
         const target = lastExternalHwnd;
@@ -225,24 +231,20 @@ function deliverTranscriptionOutput(text) {
         }
 
         logger.warn('[delivery] autotype failed or target window invalid; falling back to paste bubble');
-        if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(clean);
         maybeShowPasteBubble(clean);
         return { success: true, delivered: 'bubble', typed: false, fallback: true };
     }
 
     if (mode === 'toast') {
-        if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(clean);
         maybeShowPasteToast(clean);
         return { success: true, delivered: 'toast', typed: false };
     }
 
     if (mode === 'bubble') {
-        if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(clean);
         maybeShowPasteBubble(clean);
         return { success: true, delivered: 'bubble', typed: false };
     }
 
-    if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(clean);
     return { success: true, delivered: 'clipboard', typed: false };
 }
 

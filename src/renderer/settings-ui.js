@@ -81,6 +81,7 @@ window.VTC = window.VTC || {};
     const outputModeSelectEl = document.getElementById('output-mode-select');
     const autotypeMethodSelectEl = document.getElementById('autotype-method-select');
     const pasteKeyInputEl = document.getElementById('paste-key-input');
+    const alwaysCopyClipboardCheckbox = document.getElementById('always-copy-clipboard-checkbox');
     const historyEnabledCheckbox = document.getElementById('history-enabled-checkbox');
     const historyControlsGroup = document.getElementById('history-controls-group');
     const historySearchInput = document.getElementById('history-search-input');
@@ -790,6 +791,7 @@ window.VTC = window.VTC || {};
                     playFinishSound,
                     outputMode: outputModeVal,
                     autotypeMethod: autotypeMethodVal,
+                    alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                     spacePaste: outputModeVal !== 'clipboard',
                     pasteStyle: outputModeVal === 'toast' ? 'toast' : 'bubble',
                     pasteKey: pasteKeyVal,
@@ -805,6 +807,7 @@ window.VTC = window.VTC || {};
                     sttEngine: engine,
                     outputMode: outputModeVal,
                     autotypeMethod: autotypeMethodVal,
+                    alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                     localTier,
                     localLanguage: 'auto',
                     localModelKey: getSelectedModelKey(),
@@ -906,6 +909,9 @@ window.VTC = window.VTC || {};
             const rawKey = (typeof sttConfig?.pasteKey === 'string' && sttConfig.pasteKey) ? sttConfig.pasteKey : ' ';
             pasteKeyVal = rawKey;
             pasteKeyInputEl.value = rawKey === ' ' ? 'SPACE' : rawKey.toUpperCase();
+        }
+        if (alwaysCopyClipboardCheckbox) {
+            alwaysCopyClipboardCheckbox.checked = sttConfig?.alwaysCopyToClipboard !== false;
         }
         if (autoStopSecondsSelect) autoStopSecondsSelect.value = (sttConfig?.autoStopSeconds || 3.5).toFixed(1);
         if (autoStopOptions) autoStopOptions.style.display = autoStopCheckbox?.checked ? 'flex' : 'none';
@@ -1143,6 +1149,9 @@ window.VTC = window.VTC || {};
             autoSaveSettings();
         });
         pasteKeyInputEl.addEventListener('focus', () => { pasteKeyInputEl.select(); });
+    }
+    if (alwaysCopyClipboardCheckbox) {
+        alwaysCopyClipboardCheckbox.addEventListener('change', () => autoSaveSettings());
     }
 
     if (autoStopCheckbox) {

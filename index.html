@@ -272,15 +272,15 @@
 </div>
 </div>
 <div class="settings-section">
-<div class="settings-section-title"><span data-i18n="settings.spacePaste">Space-to-Paste / Output</span></div>
+<div class="settings-section-title"><span data-i18n="settings.spacePaste">When Finished: Output Action</span></div>
 <div class="input-group">
 <div class="flex-row gap-8">
-<label data-i18n="output.label" for="output-mode-select" class="paste-style-label">Output mode</label>
+<label data-i18n="output.label" for="output-mode-select" class="paste-style-label">Output action</label>
 <select id="output-mode-select" class="select-styled">
-<option value="clipboard" data-i18n="output.mode.clipboard">Clipboard only</option>
-<option value="bubble" data-i18n="output.mode.bubble">Paste bubble (press key)</option>
+<option value="clipboard" data-i18n="output.mode.clipboard">Copy to Clipboard (Ctrl+V)</option>
+<option value="autotype" data-i18n="output.mode.autotype">Type directly at cursor</option>
+<option value="bubble" data-i18n="output.mode.bubble">Quick-paste bubble (press key)</option>
 <option value="toast" data-i18n="output.mode.toast">Windows notification (click)</option>
-<option value="autotype" data-i18n="output.mode.autotype">Type at cursor</option>
 </select>
 </div>
 <div id="paste-key-row" class="flex-row gap-8 mt-6">
@@ -294,7 +294,16 @@
 <option value="paste" data-i18n="output.method.paste">Paste (Ctrl+V simulation)</option>
 </select>
 </div>
-<div id="autotype-note" class="setting-subnote" data-i18n="output.autotypeNote">Types the transcript into the active window. Preserves clipboard. If an app blocks it, switch to 'Paste' method.</div>
+<div id="autotype-note" class="setting-subnote" data-i18n="output.autotypeNote">Types the transcript directly into the focused window. If an app blocks direct typing, switch to 'Paste' method.</div>
+<!-- Always Keep in Clipboard Toggle -->
+<div class="switch-row mt-8" id="always-copy-clipboard-row">
+<label class="switch-label" data-i18n="output.alwaysCopyLabel" for="always-copy-clipboard-checkbox">Always Keep in Clipboard (Ctrl+V)</label>
+<label class="toggle-switch">
+<input checked="" id="always-copy-clipboard-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div class="setting-subnote" data-i18n="output.alwaysCopyNote">Always copies the transcript to clipboard even when typing directly, so you can always press Ctrl+V if pasting fails.</div>
 </div>
 </div>
 <div class="settings-section">
