@@ -70,7 +70,10 @@ if (!gotTheLock) {
         })
     });
 
-    const updateTray = () => updateTrayMenu({
+    // Single factory for tray callbacks: updateTrayMenu rebuilds the menu on
+    // every toggle and createTray needs the same wiring, so share one source
+    // of truth instead of two hand-copied callback objects.
+    const makeTrayCallbacks = () => ({
         onToggleRecording: () => {
             if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
         },
@@ -91,6 +94,8 @@ if (!gotTheLock) {
         }
     });
 
+    const updateTray = () => updateTrayMenu(makeTrayCallbacks());
+
     registerIpcHandlers({ sttService, updateTray });
 
     app.whenReady().then(async () => {
@@ -107,26 +112,7 @@ if (!gotTheLock) {
         logger.info(`[main] startup | version: ${require('./package.json').version} | engine: ${cfg.sttEngine} | localTier: ${cfg.localTier} | style: ${cfg.widgetStyle} | threshold: ${cfg.silenceThreshold} | autoStop: ${cfg.autoStopEnabled} (${cfg.autoStopSeconds}s) | outputMode: ${cfg.outputMode || 'clipboard'} | uiLang: ${cfg.uiLanguage}`);
 
         createMainWindow();
-        createTray({
-            onToggleRecording: () => {
-                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.webContents.send('toggle-recording');
-            },
-            onResetPosition: () => resetWidgetPosition(),
-            onShowSettings: () => showSettingsWindow(),
-            onAlwaysOnTopChange: (checked) => {
-                saveConfig({ alwaysOnTop: checked });
-                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(checked);
-                updateTray();
-                broadcastSettingsChanged(sttService, updateTray);
-            },
-            onQuit: () => app.quit(),
-            onToggleWindow: () => {
-                if (windows.mainWindow && !windows.mainWindow.isDestroyed()) {
-                    if (windows.mainWindow.isVisible()) windows.mainWindow.focus();
-                    else windows.mainWindow.show();
-                }
-            }
-        });
+        createTray(makeTrayCallbacks());
 
         initHotkeys({
             onToggleRecording: () => {
@@ -183,7 +169,11 @@ if (!gotTheLock) {
             logger.error('[main] graceful shutdown stalled for 1500ms — forcing exit (config already flushed)');
             app.exit(0);
         }, 1500);
-        sttService.unloadAll()
+        // Deferred through Promise.resolve so even a synchronous throw from
+        // unloadAll lands in the catch/watchdog path instead of escaping
+        // this handler and skipping the finally() quit.
+        Promise.resolve()
+            .then(() => sttService.unloadAll())
             .catch(error => logger.error(`[main] shutdown cleanup failed | ${sanitizeErrorMessage(error)}`))
             .finally(() => {
                 clearTimeout(shutdownWatchdog);

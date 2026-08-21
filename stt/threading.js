@@ -16,9 +16,12 @@ function physicalCores() {
 // get slower (thread-pool contention + memory bandwidth). Capped, so we never
 // blow past what the chip can feed. RAM use is unchanged: threads schedule the
 // same tensors, they do not duplicate the model weights.
-function numThreadsFor(modelKey = '') {
+// `backend` is optional (registry backend id, e.g. 'whisper'): registry keys no
+// longer always carry the family name (omni-multilingual IS Whisper), so the
+// adapter passes the backend to keep lane matching accurate.
+function numThreadsFor(modelKey = '', backend = '') {
     const cores = physicalCores();
-    const big = /(big|large|whisper)/i.test(modelKey);
+    const big = /(big|large|whisper)/i.test(`${modelKey} ${backend}`);
     const laneEstimate = big ? 8 : 6;
     return Math.max(2, Math.min(cores, laneEstimate));
 }

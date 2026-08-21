@@ -75,6 +75,20 @@ function getPromptForLang(lang) {
  * @param {(text: string) => {typed?: boolean}} [options.onDeliver] Callback to deliver text
  * @returns {(request: {arrayBuffer: ArrayBuffer, mimeType?: string, uiLanguage?: string}) => Promise<object>}
  */
+// A single hung HTTP request must never stall the serialized transcription
+// queue: race the SDK call against a hard deadline so the failover ladder
+// keeps moving. The losing promise is drained to avoid unhandledRejection.
+const GENERATE_TIMEOUT_MS = 60000;
+function generateWithTimeout(ai, params) {
+    let timer;
+    const inner = ai.models.generateContent(params);
+    inner.catch(() => {});
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Gemini request timed out')), GENERATE_TIMEOUT_MS);
+    });
+    return Promise.race([inner, timeout]).finally(() => clearTimeout(timer));
+}
+
 function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({}) } = {}) {
     return async function geminiTranscriber({ arrayBuffer, mimeType = 'audio/webm', uiLanguage }) {
         const keys = getApiKeys();
@@ -114,6 +128,9 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
             return { success: false, code: 'RATE_LIMITED', error: `${why} — try again tomorrow.` };
         }
 
+        // Encoding multi-MB audio is not free — do it once, not per attempt.
+        const audioB64 = buffer.toString('base64');
+
         let lastError = null;
         let authFailures = 0;
         const keyRateHits = {};
@@ -124,10 +141,10 @@ function createGeminiTranscriber({ onFallback = () => {}, onDeliver = () => ({})
             for (const model of chain) {
                 for (let attempt = 0; attempt < 2; attempt++) {
                     try {
-                        const response = await ai.models.generateContent({
+                        const response = await generateWithTimeout(ai, {
                             model,
                             contents: [
-                                { inlineData: { data: buffer.toString('base64'), mimeType } },
+                                { inlineData: { data: audioB64, mimeType } },
                                 getPromptForLang(lang)
                             ]
                         });

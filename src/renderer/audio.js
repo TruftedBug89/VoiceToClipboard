@@ -15,6 +15,7 @@ window.VTC = window.VTC || {};
     const micTestMeterStatus = document.getElementById('mic-test-meter-status');
 
     let isTestingMic = false;
+    let isMicTestStarting = false;
     let testMicStream = null;
     let testMicAudioCtx = null;
     let testMicAnalyser = null;
@@ -92,20 +93,45 @@ window.VTC = window.VTC || {};
     }
 
     async function getMicStream() {
-        if (micDeviceId) {
-            try {
-                return await navigator.mediaDevices.getUserMedia({
-                    audio: { deviceId: { exact: micDeviceId } }
-                });
-            } catch (err) {
-                if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-                    console.warn('[render] Selected mic unavailable, falling back to default:', err);
-                    return await navigator.mediaDevices.getUserMedia({ audio: true });
+        let timedOut = false;
+        const releaseIfLate = (stream) => {
+            // The 5s timeout may have already lost the race while permission
+            // was pending; stop the late stream so the mic is not left live.
+            try { stream.getTracks().forEach(track => track.stop()); } catch (e) {}
+        };
+        const fetchStream = async () => {
+            let stream;
+            if (micDeviceId) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: { deviceId: { exact: micDeviceId } }
+                    });
+                } catch (err) {
+                    if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+                        console.warn('[render] Selected mic unavailable, falling back to default:', err);
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    } else {
+                        throw err;
+                    }
                 }
-                throw err;
+            } else {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
-        }
-        return await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (timedOut) {
+                releaseIfLate(stream);
+                throw new Error('Microphone acquisition timed out.');
+            }
+            return stream;
+        };
+
+        const timeout = new Promise((_, reject) => {
+            setTimeout(() => {
+                timedOut = true;
+                reject(new Error('Microphone acquisition timed out.'));
+            }, 5000);
+        });
+
+        return Promise.race([fetchStream(), timeout]);
     }
 
     async function audioBlobTo16kHzFloat32(audioBlob) {
@@ -193,8 +219,9 @@ window.VTC = window.VTC || {};
     }
 
     async function startMicTest() {
-        if (isTestingMic || window.VTC?.recording?.isRecording) return;
+        if (isTestingMic || isMicTestStarting || window.VTC?.recording?.isRecording) return;
         const t = window.VTC?.i18n?.t || ((k) => k);
+        isMicTestStarting = true;
         try {
             testMicStream = await getMicStream();
             testMicAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -242,6 +269,8 @@ window.VTC = window.VTC || {};
         } catch (err) {
             console.warn('[render] Mic test failed:', err);
             stopMicTest();
+        } finally {
+            isMicTestStarting = false;
         }
     }
 

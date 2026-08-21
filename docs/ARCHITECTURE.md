@@ -48,7 +48,7 @@
 | [`src/main/windows.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/windows.js) | Widget and Settings window creation, geometry validation, click-through hover polling, and snapshot broadcasting. |
 | [`src/main/tray.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/tray.js) | System tray creation, fallback base64 icon, dynamic menu with Always-on-Top toggle, and cleanup. |
 | [`src/main/hotkeys.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/hotkeys.js) | Global `uiohook-napi` keyboard and mouse hotkey listeners, keycode translation, and hotkey recording. |
-| [`src/main/delivery.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/delivery.js) | Output router: clipboard copy, Space-to-paste bubble, toast notification, and `win32.typeUnicodeText` autotype. |
+| [`src/main/delivery.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/delivery.js) | Output router: clipboard copy, Space-to-paste bubble, toast notification, and autotype/paste injection with Enter simulation. |
 | [`src/main/hygiene.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/hygiene.js) | Startup cleanup for stale model caches, orphaned archives, Electron caches >200MB, and logs >5MB / 7 days. |
 | [`src/main/ipc.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/ipc.js) | Typed IPC handler registration connecting renderer calls to backend services. |
 | [`src/main/env-refresh.js`](file:///C:/Users/lavvo/Documents/VoiceToClipboard/src/main/env-refresh.js) | Re-reads `GEMINI_API_KEY` from the live Windows registry (HKCU/HKLM) and refreshes `process.env` without exposing key material. |

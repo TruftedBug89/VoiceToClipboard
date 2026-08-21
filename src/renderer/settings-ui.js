@@ -4,24 +4,51 @@
 window.VTC = window.VTC || {};
 
 (function () {
+    const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
 
-    const MODEL_TIER_FLAGS = Object.freeze({
-        tiny: '🇺🇸',
-        mini: '🇺🇸 🇪🇸',
-        'zh-light': '🇨🇳 🇺🇸',
-        light: '🇺🇸 🇪🇸 🇨🇳',
-        big: '🇺🇸 🇪🇸 🇨🇳',
-        'zh-big': '🇨🇳 🇺🇸'
+    // Real vector flags - Windows has no glyphs for regional-indicator emoji
+    // (users literally see "US"/"CN" letters), so we render compact inline
+    // SVGs instead. Simplified but recognizable at 18x13 px.
+    const FLAG_SVGS = Object.freeze({
+        US: '<svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#b22234"/><g fill="#fff"><rect y="1.08" width="20" height="1.08"/><rect y="3.23" width="20" height="1.08"/><rect y="5.38" width="20" height="1.08"/><rect y="7.54" width="20" height="1.08"/><rect y="9.69" width="20" height="1.08"/><rect y="11.85" width="20" height="1.08"/></g><rect width="9" height="7.54" fill="#3c3b6e"/><g fill="#fff"><circle cx="1.6" cy="1.5" r=".55"/><circle cx="3.7" cy="1.5" r=".55"/><circle cx="5.8" cy="1.5" r=".55"/><circle cx="7.4" cy="1.5" r=".55"/><circle cx="2.65" cy="2.9" r=".55"/><circle cx="4.75" cy="2.9" r=".55"/><circle cx="6.6" cy="2.9" r=".55"/><circle cx="1.6" cy="4.3" r=".55"/><circle cx="3.7" cy="4.3" r=".55"/><circle cx="5.8" cy="4.3" r=".55"/><circle cx="7.4" cy="4.3" r=".55"/><circle cx="2.65" cy="5.7" r=".55"/><circle cx="4.75" cy="5.7" r=".55"/><circle cx="6.6" cy="5.7" r=".55"/></g><rect width="20" height="14" fill="none" stroke="rgba(255,255,255,.28)" stroke-width=".6"/></svg>',
+        ES: '<svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#c60b1e"/><rect y="3.5" width="20" height="7" fill="#ffc400"/><rect width="20" height="14" fill="none" stroke="rgba(255,255,255,.28)" stroke-width=".6"/></svg>',
+        CN: '<svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#de2910"/><path d="M3.5 1.8 4.3 4h2.3l-1.85 1.4.7 2.25L3.5 6.3 1.55 7.65l.7-2.25L.4 4h2.3z" fill="#ffde00"/><g fill="#ffde00"><circle cx="7.6" cy="1.6" r=".62"/><circle cx="9" cy="3.1" r=".62"/><circle cx="9" cy="5" r=".62"/><circle cx="7.6" cy="6.5" r=".62"/></g><rect width="20" height="14" fill="none" stroke="rgba(255,255,255,.28)" stroke-width=".6"/></svg>'
     });
+    const TIER_FLAG_CODES = Object.freeze({
+        tiny: ['US'],
+        mini: ['US', 'ES'],
+        'zh-light': ['CN', 'US'],
+        light: ['US', 'ES', 'CN'],
+        big: ['US', 'ES', 'CN'],
+        'zh-big': ['CN', 'US']
+    });
+    // Expected runtime speed per tier. Level drives a color-coded professional
+    // bolt icon; label text comes from locales (models.speed.*).
+    const TIER_SPEED = Object.freeze({
+        tiny: { level: 3, key: 'models.speed.fastest' },
+        mini: { level: 2, key: 'models.speed.fast' },
+        'zh-light': { level: 2, key: 'models.speed.fast' },
+        light: { level: 1, key: 'models.speed.balanced' },
+        big: { level: 0, key: 'models.speed.thorough' },
+        'zh-big': { level: 0, key: 'models.speed.thorough' }
+    });
+    const SPEED_BOLT_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6.8.5 1.8 6.9h2.9L4.9 11.5l5.3-6.6H7.2z"/></svg>';
 
     const MODEL_TIER_LABELS = Object.freeze({
-        tiny: { name: 'Tiny · 🇺🇸' },
-        mini: { name: 'Mini · 🇺🇸 🇪🇸' },
-        'zh-light': { name: 'Chinese + English (Light) · 🇨🇳 🇺🇸' },
-        light: { name: 'Light · 🇺🇸 🇪🇸 🇨🇳' },
-        big: { name: 'Big · 🇺🇸 🇪🇸 🇨🇳' },
-        'zh-big': { name: 'Chinese + English (Big) · 🇨🇳 🇺🇸' }
+        tiny: { name: 'Tiny' },
+        mini: { name: 'Mini' },
+        'zh-light': { name: 'Chinese + English (Light)' },
+        light: { name: 'Light' },
+        big: { name: 'Big' },
+        'zh-big': { name: 'Chinese + English (Big)' }
     });
+
+    // CRITICAL: mirrors stt/config.js WIDGET_STYLES. The renderer cannot
+    // require() main-process modules, and this identifier was previously
+    // undefined here, so the whole IIFE threw ReferenceError at the final
+    // window.VTC.settings export — leaving EVERY window.VTC.settings.* call
+    // in renderer.js dead (empty model dropdown, unsynced engine segment).
+    const WIDGET_STYLES = Object.freeze(['crimson', 'ocean', 'aurora', 'terminal']);
 
     let currentWidgetStyle = 'crimson';
     // Set by theme-bootstrap.js only when it read a valid appearance before
@@ -41,6 +68,12 @@ window.VTC = window.VTC || {};
     let autoSaveTimer = null;
     let settingsSaveQueue = Promise.resolve();
     let pasteKeyVal = ' ';
+    // A ?settings=1 window has its modal pre-marked .active by renderer.js at
+    // boot, before any config data arrives. openSettings() must still run its
+    // first full refreshSettingsUi() exactly once for that activation, or
+    // setEngine()/tier sync never happen and the offline model group stays
+    // display:none until a manual engine re-click.
+    let pendingExternalActivation = false;
 
     // DOM Elements
     const settingsModal = document.getElementById('settings-modal');
@@ -89,6 +122,7 @@ window.VTC = window.VTC || {};
     const outputModeSelectEl = document.getElementById('output-mode-select');
     const autotypeMethodSelectEl = document.getElementById('autotype-method-select');
     const pasteKeyInputEl = document.getElementById('paste-key-input');
+    const pressEnterCheckbox = document.getElementById('press-enter-checkbox');
     const alwaysCopyClipboardCheckbox = document.getElementById('always-copy-clipboard-checkbox');
     const historyEnabledCheckbox = document.getElementById('history-enabled-checkbox');
     const historyControlsGroup = document.getElementById('history-controls-group');
@@ -156,10 +190,10 @@ window.VTC = window.VTC || {};
 
     function dropdownSubLabel(model) {
         const t = window.VTC?.i18n?.t || ((k) => k);
+        // Name lives on line 1; the sub line carries only facts.
         const size = formatDownloadSize(model.downloadBytes);
         const ram = String(model.ramEstimate || t('model.sizePending')).trim();
-        const localizedName = t('model.' + model.key + '.name', null, model.name);
-        return `${localizedName} · ${size} · ${ram}`;
+        return `${size} · ${ram}`;
     }
 
     function buildModelDropdown() {
@@ -167,7 +201,7 @@ window.VTC = window.VTC || {};
         const t = window.VTC?.i18n?.t || ((k) => k);
         modelDropdownPanel.replaceChildren();
         for (const model of modelCatalog) {
-            const lbl = MODEL_TIER_LABELS[model.tier] || { name: model.name, recommended: false };
+            const lbl = MODEL_TIER_LABELS[model.tier] || { name: model.name };
             const row = document.createElement('button');
             row.type = 'button';
             row.className = 'model-option';
@@ -176,6 +210,18 @@ window.VTC = window.VTC || {};
 
             const main = document.createElement('span');
             main.className = 'mo-main';
+
+            // Line 1: real vector flags + localized name (+ chips).
+            const line = document.createElement('span');
+            line.className = 'mo-line';
+            const flags = document.createElement('span');
+            flags.className = 'mo-flags';
+            for (const code of (TIER_FLAG_CODES[model.tier] || [])) {
+                const f = document.createElement('span');
+                f.className = 'mo-flag';
+                f.innerHTML = FLAG_SVGS[code] || '';
+                flags.appendChild(f);
+            }
             const name = document.createElement('span');
             name.className = 'mo-name';
             name.textContent = t('models.tier.' + model.tier, null, lbl.name);
@@ -185,22 +231,64 @@ window.VTC = window.VTC || {};
                 chip.textContent = t('models.recommended', null, '⭐ Recommended');
                 name.appendChild(chip);
             }
-            if (model.tier === 'big' || model.tier === 'zh-big') {
-                const chip = document.createElement('span');
-                chip.className = 'mo-chip mo-chip-best';
-                chip.textContent = '🏆 ' + t('models.bestQuality', null, 'Best quality');
-                name.appendChild(chip);
-            }
+            line.append(flags, name);
+
+            // Line 2: size · RAM estimate.
             const sub = document.createElement('span');
             sub.className = 'mo-sub';
             sub.textContent = dropdownSubLabel(model);
-            main.append(name, sub);
+            main.append(line, sub);
+
+            // Right side: color-coded speed indicator, then installed state.
+            const end = document.createElement('span');
+            end.className = 'mo-end';
+            const speed = TIER_SPEED[model.tier];
+            if (speed) {
+                const sp = document.createElement('span');
+                sp.className = `mo-speed mo-speed-${speed.level}`;
+                sp.innerHTML = SPEED_BOLT_SVG;
+                const spTxt = document.createElement('span');
+                spTxt.textContent = t(speed.key, null, '');
+                sp.appendChild(spTxt);
+                sp.title = t(speed.key, null, '');
+                end.appendChild(sp);
+            }
+            if (model.installed) {
+                const inst = document.createElement('span');
+                inst.className = 'mo-installed';
+                inst.title = t('model.installed', null, 'Installed');
+                const instSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                instSvg.setAttribute('viewBox', '0 0 12 12');
+                const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                pathEl.setAttribute('d', 'M2 6.4 4.8 9.2 10 3.4');
+                pathEl.setAttribute('fill', 'none');
+                pathEl.setAttribute('stroke', 'currentColor');
+                pathEl.setAttribute('stroke-width', '1.8');
+                pathEl.setAttribute('stroke-linecap', 'round');
+                pathEl.setAttribute('stroke-linejoin', 'round');
+                instSvg.appendChild(pathEl);
+                inst.appendChild(instSvg);
+                const instTxt = document.createElement('span');
+                instTxt.textContent = t('model.installed', null, 'Installed');
+                inst.appendChild(instTxt);
+                end.appendChild(inst);
+            }
+
+            // Elite quality family: Big and Chinese-Big share ONE identical
+            // gold badge so they read as a single top-tier group.
+            if (model.tier === 'big' || model.tier === 'zh-big') {
+                const best = document.createElement('span');
+                best.className = 'mo-chip mo-chip-best';
+                best.textContent = t('models.bestQuality', null, 'Best quality');
+                end.appendChild(best);
+            }
 
             const check = document.createElement('span');
             check.className = 'mo-check';
             check.textContent = '✓';
 
-            row.append(main, check);
+            row.append(main, end, check);
+            if (model.installed) row.classList.add('is-installed');
             if (model.tier === (localTierSelect?.value || recommendedTier)) row.classList.add('selected');
             row.addEventListener('click', () => selectModelTier(model.tier));
             modelDropdownPanel.appendChild(row);
@@ -239,6 +327,13 @@ window.VTC = window.VTC || {};
 
     if (modelDropdownBtn) {
         modelDropdownBtn.addEventListener('click', () => {
+            // Self-heal: an empty panel means the catalog fetch failed or the
+            // dropdown was built before the catalog arrived; rebuild (or
+            // refetch) so opening it can never show zero options.
+            if (!modelDropdownPanel?.childElementCount) {
+                if (modelCatalog.length) buildModelDropdown();
+                else loadModelCatalog().catch(() => {});
+            }
             const open = modelDropdownPanel.style.display !== 'block';
             modelDropdownPanel.style.display = open ? 'block' : 'none';
             modelDropdown.classList.toggle('open', open);
@@ -255,13 +350,17 @@ window.VTC = window.VTC || {};
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && modelDropdown?.classList.contains('open')) {
             closeModelDropdown();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
+            e.preventDefault();
             return;
         }
     });
 
     async function loadModelCatalog() {
-        modelCatalog = await window.api?.getModelCatalog();
+        // Only replace the catalog on a valid array: a transient IPC failure
+        // must not wipe the dropdown into an unfixable empty state.
+        const catalog = await window.api?.getModelCatalog();
+        if (Array.isArray(catalog)) modelCatalog = catalog;
         renderModelCard();
         buildModelDropdown();
     }
@@ -498,6 +597,7 @@ window.VTC = window.VTC || {};
                 ecoMode: ecoModeCheckbox ? ecoModeCheckbox.checked : true,
                 outputMode: outputModeSelectEl ? outputModeSelectEl.value : (currentSttConfig?.outputMode || 'clipboard'),
                 autotypeMethod: autotypeMethodSelectEl ? autotypeMethodSelectEl.value : (currentSttConfig?.autotypeMethod || 'unicode'),
+                pressEnter: pressEnterCheckbox ? pressEnterCheckbox.checked : false,
                 alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                 historyEnabled: historyEnabledCheckbox ? historyEnabledCheckbox.checked : false,
                 saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
@@ -660,11 +760,15 @@ window.VTC = window.VTC || {};
         const pasteKeyRow = document.getElementById('paste-key-row');
         const autotypeMethodRow = document.getElementById('autotype-method-row');
         const autotypeNote = document.getElementById('autotype-note');
+        const pressEnterRow = document.getElementById('press-enter-row');
+        const pressEnterNote = document.getElementById('press-enter-note');
         const val = outputModeSelect ? outputModeSelect.value : 'clipboard';
 
         if (pasteKeyRow) pasteKeyRow.style.display = val === 'bubble' ? 'flex' : 'none';
         if (autotypeMethodRow) autotypeMethodRow.style.display = val === 'autotype' ? 'flex' : 'none';
         if (autotypeNote) autotypeNote.style.display = val === 'autotype' ? 'inline-flex' : 'none';
+        if (pressEnterRow) pressEnterRow.style.display = val !== 'clipboard' ? 'flex' : 'none';
+        if (pressEnterNote) pressEnterNote.style.display = val !== 'clipboard' ? 'inline-flex' : 'none';
     }
 
     let historyRenderSeq = 0;
@@ -759,12 +863,26 @@ window.VTC = window.VTC || {};
         }
     }
 
+    // Points at the latest debounced save payload so an imminent close can
+    // flush it synchronously instead of waiting out the 150ms timer.
+    let runQueuedSettingsSave = null;
+
+    function flushPendingSettingsSave() {
+        if (!autoSaveTimer) return;
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+        const runNow = runQueuedSettingsSave;
+        runQueuedSettingsSave = null;
+        if (runNow) {
+            try { settingsSaveQueue = settingsSaveQueue.then(runNow, runNow).catch(e => console.error('Settings save failed:', e)); } catch (e) {}
+        }
+    }
+
     function autoSaveSettings() {
         clearTimeout(autoSaveTimer);
-        autoSaveTimer = setTimeout(() => {
-            const save = async () => {
+        const save = async () => {
                 const engine = selectedEngine;
-                const localTier = localTierSelect?.value || 'light';
+                const localTier = localTierSelect?.value || currentSttConfig?.localTier || 'light';
                 const autoStopEnabled = autoStopCheckbox?.checked || false;
                 const autoStopSeconds = parseFloat(autoStopSecondsSelect?.value || '3.5') || 3.5;
                 const silenceThreshold = parseInt(silenceThresholdSlider ? silenceThresholdSlider.value : 12) || 12;
@@ -804,6 +922,7 @@ window.VTC = window.VTC || {};
                     playFinishSound,
                     outputMode: outputModeVal,
                     autotypeMethod: autotypeMethodVal,
+                    pressEnter: pressEnterCheckbox ? pressEnterCheckbox.checked : false,
                     alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                     spacePaste: outputModeVal !== 'clipboard',
                     pasteStyle: outputModeVal === 'toast' ? 'toast' : 'bubble',
@@ -820,6 +939,7 @@ window.VTC = window.VTC || {};
                     sttEngine: engine,
                     outputMode: outputModeVal,
                     autotypeMethod: autotypeMethodVal,
+                    pressEnter: pressEnterCheckbox ? pressEnterCheckbox.checked : false,
                     alwaysCopyToClipboard: alwaysCopyClipboardCheckbox ? alwaysCopyClipboardCheckbox.checked : true,
                     localTier,
                     localLanguage: 'auto',
@@ -833,7 +953,9 @@ window.VTC = window.VTC || {};
                     idleOpacity,
                     saveRecordings: saveRecordingsCheckbox ? saveRecordingsCheckbox.checked : false
                 };
-            };
+        };
+        runQueuedSettingsSave = save;
+        autoSaveTimer = setTimeout(() => {
             settingsSaveQueue = settingsSaveQueue.then(save, save).catch(error => console.error('Settings save failed:', error));
         }, 150);
     }
@@ -881,7 +1003,12 @@ window.VTC = window.VTC || {};
         if (window.api?.refreshEnvApiKey) {
             await window.api.refreshEnvApiKey().catch(() => {});
         }
-        const sttConfig = snapshot || await window.api?.getSttConfig();
+        if (!modelCatalog || !modelCatalog.length) {
+            await loadModelCatalog().catch(() => {});
+        }
+        // One failed IPC round-trip must not abort the whole refresh before
+        // setEngine()/tier sync run; fall through with what we have.
+        const sttConfig = snapshot || await window.api?.getSttConfig()?.catch(() => null) || currentSttConfig || {};
         if (requestId !== refreshRequestId) return;
         applyAppearanceSnapshot(sttConfig);
         currentSttConfig = sttConfig;
@@ -891,7 +1018,7 @@ window.VTC = window.VTC || {};
         if (cachePath && sttConfig?.modelCachePath) cachePath.textContent = `${t('models.cachePath')} (${sttConfig.modelCachePath})`;
         const recPathDisplay = document.getElementById('recordings-path-display');
         if (recPathDisplay && sttConfig?.recordingsPath) recPathDisplay.textContent = sttConfig.recordingsPath;
-        const apiStatus = await window.api?.getApiKeyStatus();
+        const apiStatus = await window.api?.getApiKeyStatus()?.catch(() => null);
         if (requestId !== refreshRequestId) return;
 
         await window.VTC?.interaction?.loadHotkey();
@@ -923,11 +1050,17 @@ window.VTC = window.VTC || {};
             pasteKeyVal = rawKey;
             pasteKeyInputEl.value = rawKey === ' ' ? 'SPACE' : rawKey.toUpperCase();
         }
+        if (pressEnterCheckbox) {
+            pressEnterCheckbox.checked = !!sttConfig?.pressEnter;
+        }
         if (alwaysCopyClipboardCheckbox) {
             alwaysCopyClipboardCheckbox.checked = sttConfig?.alwaysCopyToClipboard !== false;
         }
         if (autoStopSecondsSelect) autoStopSecondsSelect.value = (sttConfig?.autoStopSeconds || 3.5).toFixed(1);
         if (autoStopOptions) autoStopOptions.style.display = autoStopCheckbox?.checked ? 'flex' : 'none';
+        if (document.getElementById('settings-modal')?.classList.contains('active')) {
+            window.VTC?.vad?.startSettingsMicPreview?.();
+        }
 
         const silenceThreshold = typeof sttConfig?.silenceThreshold === 'number' ? sttConfig.silenceThreshold : 12;
         if (silenceThresholdSlider) silenceThresholdSlider.value = silenceThreshold;
@@ -990,7 +1123,7 @@ window.VTC = window.VTC || {};
 
         const appVersionDisplay = document.getElementById('app-version-display');
         if (appVersionDisplay) {
-            const ver = window.api && window.api.appVersion ? window.api.appVersion : '4.2.0';
+            const ver = window.api && window.api.appVersion ? window.api.appVersion : '5.0.0';
             appVersionDisplay.textContent = `v${ver}`;
         }
 
@@ -1025,8 +1158,13 @@ window.VTC = window.VTC || {};
         if (!settingsModal) return;
         if (settingsModal.classList.contains('active')) {
             closeModalBtn?.focus();
+            if (pendingExternalActivation) {
+                pendingExternalActivation = false;
+                refreshSettingsUi().catch(() => {});
+            }
             return;
         }
+        pendingExternalActivation = false;
         lastFocusedBeforeSettings = document.activeElement;
         settingsModal.classList.add('active');
         settingsModal.setAttribute('aria-hidden', 'false');
@@ -1039,7 +1177,9 @@ window.VTC = window.VTC || {};
     }
 
     function closeSettings() {
-        if (!settingsModal || !settingsModal.classList.contains('active')) return;
+        flushPendingSettingsSave();
+        if (!settingsModal) return;
+        if (!isSettingsWindow && !settingsModal.classList.contains('active')) return;
         window.VTC?.vad?.stopSettingsMicPreview();
         window.VTC?.audio?.stopMicTest();
         if (activeDownloadKey) {
@@ -1051,7 +1191,11 @@ window.VTC = window.VTC || {};
         settingsModal.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('settings-active');
         window.VTC?.interaction?.refreshMouseIgnore();
-        window.api?.closeSettingsWindow();
+        if (window.api?.closeSettingsWindow) {
+            window.api.closeSettingsWindow();
+        } else if (isSettingsWindow) {
+            window.close();
+        }
         // Restore keyboard focus to whatever opened the settings UI.
         if (lastFocusedBeforeSettings && lastFocusedBeforeSettings.focus) {
             try { lastFocusedBeforeSettings.focus(); } catch (e) {}
@@ -1062,7 +1206,7 @@ window.VTC = window.VTC || {};
     // Keyboard support: ESC closes settings once; Tab is trapped inside the
     // modal so focus can never land on the widget behind it.
     document.addEventListener('keydown', (e) => {
-        const modalActive = settingsModal && settingsModal.classList.contains('active');
+        const modalActive = isSettingsWindow || (settingsModal && settingsModal.classList.contains('active'));
         if (!modalActive) return;
         if (e.key === 'Escape') {
             if (modelDropdown?.classList.contains('open')) return; // dropdown owns ESC
@@ -1163,6 +1307,9 @@ window.VTC = window.VTC || {};
         });
         pasteKeyInputEl.addEventListener('focus', () => { pasteKeyInputEl.select(); });
     }
+    if (pressEnterCheckbox) {
+        pressEnterCheckbox.addEventListener('change', () => autoSaveSettings());
+    }
     if (alwaysCopyClipboardCheckbox) {
         alwaysCopyClipboardCheckbox.addEventListener('change', () => autoSaveSettings());
     }
@@ -1170,7 +1317,6 @@ window.VTC = window.VTC || {};
     if (autoStopCheckbox) {
         autoStopCheckbox.addEventListener('change', () => {
             if (autoStopOptions) autoStopOptions.style.display = autoStopCheckbox.checked ? 'flex' : 'none';
-            if (!autoStopCheckbox.checked) window.VTC?.vad?.stopSettingsMicPreview();
             autoSaveSettings();
         });
     }
@@ -1247,6 +1393,9 @@ window.VTC = window.VTC || {};
 
     wireStylePicker();
 
+    window.addEventListener('pagehide', flushPendingSettingsSave);
+    window.addEventListener('beforeunload', flushPendingSettingsSave);
+
     window.VTC.settings = {
         WIDGET_STYLES,
         MODEL_TIER_LABELS,
@@ -1264,6 +1413,7 @@ window.VTC = window.VTC || {};
             }
         },
         openSettings,
+        markSettingsExternallyActivated() { pendingExternalActivation = true; },
         closeSettings,
         refreshSettingsUi,
         checkApiKeyStatus,

@@ -39,14 +39,25 @@ function trayMenuForState(alwaysOnTop, callbacks) {
     ]);
 }
 
+function fallbackTrayIcon() {
+    const iconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACYSURBVDhPzZExDsMgDEVf6tCld+m+U0+To0TkAhUjy5ZIVUq/xI/tf3ADcM49+oA7Y/5hF5i71oO5G+269wP4jPntA0Tkg1Kq/wNEpAFKqQ9O1wZ8YEqzT9cGTFA3+3RtwAR1s0/XBkxQN/t0bcAER6v26dqACeq2eBtw07X/B1y/G/A13QGk688BpOv/Ac492gE24D70BUt0i16n37dGAAAAAElFTkSuQmCC';
+    return nativeImage.createFromDataURL('data:image/png;base64,' + iconBase64);
+}
+
 function createTray(callbacks = {}) {
+    // Re-initialization must not leak the previous Tray or stack duplicate
+    // click listeners onto it.
+    if (tray && !tray.isDestroyed()) {
+        tray.destroy();
+        tray = null;
+    }
     const iconPath = path.join(__dirname, '../../build/icon.ico');
-    let icon;
+    let icon = fallbackTrayIcon();
     if (fs.existsSync(iconPath)) {
-        icon = nativeImage.createFromPath(iconPath);
-    } else {
-        const iconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACYSURBVDhPzZExDsMgDEVf6tCld+m+U0+To0TkAhUjy5ZIVUq/xI/tf3ADcM49+oA7Y/5hF5i71oO5G+269wP4jPntA0Tkg1Kq/wNEpAFKqQ9O1wZ8YEqzT9cGTFA3+3RtwAR1s0/XBkxQN/t0bcAER6v26dqACeq2eBtw07X/B1y/G/A13QGk688BpOv/Ac492gE24D70BUt0i16n37dGAAAAAElFTkSuQmCC';
-        icon = nativeImage.createFromDataURL('data:image/png;base64,' + iconBase64);
+        const fromDisk = nativeImage.createFromPath(iconPath);
+        // A corrupt/unreadable .ico decodes to an empty image, which renders as
+        // an invisible tray icon; keep the bundled fallback in that case.
+        if (!fromDisk.isEmpty()) icon = fromDisk;
     }
     tray = new Tray(icon);
     const lang = getUiLanguage();

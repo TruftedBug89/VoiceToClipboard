@@ -31,14 +31,16 @@ async function loadHistory() {
  * @returns {Promise<void>}
  */
 async function saveHistory(historyArray) {
+    const tempPath = `${historyPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     try {
         const limit = loadConfig().historyLimit || 50;
         const bounded = Array.isArray(historyArray) ? historyArray.slice(0, limit) : [];
-        const tempPath = `${historyPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
         await fs.promises.writeFile(tempPath, JSON.stringify(bounded, null, 2), 'utf8');
         await fs.promises.rename(tempPath, historyPath);
     } catch (e) {
         logger.warn(`[history] Failed to save history: ${e.message || e}`);
+        // Never leak orphaned .tmp files in the user data directory.
+        fs.promises.unlink(tempPath).catch(() => {});
     }
 }
 
@@ -68,11 +70,8 @@ async function listHistory(query = '') {
     const history = await loadHistory();
     if (typeof query === 'string' && query.trim()) {
         const q = query.trim().toLowerCase();
-        return history.filter(item =>
-            (item.text && item.text.toLowerCase().includes(q)) ||
-            (item.engine && item.engine.toLowerCase().includes(q)) ||
-            (item.model && item.model.toLowerCase().includes(q))
-        );
+        const has = (v) => typeof v === 'string' && v.toLowerCase().includes(q);
+        return history.filter(item => has(item.text) || has(item.engine) || has(item.model));
     }
     return history;
 }
@@ -98,6 +97,59 @@ async function clearHistory() {
 }
 
 /**
+ * Returns a valid Date for a history timestamp, or null when missing/invalid.
+ * @param {*} ts
+ * @returns {Date|null}
+ */
+function safeDate(ts) {
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Quotes a CSV cell, doubles embedded quotes, and neutralizes spreadsheet
+ * formula injection (=, +, -, @, tab, CR prefixes) per the OWASP cheat sheet.
+ * @param {*} value
+ * @returns {string}
+ */
+function csvCell(value) {
+    let s = String(value === undefined || value === null ? '' : value).replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return `"${s}"`;
+}
+
+/**
+ * Serializes history items to JSON, TXT, or CSV text.
+ * Exported separately from exportHistory so formats stay unit-testable
+ * without Electron dialogs.
+ * @param {Array<object>} history
+ * @param {'json'|'csv'|'txt'} format
+ * @returns {string}
+ */
+function serializeHistory(history, format) {
+    if (format === 'csv') {
+        const rows = history.map(i => [
+            csvCell(i.id),
+            csvCell(safeDate(i.ts) ? safeDate(i.ts).toISOString() : ''),
+            csvCell(i.engine),
+            csvCell(i.model),
+            csvCell(i.lang),
+            Number.isFinite(i.chars) ? i.chars : 0,
+            Number.isFinite(i.durationMs) ? i.durationMs : 0,
+            csvCell(i.text)
+        ].join(',')).join('\n');
+        return `id,timestamp,engine,model,lang,chars,durationMs,text\n${rows}\n`;
+    }
+    if (format === 'txt') {
+        return history.map(i => {
+            const d = safeDate(i.ts);
+            return `[${d ? d.toLocaleString() : String(i.ts ?? '')}] (${i.engine}/${i.model})\n${typeof i.text === 'string' ? i.text : ''}\n`;
+        }).join('\n---\n\n');
+    }
+    return JSON.stringify(history, null, 2);
+}
+
+/**
  * Exports history to JSON, CSV, or TXT via a native save dialog.
  * @param {Electron.BrowserWindow|null} parentWindow
  * @param {'json'|'csv'|'txt'} [format]
@@ -120,26 +172,7 @@ async function exportHistory(parentWindow, format = 'json', L = (k) => k) {
 
     if (result.canceled || !result.filePath) return { success: false, canceled: true };
 
-    let content = '';
-    if (format === 'json') {
-        content = JSON.stringify(history, null, 2);
-    } else if (format === 'txt') {
-        content = history.map(i => `[${new Date(i.ts).toLocaleString()}] (${i.engine}/${i.model})\n${i.text}\n`).join('\n---\n\n');
-    } else if (format === 'csv') {
-        const escapeCsv = str => `"${String(str || '').replace(/"/g, '""')}"`;
-        const header = 'id,timestamp,engine,model,lang,chars,durationMs,text\n';
-        const rows = history.map(i => [
-            escapeCsv(i.id),
-            escapeCsv(new Date(i.ts).toISOString()),
-            escapeCsv(i.engine),
-            escapeCsv(i.model),
-            escapeCsv(i.lang),
-            i.chars || 0,
-            i.durationMs || 0,
-            escapeCsv(i.text)
-        ].join(',')).join('\n');
-        content = header + rows;
-    }
+    const content = serializeHistory(history, ext);
 
     await fs.promises.writeFile(result.filePath, content, 'utf8');
     return { success: true, filePath: result.filePath };
@@ -178,6 +211,7 @@ module.exports = {
     loadHistory,
     saveHistory,
     mutateHistory,
+    serializeHistory,
     listHistory,
     deleteHistory,
     clearHistory,

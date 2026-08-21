@@ -23,6 +23,7 @@ window.VTC = window.VTC || {};
     let settingsPreviewAudioCtx = null;
     let settingsPreviewAnalyser = null;
     let settingsMeterFrameId = null;
+    let settingsPreviewStarting = false;
 
     /**
      * Frequency-weighted RMS volume focused on vocal speech bands (~150Hz to 8kHz).
@@ -91,7 +92,8 @@ window.VTC = window.VTC || {};
     }
 
     async function startSettingsMicPreview() {
-        if (window.VTC?.recording?.isRecording || settingsPreviewStream) return;
+        if (window.VTC?.recording?.isRecording || settingsPreviewStream || settingsPreviewStarting) return;
+        settingsPreviewStarting = true;
         try {
             settingsPreviewStream = await window.VTC.audio.getMicStream();
             settingsPreviewAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -102,6 +104,7 @@ window.VTC = window.VTC || {};
             settingsPreviewAnalyser.fftSize = 64;
             const previewSource = settingsPreviewAudioCtx.createMediaStreamSource(settingsPreviewStream);
             previewSource.connect(settingsPreviewAnalyser);
+            if (noiseMeterWrap) noiseMeterWrap.style.display = 'block';
 
             function renderSettingsMeter() {
                 const isSettingsOpen = document.getElementById('settings-modal')?.classList.contains('active');
@@ -125,6 +128,8 @@ window.VTC = window.VTC || {};
             renderSettingsMeter();
         } catch (e) {
             console.warn('Settings mic preview unavailable:', e);
+        } finally {
+            settingsPreviewStarting = false;
         }
     }
 
@@ -142,6 +147,7 @@ window.VTC = window.VTC || {};
             settingsPreviewAudioCtx = null;
         }
         settingsPreviewAnalyser = null;
+        if (noiseMeterWrap) noiseMeterWrap.style.display = 'none';
     }
 
     async function autoCalibrateNoiseFloor() {
@@ -169,8 +175,8 @@ window.VTC = window.VTC || {};
             autoCalibrateBtn.disabled = false;
             isCalibrating = false;
             if (calibrateFeedback) calibrateFeedback.style.color = '';
-            if (noiseMeterWrap) noiseMeterWrap.style.display = 'none';
             stopSettingsMicPreview();
+            startSettingsMicPreview();
         };
 
         autoCalibrateBtn.disabled = true;

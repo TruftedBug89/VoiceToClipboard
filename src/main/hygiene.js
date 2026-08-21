@@ -50,9 +50,13 @@ async function cleanupJunk(sttService) {
     // 2. Stray download archives / partial files in the model cache folder
     const modelEntries = await fs.promises.readdir(modelsDir).catch(() => []);
     for (const name of modelEntries) {
-        if (/\.(tar\.bz2|zip|part|tmp|download|aria2)$/i.test(name)) {
-            await fs.promises.rm(path.join(modelsDir, name), { recursive: true, force: true }).catch(() => {});
-        }
+        if (!/\.(tar\.bz2|zip|part|tmp|download|aria2)$/i.test(name)) continue;
+        // Skip archives written within the last minute: a download can start
+        // while this startup pass runs, and deleting its .part/.download file
+        // would corrupt an in-flight transfer.
+        const stat = await fs.promises.stat(path.join(modelsDir, name)).catch(() => null);
+        if (stat && Date.now() - stat.mtimeMs < 60000) continue;
+        await fs.promises.rm(path.join(modelsDir, name), { recursive: true, force: true }).catch(() => {});
     }
 
     // 3. Crashpad crash dumps older than a week

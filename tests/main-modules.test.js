@@ -55,6 +55,20 @@ test('main i18n helper resolves translations and variable interpolations', () =>
     assert.equal(formatted, '1.5 sec');
 });
 
+test('main i18n L falls back en -> key and never re-substitutes values', () => {
+    // Case-normalized language codes still resolve (was falling back to English).
+    assert.equal(L('tray.quit', null, 'ES'), '❌ Salir');
+    assert.equal(L('tray.quit', null, 'ZH'), '❌ 退出');
+    // Unknown language codes fall back to the English value.
+    assert.equal(L('tray.quit', null, 'fr'), '❌ Quit');
+    // Fully unknown keys echo the key itself.
+    assert.equal(L('no.such.key'), 'no.such.key');
+    // Substituted VALUES are not scanned for more placeholders (single pass).
+    assert.equal(L('meter.speechVal', { v: '{n} sneaky {v}' }, 'en'), 'Speech · {n} sneaky {v}');
+    // Unknown placeholders are left untouched.
+    assert.equal(L('history.chars', {}, 'en'), '{n} chars');
+});
+
 test('main process resolves live window state instead of a destructured null getter', () => {
     assert.match(mainSource, /const windows = require\('\.\/src\/main\/windows'\);/);
     assert.match(mainSource, /initForegroundPolling\(\(\) => windows\.mainWindow\)/);

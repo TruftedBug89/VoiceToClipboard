@@ -36,3 +36,26 @@ test('sanitizeErrorMessage redacts bearer tokens and key fields', () => {
     assert.match(sanitizeErrorMessage('api_key=sk-1234567890'), /REDACTED/);
     assert.equal(sanitizeErrorMessage('plain message'), 'plain message');
 });
+
+test('sanitizeErrorMessage redacts suffixed query-param secret names', () => {
+    const out = sanitizeErrorMessage(new Error('GET https://host/v1/x?refresh_token=abc123def456&authkey=zzz999888 failed'));
+    assert.ok(!out.includes('abc123def456'), 'refresh_token value must be redacted');
+    assert.ok(!out.includes('zzz999888'), 'authkey value must be redacted');
+});
+
+test('sanitizeErrorMessage redacts Basic-auth credentials and x-goog-api-key headers', () => {
+    const out = sanitizeErrorMessage(new Error('Authorization: Basic dXNlcjpwYXNzd29yZA=='));
+    assert.ok(!out.includes('dXNlcjpwYXNzd29yZA'), 'base64 basic credential must be redacted');
+    const hdr = sanitizeErrorMessage(new Error('{"x-goog-api-key": "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"}'));
+    assert.ok(!hdr.includes('AIzaSyXXXXXXXX'), 'header key material must be redacted');
+});
+
+test('sanitizeErrorMessage survives hostile thrown values and sanitizes causes', () => {
+    const hostile = { get toString() { throw new Error('nope'); } };
+    assert.equal(sanitizeErrorMessage(hostile), 'Unknown error');
+    const inner = new Error('inner failed with key=AIzaSyDYYYYYYYYYYYYYYYYYYYYYYYYY');
+    const outer = new Error('outer failed');
+    outer.cause = inner;
+    const out = sanitizeErrorMessage(outer);
+    assert.ok(!out.includes('AIzaSyDYYYY'), 'cause-chain key material must be redacted');
+});

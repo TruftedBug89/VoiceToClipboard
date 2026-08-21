@@ -78,7 +78,7 @@ window.VTC = window.VTC || {};
 
         if (isSettingsWindow) return;
 
-        const isSettingsOpen = settingsModal && settingsModal.classList.contains('active');
+        const isSettingsOpen = (settingsModal && settingsModal.classList.contains('active')) || document.body.classList.contains('settings-active');
         const isRecording = window.VTC?.recording?.isRecording;
 
         if (isSettingsOpen) {

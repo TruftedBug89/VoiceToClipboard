@@ -2,6 +2,8 @@ const WAV_HEADER_BYTES = 44;
 const MAX_AUDIO_SECONDS = 15 * 60;
 
 function toFloat32Array(value) {
+    // Zero-copy path: callers must not mutate `value` after handoff (IPC structured
+    // clone copies anyway; in-process callers share the same underlying buffer).
     if (value instanceof Float32Array && value.byteOffset % 4 === 0) {
         return value;
     }

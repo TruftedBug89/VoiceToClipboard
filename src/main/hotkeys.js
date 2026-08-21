@@ -12,6 +12,9 @@ let currentHotkeyConfig = null;
 let isRecordingHotkey = false;
 let hotkeyPromiseResolve = null;
 let hotkeyCaptureTimeout = null;
+// Keycodes currently held down, used to detect OS auto-repeat keydowns so a
+// held trigger key fires onToggleRecording once per physical press only.
+let pressedKeys = new Set();
 
 const CAPTURE_RESULT = Object.freeze({
     ok: 'ok',
@@ -71,8 +74,7 @@ function startRecordingHotkey() {
         hotkeyPromiseResolve = (payload) => {
             const { result, hotkey } = payload || {};
             if (result === CAPTURE_RESULT.ok) {
-                const hk = result === CAPTURE_RESULT.ok ? loadConfig().customHotkey || currentHotkeyConfig : null;
-                applyHotkeyConfig(hk);
+                applyHotkeyConfig(loadConfig().customHotkey || currentHotkeyConfig);
             }
             resolve(payload);
         };
@@ -85,6 +87,10 @@ function startRecordingHotkey() {
 
 function initHotkeys({ onToggleRecording = () => {} } = {}) {
     uIOhook.on('keydown', (e) => {
+        // OS auto-repeat re-sends keydown while a key is held; only the first
+        // physical press of a keycode may fire the toggle (double-fire guard).
+        const isRepeat = pressedKeys.has(e.keycode);
+        pressedKeys.add(e.keycode);
         if (isRecordingHotkey) {
             const keyName = reverseKeyMap[e.keycode] || null;
             // Modifiers alone are not a hotkey — wait for the trigger key.
@@ -117,10 +123,15 @@ function initHotkeys({ onToggleRecording = () => {} } = {}) {
             if (e.keycode === currentHotkeyConfig.keycode &&
                 !!e.ctrlKey === !!currentHotkeyConfig.ctrl &&
                 !!e.altKey === !!currentHotkeyConfig.alt &&
-                !!e.shiftKey === !!currentHotkeyConfig.shift) {
+                !!e.shiftKey === !!currentHotkeyConfig.shift &&
+                !isRepeat) {
                 onToggleRecording();
             }
         }
+    });
+
+    uIOhook.on('keyup', (e) => {
+        pressedKeys.delete(e.keycode);
     });
 
     uIOhook.on('mousedown', (e) => {
@@ -160,7 +171,7 @@ function initHotkeys({ onToggleRecording = () => {} } = {}) {
             saveConfig({ customHotkey: null });
         }
     }
-    applyHotkeyConfig(loadConfig().customHotkey);
+    applyHotkeyConfig(config.customHotkey);
     uIOhook.start();
 }
 
@@ -174,7 +185,14 @@ function stopHotkeys() {
     try {
         uIOhook.removeAllListeners('keydown');
         uIOhook.removeAllListeners('mousedown');
+        uIOhook.removeAllListeners('keyup');
     } catch (e) {}
+    // Settle any in-flight capture so its promise resolves and the capture
+    // timer cannot fire into a torn-down app.
+    try {
+        finishCapture(CAPTURE_RESULT.cancelled, currentHotkeyString());
+    } catch (e) {}
+    pressedKeys.clear();
 }
 
 module.exports = {

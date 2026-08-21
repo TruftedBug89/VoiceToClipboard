@@ -97,7 +97,7 @@ class SttService {
             const installedPath = await this.cache.install(modelKey, onProgress, controller.signal);
             return { success: true, path: installedPath };
         } catch (error) {
-            if (controller.signal.aborted || error.message === 'Download cancelled.') {
+            if (controller.signal.aborted || error?.message === 'Download cancelled.') {
                 return { success: false, code: 'CANCELLED', error: 'Download cancelled.' };
             }
             const normalized = normalizeError(error);
@@ -152,7 +152,14 @@ class SttService {
 
     async remove(modelKey) {
         this.cancelDownload(modelKey);
-        if (this._sherpa?.loaded?.modelKey === modelKey) await this.sherpa.unload();
+        // Run through the transcription queue so removing a model can never
+        // free its recognizer (or delete its files) while a decode is reading
+        // them — same guarantee unloadAll() gives settings saves.
+        const doUnload = async () => {
+            if (this._sherpa?.loaded?.modelKey === modelKey) await this._sherpa.unload();
+        };
+        this.queue = this.queue.then(doUnload, doUnload);
+        await this.queue;
         await this.cache.remove(modelKey);
         return { success: true };
     }
@@ -207,9 +214,8 @@ class SttService {
         const operation = this.queue.then(async () => {
             try {
                 if (request.engine === 'gemini') {
-                    const result = await this.geminiTranscriber(request);
-                    if (!result?.success) return result;
-                    return result;
+                    // The result passes through; a thrown error is normalized below.
+                    return await this.geminiTranscriber(request);
                 }
 
                 const pcm = validatePcm(request.pcm, request.sampleRate || 16000);

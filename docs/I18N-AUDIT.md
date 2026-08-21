@@ -1,7 +1,7 @@
 # I18N Audit — VoiceToClipboard
 
 Automated audit of translation-key usage vs `locales/{en,es,zh}.json` (all 3 files hold
-identical key sets — 238 keys after flattening — with no missing/empty/untranslated values).
+identical key sets — 242 keys after flattening as of the 4.3.1 release pass — with no missing/empty/untranslated values).
 
 ## Status: RESOLVED (release polish pass)
 

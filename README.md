@@ -8,7 +8,7 @@
 
 > A lightweight, always-on-top Windows widget that turns microphone speech into clipboard text.
 
-![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![Electron](https://img.shields.io/badge/Electron-v43.2.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -22,8 +22,8 @@
 - Global recording shortcut, customizable in Settings.
 - Click-to-record, click again to submit, or press `Esc` to cancel.
 - Gemini cloud transcription with automatic 5-model fallback (rate-limited models are remembered and skipped until the next day).
-- **Six local offline models** — all multilingual/bilingual with automatic language detection (no language setting, ever):
-  - **Tiny · Moonshine v2 Base INT8** (~239 MB) and **Mini · FastConformer Transducer 10 languages** (~102 MB) — tiny footprint, instant low-RAM wake.
+- **Six local offline models** — automatic language detection with no language setting (Tiny is English-focused; the rest are multilingual/bilingual):
+  - **Tiny · Zipformer Transducer INT8** (~293 MB) and **Mini · FastConformer Transducer 10 languages** (~102 MB) — tiny footprint, instant low-RAM wake.
   - **Chinese + English (Light) · SenseVoice** (~158 MB, ~400 MB RAM) and **Chinese + English (Big) · FireRedASR2** (~496 MB, ~1.1 GB RAM) — mainly Mandarin, plus English.
   - **Light · Whisper Small INT8** (~610 MB, ~550 MB RAM) — the default pick; 99+ languages, high accuracy.
   - **Big · Whisper Turbo INT8** (~538 MB, ~950 MB RAM) — max precision, distilled 4-layer decoder.
@@ -77,7 +77,7 @@ Select **Offline Models** in Settings, pick one of the six models from the **Off
 
 | Model | Languages (auto) | Download | RAM while loaded |
 | :--- | :--- | :--- | :--- |
-| Tiny · Moonshine v2 Base INT8 | English, Spanish, Chinese | ~239 MB | ~290 MB |
+| Tiny · Zipformer Transducer INT8 | English | ~293 MB | ~180 MB |
 | Mini · FastConformer Transducer | 10 languages (EN/DE/ES/FR/IT/PL/RU/UK/HR/BE) | ~102 MB | ~270 MB |
 | Chinese + English (Light) · SenseVoice | Mandarin, English, Cantonese, Japanese, Korean | ~158 MB | ~400 MB |
 | Light · Whisper Small INT8 | 99+ languages | ~610 MB | ~550 MB |

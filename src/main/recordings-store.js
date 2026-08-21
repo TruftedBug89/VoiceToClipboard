@@ -40,17 +40,27 @@ async function saveRecordingAudio(request) {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${String(now.getMilliseconds()).padStart(3, '0')}`;
+        // Same-millisecond saves (e.g. a quick "Transcribe Again" retry) must
+        // not silently overwrite each other, so add -1, -2, ... on collision.
+        const uniquePath = (base) => {
+            let candidate = base;
+            for (let n = 2; fs.existsSync(candidate); n++) {
+                const ext = path.extname(base);
+                candidate = path.join(path.dirname(base), `${path.basename(base, ext)}-${n}${ext}`);
+            }
+            return candidate;
+        };
         let filePath = null;
         if (request.pcm) {
             const pcmData = new Float32Array(request.pcm);
             const wavBuffer = pcmToWav(pcmData, request.sampleRate || 16000);
-            filePath = path.join(recordingsDir, `recording_${timestamp}.wav`);
+            filePath = uniquePath(path.join(recordingsDir, `recording_${timestamp}.wav`));
             await fs.promises.writeFile(filePath, wavBuffer);
             logger.info(`[recordings] Saved voice recording WAV: ${filePath} (${wavBuffer.length} bytes)`);
         } else if (request.arrayBuffer) {
             const isWebm = request.mimeType && request.mimeType.includes('webm');
             const ext = isWebm ? 'webm' : 'audio';
-            filePath = path.join(recordingsDir, `recording_${timestamp}.${ext}`);
+            filePath = uniquePath(path.join(recordingsDir, `recording_${timestamp}.${ext}`));
             const buf = Buffer.from(request.arrayBuffer);
             await fs.promises.writeFile(filePath, buf);
             logger.info(`[recordings] Saved voice recording ${ext.toUpperCase()}: ${filePath} (${buf.length} bytes)`);
@@ -68,8 +78,8 @@ async function saveRecordingAudio(request) {
  */
 async function openRecordingsFolder() {
     await fs.promises.mkdir(recordingsDir, { recursive: true });
-    await shell.openPath(recordingsDir);
-    return { success: true, path: recordingsDir };
+    const error = await shell.openPath(recordingsDir);
+    return error ? { success: false, path: recordingsDir, error } : { success: true, path: recordingsDir };
 }
 
 module.exports = {

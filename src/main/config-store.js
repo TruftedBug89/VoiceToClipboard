@@ -78,13 +78,29 @@ async function migrateLegacyUserData() {
     }
 }
 
-async function performWriteToDisk(configToWrite) {
+// Monotonic write generation. Each scheduled async write captures the
+// current generation; flushConfigImmediately bumps it so an older snapshot
+// still queued or in flight is skipped instead of renaming over the
+// fresher synchronous flush (last-writer-wins corruption guard).
+let writeGeneration = 0;
+
+async function performWriteToDisk(configToWrite, generation) {
+    const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+    let renamed = false;
     try {
-        const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
         await fs.promises.writeFile(tempPath, JSON.stringify(configToWrite, null, 2), 'utf8');
-        await fs.promises.rename(tempPath, configPath);
+        // Re-check AFTER writing: a synchronous flush may have superseded
+        // this snapshot while the bytes were hitting disk.
+        if (generation === writeGeneration) {
+            await fs.promises.rename(tempPath, configPath);
+            renamed = true;
+        }
     } catch (e) {
         console.error('Failed to save config asynchronously:', e.message || e);
+    } finally {
+        if (!renamed) {
+            try { await fs.promises.unlink(tempPath); } catch (e) { /* ignore */ }
+        }
     }
 }
 
@@ -93,7 +109,8 @@ function scheduleDiskWrite() {
     saveDebounceTimer = setTimeout(() => {
         saveDebounceTimer = null;
         const configSnapshot = { ...loadConfig() };
-        writeQueue = writeQueue.then(() => performWriteToDisk(configSnapshot)).catch(() => {});
+        const generation = writeGeneration;
+        writeQueue = writeQueue.then(() => performWriteToDisk(configSnapshot, generation)).catch(() => {});
     }, 200);
 }
 
@@ -102,14 +119,21 @@ function flushConfigImmediately() {
         clearTimeout(saveDebounceTimer);
         saveDebounceTimer = null;
     }
+    // Invalidate queued/in-flight async writes first: the synchronous flush
+    // below is authoritative and must not lose a last-writer race against a
+    // slower debounced snapshot.
+    writeGeneration++;
     if (cachedConfig) {
         const configSnapshot = { ...loadConfig() };
+        let tempPath = null;
         try {
-            const tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+            tempPath = `${configPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
             fs.writeFileSync(tempPath, JSON.stringify(configSnapshot, null, 2), 'utf8');
             fs.renameSync(tempPath, configPath);
+            tempPath = null;
         } catch (e) {
             console.error('Failed to save config synchronously:', e.message || e);
+            if (tempPath) { try { fs.unlinkSync(tempPath); } catch (e2) { /* ignore */ } }
         }
     }
 }
@@ -126,6 +150,14 @@ function loadConfig() {
         }
     } catch (e) {
         console.error('Failed to load config:', e.message || e);
+        // Preserve the unreadable file once so corruption or a transient
+        // read error can't be silently overwritten by a defaults-only save.
+        try {
+            const backupPath = `${configPath}.corrupt`;
+            if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) {
+                fs.copyFileSync(configPath, backupPath);
+            }
+        } catch (backupError) { /* best effort */ }
     }
     const cfg = migrateConfig({});
     if (!cfg.uiLanguage) cfg.uiLanguage = mapUiLanguage(getSystemLocale());
@@ -203,6 +235,8 @@ async function getSettingsSnapshot(sttService) {
         autoStopSeconds: typeof config.autoStopSeconds === 'number' ? Math.max(1.5, Math.min(5, config.autoStopSeconds)) : 3.5,
         outputMode: config.outputMode || 'clipboard',
         autotypeMethod: config.autotypeMethod || 'unicode',
+        pressEnter: config.pressEnter === true,
+        alwaysCopyToClipboard: config.alwaysCopyToClipboard !== false,
         spacePaste: config.outputMode ? config.outputMode !== 'clipboard' : (config.spacePaste === true),
         pasteStyle: config.outputMode === 'toast' || config.pasteStyle === 'toast' ? 'toast' : 'bubble',
         pasteKey: typeof config.pasteKey === 'string' && config.pasteKey.length <= 12 ? config.pasteKey : ' ',

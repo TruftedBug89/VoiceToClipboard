@@ -39,7 +39,15 @@ function _write(level, msg) {
         const f = _file();
         if (f) {
             _rotateIfNeeded(f);
-            fs.appendFileSync(f, line);
+            try {
+                fs.appendFileSync(f, line);
+            } catch (appendError) {
+                // The log dir can vanish mid-session (portable drives, manual
+                // cleanup). Recreate it once and retry; the outer try still
+                // swallows any remaining failure so logging never crashes.
+                fs.mkdirSync(path.dirname(f), { recursive: true });
+                fs.appendFileSync(f, line);
+            }
         }
         return line.trim();
     } catch (e) { /* logging must never crash the app */ }

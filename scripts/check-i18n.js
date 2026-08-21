@@ -1,13 +1,44 @@
 // Locale parity check: every key present in en.json must exist in es.json and zh.json.
-// Exits non-zero and lists the missing keys on failure.
+// Also flags duplicate JSON keys (JSON.parse silently keeps only the last one,
+// so a typo'd near-duplicate entry can otherwise shadow the intended value).
+// Exits non-zero and lists the problems on failure.
 const fs = require('fs');
 const path = require('path');
 
 const dir = path.join(__dirname, '..', 'locales');
 const langs = ['en', 'es', 'zh'];
 const data = {};
+let failed = false;
+
+// Lightweight duplicate-key scan for the pretty-printed locale files
+// (one "key": value per line, nested objects indented). Tracks the open
+// object stack so identical names in sibling objects are not false positives.
+function findDuplicateKeys(raw) {
+    const dups = new Set();
+    const stack = [new Set()];
+    const keyLine = /^\s*"((?:[^"\\]|\\.)*)"\s*:/;
+    for (const line of raw.split(/\r?\n/)) {
+        const m = line.match(keyLine);
+        if (m) {
+            const top = stack[stack.length - 1];
+            if (top.has(m[1])) dups.add(m[1]);
+            else top.add(m[1]);
+        }
+        const delta = (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+        for (let i = 0; i < delta; i++) stack.push(new Set());
+        for (let i = 0; i < -delta && stack.length > 1; i++) stack.pop();
+    }
+    return [...dups];
+}
+
 for (const lang of langs) {
-    data[lang] = JSON.parse(fs.readFileSync(path.join(dir, `${lang}.json`), 'utf8'));
+    const raw = fs.readFileSync(path.join(dir, `${lang}.json`), 'utf8');
+    data[lang] = JSON.parse(raw);
+    const dups = findDuplicateKeys(raw);
+    if (dups.length) {
+        failed = true;
+        console.error(`[${lang}] duplicate key(s): ${dups.join(', ')}`);
+    }
 }
 
 function flatten(obj, prefix = '', out = new Set()) {
@@ -20,7 +51,6 @@ function flatten(obj, prefix = '', out = new Set()) {
 }
 
 const base = flatten(data.en);
-let failed = false;
 for (const lang of langs) {
     if (lang === 'en') continue;
     const other = flatten(data[lang]);

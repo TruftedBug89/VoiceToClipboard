@@ -51,6 +51,9 @@ function readWindowsEnvVar(name) {
  */
 function refreshGeminiApiKeyFromEnvironment() {
     const before = process.env.GEMINI_API_KEY || '';
+    // Off Windows there is no registry to consult; never delete the live
+    // value just because it cannot be re-read.
+    if (process.platform !== 'win32') return { changed: false, found: !!before };
     const fresh = readWindowsEnvVar('GEMINI_API_KEY');
     if (fresh) {
         process.env.GEMINI_API_KEY = fresh;

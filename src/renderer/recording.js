@@ -218,8 +218,8 @@ window.VTC = window.VTC || {};
             window.VTC?.vad?.stopSettingsMicPreview();
             window.api?.widgetRaise();
             setStatus('busy', 'STARTING');
-            const sttConfig = await window.api?.getSttConfig();
-            if (window.VTC?.settings) window.VTC.settings.currentSttConfig = sttConfig;
+            const sttConfig = window.VTC?.settings?.currentSttConfig || await window.api?.getSttConfig();
+            if (window.VTC?.settings && sttConfig) window.VTC.settings.currentSttConfig = sttConfig;
             log(`[render] record start | autoStop=${!!sttConfig?.autoStopEnabled} (${sttConfig?.autoStopSeconds}s) | threshold=${sttConfig?.silenceThreshold} | engine=${sttConfig?.sttEngine}`);
             
             hasSpoken = false;
@@ -310,7 +310,13 @@ window.VTC = window.VTC || {};
 
                 const chunks = audioChunks;
                 audioChunks = [];
-                if (cancelPending || sessionId !== recordingSessionId) {
+                if (sessionId !== recordingSessionId) {
+                    // Stale stop from a superseded session: do not touch shared
+                    // state owned by the newer session.
+                    cancelPending = false;
+                    return;
+                }
+                if (cancelPending) {
                     cancelPending = false;
                     isStartingRecording = false;
                     return;
@@ -440,6 +446,8 @@ window.VTC = window.VTC || {};
                 try { audioCtx.close(); } catch (error) {}
                 audioCtx = null;
             }
+            analyser = null;
+            source = null;
             console.error('Microphone error:', err);
             setStatus('err', 'MIC UNAVAILABLE');
             setTimeout(hideStatus, 3000);
@@ -460,7 +468,7 @@ window.VTC = window.VTC || {};
         window.VTC?.visualizer?.stopVisualizer();
         refreshRetranscribeBtn();
         document.body.classList.remove('is-recording');
-        window.VTC.vad.smoothedSpeechVolume = 0;
+        if (window.VTC?.vad) window.VTC.vad.smoothedSpeechVolume = 0;
         speechFramesCount = 0;
         silenceStartTime = null;
         hasSpoken = false;

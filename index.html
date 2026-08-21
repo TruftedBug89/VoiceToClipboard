@@ -231,6 +231,10 @@
 </select>
 <span class="text-dim-11" data-i18n="autostop.silence">silence</span>
 </div>
+</div>
+</div>
+<div class="input-group">
+<div class="setting-subnote" data-i18n="autostop.thresholdNote">Sets the mic level marker used by the live input meter and silence stats. Works even when Auto-Stop is off.</div>
 <!-- Live Silence Threshold Limiter -->
 <div class="threshold-container">
 <div class="flex-between-center mb-4">
@@ -270,7 +274,6 @@
 </div>
 </div>
 </div>
-</div>
 <div class="settings-section">
 <div class="settings-section-title"><span data-i18n="settings.spacePaste">When Finished: Output Action</span></div>
 <div class="input-group">
@@ -295,6 +298,15 @@
 </select>
 </div>
 <div id="autotype-note" class="setting-subnote" data-i18n="output.autotypeNote">Types the transcript directly into the focused window. If an app blocks direct typing, switch to 'Paste' method.</div>
+<!-- Press Enter after Writing / Pasting Toggle -->
+<div class="switch-row mt-8" id="press-enter-row">
+<label class="switch-label" data-i18n="output.pressEnterLabel" for="press-enter-checkbox">Press Enter after typing/pasting</label>
+<label class="toggle-switch">
+<input id="press-enter-checkbox" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<div class="setting-subnote" id="press-enter-note" data-i18n="output.pressEnterNote">Automatically presses Enter after typing or pasting the text into the active window.</div>
 <!-- Always Keep in Clipboard Toggle -->
 <div class="switch-row mt-8" id="always-copy-clipboard-row">
 <label class="switch-label" data-i18n="output.alwaysCopyLabel" for="always-copy-clipboard-checkbox">Always Keep in Clipboard (Ctrl+V)</label>
@@ -339,7 +351,7 @@
 <div class="switch-row">
 <label class="switch-label" data-i18n="appearance.idleFade" for="idle-fade-checkbox">Idle Transparency</label>
 <label class="toggle-switch">
-<input id="idle-fade-checkbox" type="checkbox"/>
+<input id="idle-fade-checkbox" type="checkbox" checked/>
 <span class="slider"></span>
 </label>
 </div>

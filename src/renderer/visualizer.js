@@ -300,9 +300,18 @@ window.VTC = window.VTC || {};
         if (document.hidden) {
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
         } else if (!animationFrameId) {
-            animationFrameId = requestAnimationFrame(drawVisualizer);
+            // Paint one frame synchronously so the canvas never shows stale
+            // pixels after the window reappears; drawVisualizer's finally
+            // block then resumes the rAF loop automatically.
+            drawVisualizer();
         }
     });
+
+    // Start immediately at script load. Scripts sit at the end of <body>, so
+    // the canvas exists here. Self-starting guarantees the first ring frame
+    // never waits on async boot work (config/i18n/catalog fetches) elsewhere
+    // in the renderer; hidden windows simply idle until first shown.
+    startVisualizer();
 
     function resetVisualizer() {
         smoothValues.fill(0);

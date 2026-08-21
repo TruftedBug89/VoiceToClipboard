@@ -63,6 +63,18 @@ function sendCtrlV() {
     }
 }
 
+function sendEnter() {
+    if (!api) return false;
+    try {
+        api.keybdEvent(VK_RETURN, 0, 0, null);
+        api.keybdEvent(VK_RETURN, 0, KEYEVENTF_KEYUP, null);
+        return true;
+    } catch (err) {
+        console.warn('[win32] sendEnter failed:', err && err.message ? err.message : err);
+        return false;
+    }
+}
+
 function typeUnicodeText(text) {
     if (!api || !api.sendInput) return false;
     if (typeof text !== 'string' || text.length === 0) return true;
@@ -136,5 +148,6 @@ module.exports = {
         try { return api ? !!api.isWindow(hwnd) : false; } catch (e) { return false; }
     },
     sendCtrlV,
+    sendEnter,
     typeUnicodeText,
 };

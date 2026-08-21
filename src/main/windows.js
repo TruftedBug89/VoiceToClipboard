@@ -4,7 +4,6 @@
 const { BrowserWindow, screen, shell } = require('electron');
 const path = require('path');
 const { loadConfig, saveConfig, getSettingsSnapshot } = require('./config-store');
-const { sanitizeErrorMessage } = require('../../stt/error-sanitizer');
 const { logger } = require('../../logger');
 
 let mainWindow = null;
@@ -59,6 +58,7 @@ function ensureWidgetOnScreen() {
 
 function createMainWindow() {
     if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
         mainWindow.focus();
         return mainWindow;
@@ -101,7 +101,8 @@ function createMainWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
-    mainWindow.loadFile(path.join(__dirname, '../../index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../index.html'))
+        .catch(err => logger.warn(`[windows] widget index.html failed to load: ${err && err.message ? err.message : err}`));
 
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
@@ -116,10 +117,14 @@ function createMainWindow() {
 
     let savePosTimer = null;
     mainWindow.on('moved', () => {
-        if (!mainWindow) return;
+        const win = mainWindow;
+        if (!win || win.isDestroyed()) return;
         clearTimeout(savePosTimer);
         savePosTimer = setTimeout(() => {
-            const [x, y] = mainWindow.getPosition();
+            // The window can be closed (or replaced) during the debounce window;
+            // reading geometry off a destroyed window throws.
+            if (!win || win.isDestroyed()) return;
+            const [x, y] = win.getPosition();
             saveConfig({ windowX: x, windowY: y });
             ensureWidgetAlwaysOnTop();
         }, 400);
@@ -134,20 +139,26 @@ function createMainWindow() {
 // full, resizable surface.
 function createSettingsWindow() {
     if (settingsWindow && !settingsWindow.isDestroyed()) {
+        if (settingsWindow.isMinimized()) settingsWindow.restore();
+        if (loadConfig().alwaysOnTop !== false) settingsWindow.setAlwaysOnTop(true, 'screen-saver');
         settingsWindow.show();
         settingsWindow.focus();
         return settingsWindow;
     }
+    // Topmost + unowned: an owned, non-topmost settings window gets dragged
+    // into minimize cascades whenever a fullscreen game steals foreground
+    // (any focus flicker, e.g. a native <select> popup, triggers it).
+    const settingsTopmost = loadConfig().alwaysOnTop !== false;
     settingsWindow = new BrowserWindow({
         width: 420,
         height: 720,
         minWidth: 360,
         minHeight: 520,
-        parent: mainWindow,
         frame: false,
         backgroundColor: '#0e0f14',
         autoHideMenuBar: true,
         resizable: true,
+        alwaysOnTop: settingsTopmost,
         webPreferences: {
             preload: path.join(__dirname, '../../preload.js'),
             nodeIntegration: false,
@@ -156,8 +167,10 @@ function createSettingsWindow() {
             backgroundThrottling: true
         }
     });
+    if (settingsTopmost) settingsWindow.setAlwaysOnTop(true, 'screen-saver');
     secureWebContents(settingsWindow.webContents);
-    settingsWindow.loadFile(path.join(__dirname, '../../index.html'), { query: { settings: '1' } });
+    settingsWindow.loadFile(path.join(__dirname, '../../index.html'), { query: { settings: '1' } })
+        .catch(err => logger.warn(`[windows] settings index.html failed to load: ${err && err.message ? err.message : err}`));
     settingsWindow.on('closed', () => {
         settingsWindow = null;
         ensureWidgetAlwaysOnTop();

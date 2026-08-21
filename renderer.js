@@ -53,72 +53,113 @@
         // Separate settings window (index.html?settings=1): the modal fills
         // the whole surface and opens immediately on boot.
         const isSettingsWindow = new URLSearchParams(window.location.search).get('settings') === '1';
-        if (isSettingsWindow) document.body.classList.add('settings-window');
+        if (isSettingsWindow) {
+            document.body.classList.add('settings-window', 'settings-active');
+            const modalEl = document.getElementById('settings-modal');
+            if (modalEl) {
+                modalEl.classList.add('active');
+                modalEl.setAttribute('aria-hidden', 'false');
+            }
+            // The modal is shown before data arrives; remember that so the
+            // first openSettings(true) below still runs its full UI sync.
+            window.VTC?.settings?.markSettingsExternallyActivated?.();
+        }
 
         // Boot feedback: show the busy badge immediately so a slow first
         // config round-trip never looks like a frozen window.
         const bootStartedAt = Date.now();
         window.VTC.recording.setStatus('busy', 'STARTING');
 
-        const snapshot = await window.api?.getSttConfig();
-        window.VTC.settings.applyAppearanceSnapshot(snapshot);
-        window.VTC.i18n.applyI18n(snapshot?.uiLanguage || 'en');
-        await window.VTC.settings.loadModelCatalog();
-
-        window.VTC.settings.currentSttConfig = snapshot;
-        window.VTC.settings.applyModelRecommendation(snapshot);
-        await window.VTC.settings.checkApiKeyStatus();
-
-        if (isSettingsWindow) {
-            window.VTC.settings.openSettings(true);
-            return;
-        }
-
-        window.VTC.visualizer.startVisualizer();
-
-        // Keep the boot indicator visible long enough to be noticed.
-        const bootElapsed = Date.now() - bootStartedAt;
-        setTimeout(() => {
+        // Safety watchdog: ensure STARTING badge is NEVER stuck on screen
+        const safetyWatchdog = setTimeout(() => {
             if (!window.VTC.recording.isRecording && !window.VTC.recording.isStartingRecording) {
                 window.VTC.recording.hideStatus();
             }
-        }, Math.max(0, 900 - bootElapsed));
+        }, 1200);
 
-        // First-run welcome tour: one time, dismissible, never blocks the
-        // mic or global hotkey. The card itself is click-through except for
-        // its compact acknowledgement button.
-        if (snapshot?.firstRun) {
-            const tour = document.getElementById('first-run-tour');
-            if (tour) {
-                const modelHint = document.getElementById('first-run-model-hint');
-                if (modelHint) modelHint.hidden = !(snapshot.sttEngine === 'local' && !snapshot.isDownloaded);
-                tour.hidden = false;
-                document.body.classList.add('first-run-active');
-                document.getElementById('mic-button')?.classList.add('first-run-highlight');
-                document.getElementById('settings-btn')?.classList.add('first-run-highlight');
-                const dismiss = () => {
-                    tour.hidden = true;
-                    document.body.classList.remove('first-run-active');
-                    document.getElementById('mic-button')?.classList.remove('first-run-highlight');
-                    document.getElementById('settings-btn')?.classList.remove('first-run-highlight');
-                    window.api?.markFirstRunDone?.();
-                    document.removeEventListener('keydown', escHandler);
-                };
-                const escHandler = (e) => {
-                    if (e.key === 'Escape' && !tour.hidden && !window.VTC.recording?.isRecording) {
-                        e.preventDefault();
-                        dismiss();
-                    }
-                };
-                document.getElementById('first-run-dismiss')?.addEventListener('click', dismiss, { once: true });
-                document.addEventListener('keydown', escHandler);
+        try {
+            // A failed config round-trip must not skip the settings-window
+            // branch below; fall back to defaults instead of a dead surface.
+            const snapshot = await window.api?.getSttConfig()?.catch((error) => {
+                console.error('getSttConfig failed:', error);
+                return null;
+            });
+            if (snapshot) {
+                window.VTC.settings.applyAppearanceSnapshot(snapshot);
+                window.VTC.i18n.applyI18n(snapshot?.uiLanguage || 'en');
+                window.VTC.settings.currentSttConfig = snapshot;
+                window.VTC.settings.applyModelRecommendation(snapshot);
             }
+
+            if (isSettingsWindow) {
+                await window.VTC.settings.loadModelCatalog().catch(() => {});
+                await window.VTC.settings.checkApiKeyStatus().catch(() => {});
+                // The modal was pre-activated above for instant first paint,
+                // so openSettings() would early-return on its active check
+                // and skip ALL field syncing (engine groups, tier values,
+                // checkboxes, history). Refresh directly instead - this is
+                // what actually populates the offline-models view.
+                await window.VTC.settings.refreshSettingsUi().catch((e) => {
+                    console.error('[render] settings refresh failed:', e);
+                });
+                document.getElementById('close-modal-btn')?.focus?.();
+                return;
+            }
+
+            // Non-blocking background catalog and key checks for widget
+            window.VTC.settings.loadModelCatalog().catch(() => {});
+            window.VTC.settings.checkApiKeyStatus().catch(() => {});
+
+            window.VTC.visualizer.startVisualizer();
+
+            // First-run welcome tour: one time, dismissible, never blocks the
+            // mic or global hotkey. The card itself is click-through except for
+            // its compact acknowledgement button.
+            if (snapshot?.firstRun) {
+                const tour = document.getElementById('first-run-tour');
+                if (tour) {
+                    const modelHint = document.getElementById('first-run-model-hint');
+                    if (modelHint) modelHint.hidden = !(snapshot.sttEngine === 'local' && !snapshot.isDownloaded);
+                    tour.hidden = false;
+                    document.body.classList.add('first-run-active');
+                    document.getElementById('mic-button')?.classList.add('first-run-highlight');
+                    document.getElementById('settings-btn')?.classList.add('first-run-highlight');
+                    const dismiss = () => {
+                        tour.hidden = true;
+                        document.body.classList.remove('first-run-active');
+                        document.getElementById('mic-button')?.classList.remove('first-run-highlight');
+                        document.getElementById('settings-btn')?.classList.remove('first-run-highlight');
+                        window.api?.markFirstRunDone?.();
+                        document.removeEventListener('keydown', escHandler);
+                    };
+                    const escHandler = (e) => {
+                        if (e.key === 'Escape' && !tour.hidden && !window.VTC.recording?.isRecording) {
+                            e.preventDefault();
+                            dismiss();
+                        }
+                    };
+                    document.getElementById('first-run-dismiss')?.addEventListener('click', dismiss, { once: true });
+                    document.addEventListener('keydown', escHandler);
+                }
+            }
+        } catch (error) {
+            console.error('Renderer init error:', error);
+        } finally {
+            clearTimeout(safetyWatchdog);
+            const bootElapsed = Date.now() - bootStartedAt;
+            setTimeout(() => {
+                if (!window.VTC.recording.isRecording && !window.VTC.recording.isStartingRecording) {
+                    window.VTC.recording.hideStatus();
+                }
+            }, Math.max(50, Math.min(500, 500 - bootElapsed)));
         }
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeRenderer);
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeRenderer().catch(() => window.VTC?.recording?.hideStatus());
+        });
     } else {
-        initializeRenderer().catch(() => window.VTC?.recording?.setStatus('err', 'ERROR'));
+        initializeRenderer().catch(() => window.VTC?.recording?.hideStatus());
     }
 })();

@@ -94,14 +94,19 @@ class SherpaAdapter {
     }
 
     async load(modelKey) {
-        if (this.loaded?.modelKey === modelKey) {
-            // If the language hint changed (UI language switched), rebuild the
-            // recognizer so SenseVoice picks up the new language.
-            if (this.loaded.langHint === this._senseVoiceLanguage) return this.loaded;
-            await this.unload();
-        } else {
-            await this.unload();
+        // If the model or any language hint changed (UI language switched),
+        // rebuild the recognizer so SenseVoice and Whisper pick up the new
+        // language. The hints must be compared independently: distinct UI
+        // languages can share one SenseVoice hint ('auto') while differing
+        // for Whisper (es -> auto/es vs an unmapped code -> auto/en).
+        if (
+            this.loaded?.modelKey === modelKey &&
+            this.loaded.langHint === this._senseVoiceLanguage &&
+            this.loaded.whisperHint === this._whisperLanguage
+        ) {
+            return this.loaded;
         }
+        await this.unload();
         const modelPath = await this.cache.getInstalledPath(modelKey);
         if (!modelPath) throw new Error('Model weights are not downloaded yet.');
 
@@ -124,7 +129,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, tokFile)
                 },
-                numThreads: numThreadsFor(modelKey),
+                numThreads: numThreadsFor(modelKey, registryModel.backend),
                 provider: 'cpu',
                 debug: 0
             };
@@ -139,7 +144,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: numThreadsFor(modelKey),
+                numThreads: numThreadsFor(modelKey, registryModel.backend),
                 provider: 'cpu',
                 debug: 0
             };
@@ -152,7 +157,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: numThreadsFor(modelKey),
+                numThreads: numThreadsFor(modelKey, registryModel.backend),
                 provider: 'cpu',
                 debug: 0
             };
@@ -181,7 +186,7 @@ class SherpaAdapter {
                 },
                 // sherpa-onnx removed Whisper's 30-second constraint, so the
                 // full clip is decoded in one pass regardless of length.
-                numThreads: numThreadsFor(modelKey),
+                numThreads: numThreadsFor(modelKey, registryModel.backend),
                 provider: 'cpu',
                 debug: 0
             };
@@ -202,7 +207,7 @@ class SherpaAdapter {
                     },
                     tokens: getRequiredPath(modelPath, 'tokens.txt')
                 },
-                numThreads: numThreadsFor(modelKey),
+                numThreads: numThreadsFor(modelKey, registryModel.backend),
                 provider: 'cpu',
                 debug: 0
             };
@@ -211,7 +216,7 @@ class SherpaAdapter {
         }
 
         const recognizer = await sherpa.OfflineRecognizer.createAsync(config);
-        this.loaded = { modelKey, recognizer, modelPath, langHint: this._senseVoiceLanguage };
+        this.loaded = { modelKey, recognizer, modelPath, langHint: this._senseVoiceLanguage, whisperHint: this._whisperLanguage };
         return this.loaded;
     }
 

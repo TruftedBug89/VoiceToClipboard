@@ -3,6 +3,7 @@ const VALID_TIERS = new Set(['tiny', 'mini', 'zh-light', 'light', 'big', 'zh-big
 const WIDGET_STYLES = ['crimson', 'ocean', 'aurora', 'terminal'];
 const VALID_OUTPUT_MODES = new Set(['clipboard', 'bubble', 'toast', 'autotype']);
 const VALID_AUTOTYPE_METHODS = new Set(['unicode', 'paste']);
+const VALID_GEMINI_MODELS = new Set(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']);
 
 function resolveOutputMode(input = {}) {
     if (VALID_OUTPUT_MODES.has(input.outputMode)) {
@@ -122,6 +123,7 @@ function migrateConfig(input = {}) {
         saveRecordings: typeof config.saveRecordings === 'boolean' ? config.saveRecordings : false,
         outputMode: resolveOutputMode(config),
         autotypeMethod: resolveAutotypeMethod(config),
+        pressEnter: typeof config.pressEnter === 'boolean' ? config.pressEnter : false,
         alwaysCopyToClipboard: config.alwaysCopyToClipboard !== false,
         micDeviceId: typeof config.micDeviceId === 'string' ? config.micDeviceId : '',
         micDeviceLabel: typeof config.micDeviceLabel === 'string' ? config.micDeviceLabel : '',
@@ -135,19 +137,19 @@ function validateSttConfig(input = {}) {
     const localTier = VALID_TIERS.has(settings.localTier)
         ? settings.localTier
         : recommendedTierForRam(systemRamGB());
-    const validGeminiModels = new Set(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']);
     const widgetStyle = WIDGET_STYLES.includes(settings.widgetStyle) ? settings.widgetStyle : 'crimson';
     return {
         sttEngine: settings.sttEngine === 'gemini' ? 'gemini' : 'local',
         localTier,
         localLanguage: 'auto',
         localModelKey: deriveLocalModelKey(localTier),
-        geminiModel: validGeminiModels.has(settings.geminiModel) ? settings.geminiModel : 'gemini-2.5-flash',
+        geminiModel: VALID_GEMINI_MODELS.has(settings.geminiModel) ? settings.geminiModel : 'gemini-2.5-flash',
         ecoMode: settings.ecoMode !== false,
         playFinishSound: settings.playFinishSound !== false,
         saveRecordings: typeof settings.saveRecordings === 'boolean' ? settings.saveRecordings : false,
         outputMode: resolveOutputMode(settings),
         autotypeMethod: resolveAutotypeMethod(settings),
+        pressEnter: typeof settings.pressEnter === 'boolean' ? settings.pressEnter : false,
         alwaysCopyToClipboard: settings.alwaysCopyToClipboard !== false,
         micDeviceId: typeof settings.micDeviceId === 'string' ? settings.micDeviceId : '',
         micDeviceLabel: typeof settings.micDeviceLabel === 'string' ? settings.micDeviceLabel : '',

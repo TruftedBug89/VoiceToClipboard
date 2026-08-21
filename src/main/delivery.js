@@ -82,33 +82,43 @@ function bubblePayload(text) {
 
 function ensureBubbleWindow() {
     if (bubbleWindow && !bubbleWindow.isDestroyed()) return;
-    bubbleWindow = new BrowserWindow({
-        width: 360,
-        height: 96,
-        show: false,
-        frame: false,
-        resizable: false,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        focusable: true,
-        hasShadow: true,
-        transparent: true,
-        webPreferences: {
-            preload: path.join(__dirname, '../../bubble-preload.js'),
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: false
-        }
-    });
-    bubbleWindow.setAlwaysOnTop(true, 'screen-saver');
-    secureWebContents(bubbleWindow.webContents);
-    bubbleWindow.loadFile(path.join(__dirname, '../../bubble.html'));
-    bubbleWindow.webContents.on('did-finish-load', () => {
-        if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
-            bubbleWindow.webContents.send('bubble-set-text', bubblePayload(bubblePendingText));
-        }
-    });
-    bubbleWindow.on('closed', () => { bubbleWindow = null; });
+    try {
+        bubbleWindow = new BrowserWindow({
+            width: 360,
+            height: 96,
+            show: false,
+            frame: false,
+            resizable: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            focusable: true,
+            hasShadow: true,
+            transparent: true,
+            webPreferences: {
+                preload: path.join(__dirname, '../../bubble-preload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: false
+            }
+        });
+        bubbleWindow.setAlwaysOnTop(true, 'screen-saver');
+        secureWebContents(bubbleWindow.webContents);
+        bubbleWindow.loadFile(path.join(__dirname, '../../bubble.html'));
+        bubbleWindow.webContents.on('did-finish-load', () => {
+            if (bubblePendingText && bubbleWindow && !bubbleWindow.isDestroyed()) {
+                bubbleWindow.webContents.send('bubble-set-text', bubblePayload(bubblePendingText));
+            }
+            // Consume once: a later reload must not resurrect stale text.
+            bubblePendingText = '';
+        });
+        bubbleWindow.on('closed', () => { bubbleWindow = null; });
+    } catch (e) {
+        // Window creation can throw during shutdown or under resource
+        // pressure; degrade to clipboard-only delivery instead of throwing
+        // through the transcription success path.
+        logger.warn(`[delivery] bubble window creation failed: ${e && e.message ? e.message : e}`);
+        bubbleWindow = null;
+    }
 }
 
 function positionBubbleNear() {
@@ -129,11 +139,18 @@ function closePasteBubble() {
     bubbleWindow = null;
 }
 
-function pasteToTarget(target, text) {
+function pasteToTarget(target, text, pressEnter = false) {
     if (!target || !win32.isWindow(target)) return;
     if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(text);
     win32.setForegroundWindow(target);
-    setTimeout(() => win32.sendCtrlV(), 80);
+    setTimeout(() => {
+        win32.sendCtrlV();
+        if (pressEnter) {
+            setTimeout(() => {
+                win32.sendEnter();
+            }, 60);
+        }
+    }, 80);
 }
 
 function maybeShowPasteToast(text) {
@@ -157,7 +174,8 @@ function maybeShowPasteToast(text) {
     const pasteOnce = () => {
         if (toastSettled) return;
         toastSettled = true;
-        pasteToTarget(lastExternalHwnd, clean);
+        const config = loadConfig();
+        pasteToTarget(lastExternalHwnd, clean, !!config.pressEnter);
     };
     t.on('click', pasteOnce);
     t.on('action', pasteOnce);
@@ -174,7 +192,7 @@ function maybeShowPasteBubble(text) {
     bubbleTarget = lastExternalHwnd;
     bubblePendingText = clean;
     ensureBubbleWindow();
-    if (!bubbleWindow) return;
+    if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
     positionBubbleNear();
     if (!bubbleWindow.webContents.isLoading()) {
         bubbleWindow.webContents.send('bubble-set-text', bubblePayload(bubbleText));
@@ -190,9 +208,8 @@ function handleBubblePaste() {
     const text = bubbleText;
     closePasteBubble();
     if (!target || !win32.isWindow(target)) return;
-    if (clipboard && typeof clipboard.writeText === 'function') clipboard.writeText(text);
-    win32.setForegroundWindow(target);
-    setTimeout(() => win32.sendCtrlV(), 80);
+    const config = loadConfig();
+    pasteToTarget(target, text, !!config.pressEnter);
 }
 
 function deliverTranscriptionOutput(text) {
@@ -214,14 +231,31 @@ function deliverTranscriptionOutput(text) {
         let typed = false;
         if (win32.available && target && win32.isWindow(target)) {
             if (config.autotypeMethod === 'paste') {
-                pasteToTarget(target, clean);
+                pasteToTarget(target, clean, !!config.pressEnter);
                 typed = true;
             } else {
                 win32.setForegroundWindow(target);
-                const ok = win32.typeUnicodeText(clean);
-                if (ok) {
-                    typed = true;
-                }
+                // SetForegroundWindow completes asynchronously on Windows:
+                // injecting immediately races the focus switch and can drop
+                // keystrokes into the previous window. Defer typing like the
+                // paste path does. typeUnicodeText only returns false before
+                // any batch lands, so the deferred fallback below can never
+                // duplicate partially typed text.
+                typed = true;
+                setTimeout(() => {
+                    const ok = win32.typeUnicodeText(clean);
+                    if (!ok) {
+                        logger.warn('[delivery] unicode autotype injected nothing; falling back to paste bubble');
+                        lastDeliveryTyped = false;
+                        maybeShowPasteBubble(clean);
+                        return;
+                    }
+                    if (config.pressEnter) {
+                        setTimeout(() => {
+                            win32.sendEnter();
+                        }, 50);
+                    }
+                }, 80);
             }
         }
 

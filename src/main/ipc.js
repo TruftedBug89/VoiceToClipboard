@@ -115,6 +115,8 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
             ...stt,
             outputMode: stt.outputMode || existing.outputMode || 'clipboard',
             autotypeMethod: stt.autotypeMethod || existing.autotypeMethod || 'unicode',
+            pressEnter: settings.pressEnter !== undefined ? !!settings.pressEnter : (existing.pressEnter === true),
+            alwaysCopyToClipboard: settings.alwaysCopyToClipboard !== undefined ? settings.alwaysCopyToClipboard !== false : (existing.alwaysCopyToClipboard !== false),
             autoStopEnabled: settings.autoStopEnabled !== undefined ? !!settings.autoStopEnabled : !!existing.autoStopEnabled,
             autoStopSeconds,
             silenceThreshold,
@@ -141,7 +143,13 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         });
 
         if (!success) return { success: false };
-        if (windows.mainWindow && !windows.mainWindow.isDestroyed()) windows.mainWindow.setAlwaysOnTop(alwaysOnTop);
+        if (windows.mainWindow && !windows.mainWindow.isDestroyed()) {
+            // 'screen-saver' band matches ensureWidgetAlwaysOnTop(); the plain
+            // level here used to silently downgrade the widget after every
+            // save, letting fullscreen games cover/minimize it.
+            if (alwaysOnTop) windows.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            else windows.mainWindow.setAlwaysOnTop(false);
+        }
         if (stt.sttEngine !== 'local' || effectiveEcoMode) await sttService.unloadAll();
         await broadcastSettingsChanged(sttService, updateTray);
         return { success: true };
@@ -159,8 +167,17 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
 
     // ─── Local Model Management ─────────────────────────────────────────────
     ipcMain.handle('check-model-downloaded', async (event, modelKey) => {
-        const status = await sttService.getStatus(modelKey);
-        return { downloaded: status.installed, available: status.available, reason: status.reason, cachePath: status.cachePath };
+        // getStatus throws on unknown keys — report a safe negative instead of
+        // rejecting into the renderer (same guard style as download/remove).
+        if (typeof modelKey !== 'string' || !/^[a-z0-9-]{1,64}$/.test(modelKey)) {
+            return { downloaded: false, available: false, reason: 'Invalid model key.', cachePath: null };
+        }
+        try {
+            const status = await sttService.getStatus(modelKey);
+            return { downloaded: status.installed, available: status.available, reason: status.reason, cachePath: status.cachePath };
+        } catch (e) {
+            return { downloaded: false, available: false, reason: sanitizeErrorMessage(e), cachePath: null };
+        }
     });
 
     ipcMain.handle('download-local-model', async (event, modelKey) => {
@@ -174,9 +191,15 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
 
     ipcMain.handle('remove-local-model', async (event, modelKey) => {
         if (typeof modelKey !== 'string' || !/^[a-z0-9-]{1,64}$/.test(modelKey)) return { success: false, code: 'BAD_MODEL', error: 'Invalid model key.' };
-        const result = await sttService.remove(modelKey);
-        await broadcastModelsChanged(sttService, updateTray);
-        return result;
+        try {
+            return await sttService.remove(modelKey);
+        } catch (e) {
+            // Disk-level failures (e.g. EPERM on locked files) must not reject
+            // into the renderer and strand the catalog UI.
+            return { success: false, code: 'REMOVE_FAILED', error: sanitizeErrorMessage(e) };
+        } finally {
+            await broadcastModelsChanged(sttService, updateTray);
+        }
     });
 
     ipcMain.handle('cancel-local-model-download', async (event, modelKey) => {
@@ -309,7 +332,13 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
         }
     });
 
-    ipcMain.handle('open-recordings-folder', () => openRecordingsFolder());
+    ipcMain.handle('open-recordings-folder', async () => {
+        try {
+            return await openRecordingsFolder();
+        } catch (e) {
+            return { success: false, error: sanitizeErrorMessage(e) };
+        }
+    });
 
     ipcMain.handle('history-list', (_e, query = '') => listHistory(query));
     ipcMain.handle('history-delete', (_e, id) => deleteHistory(id));
@@ -321,10 +350,12 @@ function registerIpcHandlers({ sttService, updateTray = () => {} }) {
 
     ipcMain.handle('paste-text', async (_e, text) => {
         if (typeof text === 'string' && text) {
-            clipboard.writeText(text);
-            if (win32.available && delivery.lastExternalHwnd && win32.isWindow(delivery.lastExternalHwnd)) {
-                win32.setForegroundWindow(delivery.lastExternalHwnd);
-                setTimeout(() => win32.sendCtrlV(), 80);
+            const config = loadConfig();
+            if (clipboard && typeof clipboard.writeText === 'function') {
+                clipboard.writeText(text);
+            }
+            if (delivery.lastExternalHwnd) {
+                delivery.pasteToTarget(delivery.lastExternalHwnd, text, !!config.pressEnter);
             }
         }
         return { success: true };
