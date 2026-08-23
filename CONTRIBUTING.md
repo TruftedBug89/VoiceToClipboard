@@ -5,7 +5,7 @@ transcription to the clipboard via **Gemini (cloud)** or a **local offline model
 
 ## Prerequisites
 - Windows 10/11 (this is a Windows-only app).
-- Node.js **22 LTS** and npm.
+- Node.js **18+** and npm.
 
 ## Setup
 ```bash
@@ -51,7 +51,7 @@ with the **same key set**, then run `npm run check:i18n`. In markup prefer `data
 `data-i18n-title`, or `data-i18n-placeholder`; in logic use `t('section.key')`.
 
 ## Theming (Widget Style)
-Three styles — **Crimson** (default), **Ocean**, **Aurora** — live in `styles/themes.css` as
+Four styles — **Crimson** (default), **Ocean**, **Aurora**, **Neon Terminal** — live in `styles/themes.css` as
 `:root[data-widget-style="..."]` custom-property overrides. To add one, add an override block with
 the same variables and a swatch in `index.html` (`data-style="<name>"`), then whitelist the name in
 `main.js` (`widgetStyle`) and `renderer.js` (`applyWidgetStyle`).

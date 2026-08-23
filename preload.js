@@ -50,7 +50,6 @@ function removeListener(channel, callback) {
 contextBridge.exposeInMainWorld('api', {
     appVersion: require('./package.json').version,
     locales: { en, es, zh },
-    getInitialAppearance: () => ipcRenderer.sendSync('get-initial-appearance'),
 
     // invoke (request/response)
     getApiKeyStatus: () => ipcRenderer.invoke('get-api-key-status'),

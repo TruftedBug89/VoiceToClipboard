@@ -70,7 +70,6 @@
 
 | Channel | Direction | Request Payload | Return Value / Behavior |
 | :--- | :--- | :--- | :--- |
-| `get-initial-appearance` | SendSync | none | Synchronously returns `{ widgetStyle, idleFadeEnabled, idleOpacity, uiLanguage }` for pre-paint theme bootstrap. |
 | `get-stt-config` | Invoke | none | Returns current settings snapshot object. |
 | `save-stt-config` | Invoke | `settings: object` | Persists config, broadcasts updates, returns `{ success }`. |
 | `get-model-catalog` | Invoke | none | Returns array of 6 offline models with status and sizes. |

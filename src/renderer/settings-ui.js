@@ -51,9 +51,8 @@ window.VTC = window.VTC || {};
     const WIDGET_STYLES = Object.freeze(['crimson', 'ocean', 'aurora', 'terminal']);
 
     let currentWidgetStyle = 'crimson';
-    // Set by theme-bootstrap.js only when it read a valid appearance before
-    // first paint. The first async snapshot consumes this marker instead of
-    // repainting a conflicting theme; user-initiated changes clear it.
+    // Legacy marker from an earlier pre-paint bootstrap script; nothing sets it
+    // anymore, but keep the guard so a stray attribute can't force a repaint.
     let bootstrapStylePending = document.documentElement.getAttribute('data-bootstrap-widget-style');
     let refreshRequestId = 0;
     let lastFocusedBeforeSettings = null;
@@ -678,14 +677,13 @@ window.VTC = window.VTC || {};
     function applyWidgetStyle(style) {
         const s = WIDGET_STYLES.includes(style) ? style : 'crimson';
         // THEME DATA FLOW (regressed twice — read before touching):
-        // 1. theme-bootstrap.js applies data-widget-style synchronously in <head>
-        //    via getInitialAppearance() (sendSync → config.json) BEFORE first paint.
-        // 2. initializeRenderer() later fetches getSttConfig() and calls
-        //    applyAppearanceSnapshot(), which lands here with the same config.
+        // 1. initializeRenderer() fetches getSttConfig() and calls
+        //    applyAppearanceSnapshot(), which lands here with the config style.
+        // 2. The attribute is only written when it actually changes.
         // Re-setting the attribute (and toggling .theme-switching) restarts CSS
         // animations — the visible post-paint "morph". So when the attribute
-        // already matches we skip the DOM write entirely; the bootstrap value
-        // painted first and therefore wins on any disagreement. Real style
+        // already matches we skip the DOM write entirely; the painted value
+        // wins on any disagreement. Real style
         // changes (user clicks a swatch) still take the full path below.
         if (document.documentElement.getAttribute('data-widget-style') === s) {
             const picker = document.getElementById('style-picker');

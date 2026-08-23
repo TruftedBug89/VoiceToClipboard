@@ -14,7 +14,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 > [!NOTE]
-> **Project Status:** 🟢 **Working / Functional**  
+> **Project Status:** 🟢 **Official Release — v5.0.0**  
 > *This status must not be changed by AI unless explicitly instructed by the repository owner.*
 
 ## Highlights
@@ -52,7 +52,7 @@ Grab the ready-to-run build from the [Releases page](https://github.com/TruftedB
 - **`VoiceToClipboard.exe`** — unpacked app, no installer needed; just download and run.
 - **`VoiceToClipboard-Setup-*.exe`** — NSIS installer that adds a Start-menu shortcut.
 
-No Node.js, no npm, no dependencies. The app is a single signed Windows executable (x64, Windows 10/11).
+No Node.js, no npm, no dependencies. The app is a single Windows executable (x64, Windows 10/11).
 
 The API key (only needed for Gemini cloud transcription) can be supplied through the `GEMINI_API_KEY` environment variable or saved through Settings; environment variables take precedence. Keys are never sent to the renderer or printed intentionally.
 

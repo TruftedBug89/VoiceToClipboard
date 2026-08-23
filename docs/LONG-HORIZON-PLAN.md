@@ -1,4 +1,9 @@
-# Long-Horizon Development Plan — VoiceToClipboard (post-4.2.0)
+# Long-Horizon Development Plan — VoiceToClipboard
+
+> **HISTORICAL — superseded by v5.0.0.** This plan was authored at the 4.2.0 baseline and its release
+> checklist (v4.1.6) has since been completed. The app is now at **v5.0.0** and shipped. The tracks (B: download
+> / model lifecycle UX + RAM guardrails, and A: diagnostics & health center) below remain valid future work
+> but are no longer gating any release.
 
 Authored by the future-task planning agent, 4.2.0 baseline.
 

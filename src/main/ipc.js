@@ -10,7 +10,6 @@ const {
     getApiKeys,
     getSettingsSnapshot,
     getUiLanguage,
-    getInitialAppearance,
     canonicalUserDataPath
 } = require('./config-store');
 const {
@@ -64,10 +63,6 @@ let lastErrorText = '';
  * @param {Function} context.updateTray
  */
 function registerIpcHandlers({ sttService, updateTray = () => {} }) {
-    ipcMain.on('get-initial-appearance', event => {
-        event.returnValue = getInitialAppearance();
-    });
-
     // ─── API Key & STT Config ───────────────────────────────────────────────
     ipcMain.handle('get-api-key-status', () => {
         const envKey = process.env.GEMINI_API_KEY;

@@ -177,17 +177,6 @@ function saveConfig(data) {
     }
 }
 
-function getInitialAppearance() {
-    const config = loadConfig();
-    return {
-        widgetStyle: WIDGET_STYLES.includes(config.widgetStyle) ? config.widgetStyle : 'crimson',
-        idleFadeEnabled: config.idleFadeEnabled !== false,
-        idleOpacity: typeof config.idleOpacity === 'number' ? Math.max(0.1, Math.min(0.9, config.idleOpacity)) : 0.65,
-        uiLanguage: typeof config.uiLanguage === 'string' && LOCALES[config.uiLanguage]
-            ? config.uiLanguage
-            : mapUiLanguage(getSystemLocale())
-    };
-}
 
 function getUiLanguage() {
     const c = loadConfig();
@@ -274,7 +263,6 @@ module.exports = {
     loadConfig,
     saveConfig,
     flushConfigImmediately,
-    getInitialAppearance,
     getUiLanguage,
     getApiKeys,
     getApiKey,

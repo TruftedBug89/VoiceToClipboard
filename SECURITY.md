@@ -14,7 +14,7 @@ VoiceToClipboard is distributed as an **unsigned / self-signed** binary. SmartSc
    - electron-builder picks up a cert automatically if set via env (do not commit it):
      `CSC_LINK` (path to `.pfx`) and `CSC_KEY_PASSWORD`, or via a Windows cert in the user store.
 2. **Build reputation for unsigned releases.** More downloads of a *stable, unchanged* signed-with-nothing binary slowly whiten it; re-signing or bumping resets it. **Avoid tiny metadata churn between releases** so the same binary accumulates reputation.
-3. **Ship `SHA256SUMS.txt`** (done) so users can verify the exact bytes; some AVs are less aggressive when users/IT can confirm provenance.
+3. **Ship `SHA256SUMS.txt`** so users can verify the exact bytes; some AVs are less aggressive when users/IT can confirm provenance.
 4. **Install to user-writable paths** (this app uses per-user NSIS, no admin prompt), which reduces heuristic suspicion vs. system-level installers.
 5. **Submit false positives** to Microsoft and to the specific AV vendors once signed — unsigned binaries are the #1 cause of heuristic flags.
 

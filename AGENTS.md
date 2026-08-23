@@ -73,9 +73,8 @@ VoiceToClipboard/
    - Run syntax check: `node scripts/check-js.js`
    - Run i18n check: `node scripts/check-i18n.js`
 4. **Native Modules & Windows Quirks:**
-   - `sherpa-onnx-node`, `koffi`, and `uiohook-napi` are unpacked in `asarUnpack` in `package.json`.
+   - `sherpa-onnx-node`, `koffi`, and `uiohook-napi` are unpacked in `asarUnpack` in `package.json`; native DLLs load from `app.asar.unpacked` automatically.
    - On Windows, `unbzip2-stream` + `tar` is required for `.tar.bz2` archives.
-   - `koffi-asar-fix.js` redirects `app.asar` to `app.asar.unpacked` for native DLLs.
 
 ---
 
