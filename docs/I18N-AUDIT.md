@@ -1,7 +1,7 @@
-# I18N Audit — VoiceToClipboard
+# I18N Audit - VoiceToClipboard
 
 Automated audit of translation-key usage vs `locales/{en,es,zh}.json` (all 3 files hold
-identical key sets — 247 keys after flattening as of the v5.0.0 release pass — with no missing/empty/untranslated values).
+identical key sets - 247 keys after flattening as of the v5.0.0 release pass - with no missing/empty/untranslated values).
 
 ## Status: RESOLVED (release polish pass)
 
@@ -18,11 +18,11 @@ The issues below were found in the original audit and are now fixed:
 | 7 | MEDIUM | Model dropdown collapsed label raw English | `updateDropdownCurrent()` resolves `models.tier.<tier>`. |
 | 8 | LOW | Remaining raw strings (lang names, mic fallbacks, `License: ` prefix) | Lang names resolve `lang.<code>`; license prefix uses `model.licensePrefix`. |
 | 9 | LOW | Window title + close-button labels raw English | `document.title` resolves `app.name`; close button uses `data-i18n-title="settings.close"`. |
-| — | LOW | API-key note (`Key set via…`, `No key yet…`, `✓ Key saved…`) raw English | New keys `gemini.envKeyTitle`, `gemini.envKeyNote`, `gemini.keySaved`, `gemini.noKey`. |
-| — | LOW | Download error hints (`friendlyDownloadError`) raw English | New keys `model.errorArchive/Timeout/Network/Server/Incomplete`. |
+| - | LOW | API-key note (`Key set via…`, `No key yet…`, `✓ Key saved…`) raw English | New keys `gemini.envKeyTitle`, `gemini.envKeyNote`, `gemini.keySaved`, `gemini.noKey`. |
+| - | LOW | Download error hints (`friendlyDownloadError`) raw English | New keys `model.errorArchive/Timeout/Network/Server/Incomplete`. |
 
 ## Noted but intentionally left
 
 - **Dead locale keys** (`welcome.*`, `spacepaste.*`, `settingsWindow.title`, etc.): harmless
-  drift, no user-visible impact. Not removed to avoid churn near a release.
+ drift, no user-visible impact. Not removed to avoid churn near a release.
 - **`data-i18n-hint` tooltip infrastructure** is wired but unused in markup; harmless.

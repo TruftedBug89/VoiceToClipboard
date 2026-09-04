@@ -5,7 +5,7 @@ const { validatePcm } = require('./audio');
 const { numThreadsFor } = require('./threading');
 
 function getRequiredPath(root, fileName) {
-    return path.join(root, fileName);
+ return path.join(root, fileName);
 }
 
 // Whisper decodes a single continuous segment per call and its decoder caps
@@ -27,16 +27,16 @@ const WHISPER_OVERLAP_SECONDS = 1;
  * @returns {Array<{start: number, end: number}>}
  */
 function whisperChunkPlan(sampleCount, sampleRate = 16000) {
-    const chunkLen = Math.round(WHISPER_CHUNK_SECONDS * sampleRate);
-    const step = Math.round((WHISPER_CHUNK_SECONDS - WHISPER_OVERLAP_SECONDS) * sampleRate);
-    if (sampleCount <= chunkLen) return [{ start: 0, end: sampleCount }];
-    const ranges = [];
-    for (let start = 0; start < sampleCount; start += step) {
-        const end = Math.min(start + chunkLen, sampleCount);
-        ranges.push({ start, end });
-        if (end >= sampleCount) break;
-    }
-    return ranges;
+ const chunkLen = Math.round(WHISPER_CHUNK_SECONDS * sampleRate);
+ const step = Math.round((WHISPER_CHUNK_SECONDS - WHISPER_OVERLAP_SECONDS) * sampleRate);
+ if (sampleCount <= chunkLen) return [{ start: 0, end: sampleCount }];
+ const ranges = [];
+ for (let start = 0; start < sampleCount; start += step) {
+ const end = Math.min(start + chunkLen, sampleCount);
+ ranges.push({ start, end });
+ if (end >= sampleCount) break;
+ }
+ return ranges;
 }
 
 /**
@@ -48,19 +48,19 @@ function whisperChunkPlan(sampleCount, sampleRate = 16000) {
  * @returns {string}
  */
 function dedupeWhisperOverlap(prevText, currText) {
-    const prev = String(prevText || '').trim();
-    const curr = String(currText || '').trim();
-    if (!prev || !curr) return curr;
-    const words = curr.split(/\s+/);
-    // Overlap is ~1 s of speech (~2–4 words); try up to 12 to be safe.
-    const max = Math.min(words.length, 12);
-    for (let n = max; n >= 2; n--) {
-        const candidate = words.slice(0, n).join(' ');
-        if (prev.endsWith(candidate)) {
-            return words.slice(n).join(' ').trim();
-        }
-    }
-    return curr;
+ const prev = String(prevText || '').trim();
+ const curr = String(currText || '').trim();
+ if (!prev || !curr) return curr;
+ const words = curr.split(/\s+/);
+ // Overlap is ~1 s of speech (~2–4 words); try up to 12 to be safe.
+ const max = Math.min(words.length, 12);
+ for (let n = max; n >= 2; n--) {
+ const candidate = words.slice(0, n).join(' ');
+ if (prev.endsWith(candidate)) {
+ return words.slice(n).join(' ').trim();
+ }
+ }
+ return curr;
 }
 
 // sherpa-onnx-node exposes explicit release handles on newer builds, but older
@@ -69,210 +69,210 @@ function dedupeWhisperOverlap(prevText, currText) {
 // GC (main.js enables --expose-gc) so the ~0.3–1.2 GB of native RAM comes back
 // immediately when Power-Saving Mode unloads the model.
 function freeNativeMemory(recognizer) {
-    if (!recognizer) return;
-    for (const method of ['free', 'delete', 'close', 'dispose', 'release']) {
-        try {
-            const fn = recognizer[method];
-            if (typeof fn === 'function') {
-                fn.call(recognizer);
-                return;
-            }
-        } catch (e) { /* keep trying other releasers */ }
-    }
+ if (!recognizer) return;
+ for (const method of ['free', 'delete', 'close', 'dispose', 'release']) {
+ try {
+ const fn = recognizer[method];
+ if (typeof fn === 'function') {
+ fn.call(recognizer);
+ return;
+ }
+ } catch (e) { /* keep trying other releasers */ }
+ }
 }
 
 function scheduleGc() {
-    setImmediate(() => {
-        try { global.gc && global.gc(); } catch (e) { /* --expose-gc not set: lazy GC */ }
-    });
+ setImmediate(() => {
+ try { global.gc && global.gc(); } catch (e) { /* --expose-gc not set: lazy GC */ }
+ });
 }
 
 class SherpaAdapter {
-    constructor(cache) {
-        this.cache = cache;
-        this.loaded = null;
-    }
+ constructor(cache) {
+ this.cache = cache;
+ this.loaded = null;
+ }
 
-    async load(modelKey) {
-        // If the model or any language hint changed (UI language switched),
-        // rebuild the recognizer so SenseVoice and Whisper pick up the new
-        // language. The hints must be compared independently: distinct UI
-        // languages can share one SenseVoice hint ('auto') while differing
-        // for Whisper (es -> auto/es vs an unmapped code -> auto/en).
-        if (
-            this.loaded?.modelKey === modelKey &&
-            this.loaded.langHint === this._senseVoiceLanguage &&
-            this.loaded.whisperHint === this._whisperLanguage
-        ) {
-            return this.loaded;
-        }
-        await this.unload();
-        const modelPath = await this.cache.getInstalledPath(modelKey);
-        if (!modelPath) throw new Error('Model weights are not downloaded yet.');
+ async load(modelKey) {
+ // If the model or any language hint changed (UI language switched),
+ // rebuild the recognizer so SenseVoice and Whisper pick up the new
+ // language. The hints must be compared independently: distinct UI
+ // languages can share one SenseVoice hint ('auto') while differing
+ // for Whisper (es -> auto/es vs an unmapped code -> auto/en).
+ if (
+ this.loaded?.modelKey === modelKey &&
+ this.loaded.langHint === this._senseVoiceLanguage &&
+ this.loaded.whisperHint === this._whisperLanguage
+ ) {
+ return this.loaded;
+ }
+ await this.unload();
+ const modelPath = await this.cache.getInstalledPath(modelKey);
+ if (!modelPath) throw new Error('Model weights are not downloaded yet.');
 
-        const registryModel = getModel(modelKey);
+ const registryModel = getModel(modelKey);
 
-        let config;
-        if (registryModel.backend === 'nemo-transducer' || registryModel.backend === 'zipformer') {
-            const ef = registryModel.expectedFiles || [];
-            const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
-            const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
-            const joinFile = ef.find(f => f.includes('joiner')) || 'joiner.int8.onnx';
-            const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    transducer: {
-                        encoder: getRequiredPath(modelPath, encFile),
-                        decoder: getRequiredPath(modelPath, decFile),
-                        joiner: getRequiredPath(modelPath, joinFile)
-                    },
-                    tokens: getRequiredPath(modelPath, tokFile)
-                },
-                numThreads: numThreadsFor(modelKey, registryModel.backend),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'sense-voice') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    senseVoice: {
-                        model: getRequiredPath(modelPath, 'model.int8.onnx'),
-                        language: this._senseVoiceLanguage || 'auto',
-                        useInverseTextNormalization: 1
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: numThreadsFor(modelKey, registryModel.backend),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'fire-red-asr-ctc') {
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    fireRedAsrCtc: {
-                        model: getRequiredPath(modelPath, 'model.int8.onnx')
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: numThreadsFor(modelKey, registryModel.backend),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'whisper') {
-            // Whisper model files use a model-specific prefix (e.g. small-encoder.int8.onnx,
-            // large-v3-turbo-decoder.int8.onnx). Find them from expectedFiles.
-            const ef = registryModel.expectedFiles;
-            const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
-            const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
-            const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    whisper: {
-                        encoder: getRequiredPath(modelPath, encFile),
-                        decoder: getRequiredPath(modelPath, decFile),
-                        // sherpa-onnx rejects language 'auto' for Whisper: the C++
-                        // decoder aborts the whole process at decode time
-                        // ("Invalid language: auto"). A concrete language token must
-                        // be chosen; fall back to English like a transparent default.
-                        language: this._whisperLanguage || 'en',
-                        task: 'transcribe',
-                        tailPaddings: 1000
-                    },
-                    tokens: getRequiredPath(modelPath, tokFile)
-                },
-                // sherpa-onnx removed Whisper's 30-second constraint, so the
-                // full clip is decoded in one pass regardless of length.
-                numThreads: numThreadsFor(modelKey, registryModel.backend),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else if (registryModel.backend === 'moonshine') {
-            const fs = require('fs');
-            const pre = getRequiredPath(modelPath, 'preprocess.onnx');
-            const enc = fs.existsSync(path.join(modelPath, 'encode.int8.onnx')) ? 'encode.int8.onnx' : 'encode.onnx';
-            const unc = fs.existsSync(path.join(modelPath, 'uncached_decode.int8.onnx')) ? 'uncached_decode.int8.onnx' : 'uncached_decode.onnx';
-            const cas = fs.existsSync(path.join(modelPath, 'cached_decode.int8.onnx')) ? 'cached_decode.int8.onnx' : 'cached_decode.onnx';
-            config = {
-                featConfig: { sampleRate: 16000, featureDim: 80 },
-                modelConfig: {
-                    moonshine: {
-                        preprocessor: pre,
-                        encoder: getRequiredPath(modelPath, enc),
-                        uncachedDecoder: getRequiredPath(modelPath, unc),
-                        cachedDecoder: getRequiredPath(modelPath, cas)
-                    },
-                    tokens: getRequiredPath(modelPath, 'tokens.txt')
-                },
-                numThreads: numThreadsFor(modelKey, registryModel.backend),
-                provider: 'cpu',
-                debug: 0
-            };
-        } else {
-            throw new Error('Unsupported Sherpa model backend.');
-        }
+ let config;
+ if (registryModel.backend === 'nemo-transducer' || registryModel.backend === 'zipformer') {
+ const ef = registryModel.expectedFiles || [];
+ const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
+ const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
+ const joinFile = ef.find(f => f.includes('joiner')) || 'joiner.int8.onnx';
+ const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
+ config = {
+ featConfig: { sampleRate: 16000, featureDim: 80 },
+ modelConfig: {
+ transducer: {
+ encoder: getRequiredPath(modelPath, encFile),
+ decoder: getRequiredPath(modelPath, decFile),
+ joiner: getRequiredPath(modelPath, joinFile)
+ },
+ tokens: getRequiredPath(modelPath, tokFile)
+ },
+ numThreads: numThreadsFor(modelKey, registryModel.backend),
+ provider: 'cpu',
+ debug: 0
+ };
+ } else if (registryModel.backend === 'sense-voice') {
+ config = {
+ featConfig: { sampleRate: 16000, featureDim: 80 },
+ modelConfig: {
+ senseVoice: {
+ model: getRequiredPath(modelPath, 'model.int8.onnx'),
+ language: this._senseVoiceLanguage || 'auto',
+ useInverseTextNormalization: 1
+ },
+ tokens: getRequiredPath(modelPath, 'tokens.txt')
+ },
+ numThreads: numThreadsFor(modelKey, registryModel.backend),
+ provider: 'cpu',
+ debug: 0
+ };
+ } else if (registryModel.backend === 'fire-red-asr-ctc') {
+ config = {
+ featConfig: { sampleRate: 16000, featureDim: 80 },
+ modelConfig: {
+ fireRedAsrCtc: {
+ model: getRequiredPath(modelPath, 'model.int8.onnx')
+ },
+ tokens: getRequiredPath(modelPath, 'tokens.txt')
+ },
+ numThreads: numThreadsFor(modelKey, registryModel.backend),
+ provider: 'cpu',
+ debug: 0
+ };
+ } else if (registryModel.backend === 'whisper') {
+ // Whisper model files use a model-specific prefix (e.g. small-encoder.int8.onnx,
+ // large-v3-turbo-decoder.int8.onnx). Find them from expectedFiles.
+ const ef = registryModel.expectedFiles;
+ const encFile = ef.find(f => f.includes('encoder')) || 'encoder.int8.onnx';
+ const decFile = ef.find(f => f.includes('decoder')) || 'decoder.int8.onnx';
+ const tokFile = ef.find(f => f.includes('tokens')) || 'tokens.txt';
+ config = {
+ featConfig: { sampleRate: 16000, featureDim: 80 },
+ modelConfig: {
+ whisper: {
+ encoder: getRequiredPath(modelPath, encFile),
+ decoder: getRequiredPath(modelPath, decFile),
+ // sherpa-onnx rejects language 'auto' for Whisper: the C++
+ // decoder aborts the whole process at decode time
+ // ("Invalid language: auto"). A concrete language token must
+ // be chosen; fall back to English like a transparent default.
+ language: this._whisperLanguage || 'en',
+ task: 'transcribe',
+ tailPaddings: 1000
+ },
+ tokens: getRequiredPath(modelPath, tokFile)
+ },
+ // sherpa-onnx removed Whisper's 30-second constraint, so the
+ // full clip is decoded in one pass regardless of length.
+ numThreads: numThreadsFor(modelKey, registryModel.backend),
+ provider: 'cpu',
+ debug: 0
+ };
+ } else if (registryModel.backend === 'moonshine') {
+ const fs = require('fs');
+ const pre = getRequiredPath(modelPath, 'preprocess.onnx');
+ const enc = fs.existsSync(path.join(modelPath, 'encode.int8.onnx')) ? 'encode.int8.onnx' : 'encode.onnx';
+ const unc = fs.existsSync(path.join(modelPath, 'uncached_decode.int8.onnx')) ? 'uncached_decode.int8.onnx' : 'uncached_decode.onnx';
+ const cas = fs.existsSync(path.join(modelPath, 'cached_decode.int8.onnx')) ? 'cached_decode.int8.onnx' : 'cached_decode.onnx';
+ config = {
+ featConfig: { sampleRate: 16000, featureDim: 80 },
+ modelConfig: {
+ moonshine: {
+ preprocessor: pre,
+ encoder: getRequiredPath(modelPath, enc),
+ uncachedDecoder: getRequiredPath(modelPath, unc),
+ cachedDecoder: getRequiredPath(modelPath, cas)
+ },
+ tokens: getRequiredPath(modelPath, 'tokens.txt')
+ },
+ numThreads: numThreadsFor(modelKey, registryModel.backend),
+ provider: 'cpu',
+ debug: 0
+ };
+ } else {
+ throw new Error('Unsupported Sherpa model backend.');
+ }
 
-        const recognizer = await sherpa.OfflineRecognizer.createAsync(config);
-        this.loaded = { modelKey, recognizer, modelPath, langHint: this._senseVoiceLanguage, whisperHint: this._whisperLanguage };
-        return this.loaded;
-    }
+ const recognizer = await sherpa.OfflineRecognizer.createAsync(config);
+ this.loaded = { modelKey, recognizer, modelPath, langHint: this._senseVoiceLanguage, whisperHint: this._whisperLanguage };
+ return this.loaded;
+ }
 
-    async unload() {
-        if (!this.loaded) return;
-        const { recognizer } = this.loaded;
-        this.loaded = null;
-        freeNativeMemory(recognizer);
-        scheduleGc();
-    }
+ async unload() {
+ if (!this.loaded) return;
+ const { recognizer } = this.loaded;
+ this.loaded = null;
+ freeNativeMemory(recognizer);
+ scheduleGc();
+ }
 
-    async transcribe(modelKey, pcm, sampleRate = 16000, opts = {}) {
-        // Language hint from the UI language (SenseVoice supports zh/en/yue/ja/ko,
-        // Whisper needs a concrete language code — never 'auto').
-        if (opts && opts.uiLanguage) {
-            const langMap = { zh: 'zh', en: 'en', es: 'auto', ja: 'ja', ko: 'ko' };
-            this._senseVoiceLanguage = langMap[opts.uiLanguage] || 'auto';
-            const whisperLangMap = { zh: 'zh', en: 'en', es: 'es', ja: 'ja', ko: 'ko' };
-            this._whisperLanguage = whisperLangMap[opts.uiLanguage] || 'en';
-        }
-        const samples = validatePcm(pcm, sampleRate);
-        const loaded = await this.load(modelKey);
+ async transcribe(modelKey, pcm, sampleRate = 16000, opts = {}) {
+ // Language hint from the UI language (SenseVoice supports zh/en/yue/ja/ko,
+ // Whisper needs a concrete language code - never 'auto').
+ if (opts && opts.uiLanguage) {
+ const langMap = { zh: 'zh', en: 'en', es: 'auto', ja: 'ja', ko: 'ko' };
+ this._senseVoiceLanguage = langMap[opts.uiLanguage] || 'auto';
+ const whisperLangMap = { zh: 'zh', en: 'en', es: 'es', ja: 'ja', ko: 'ko' };
+ this._whisperLanguage = whisperLangMap[opts.uiLanguage] || 'en';
+ }
+ const samples = validatePcm(pcm, sampleRate);
+ const loaded = await this.load(modelKey);
 
-        const decodeChunk = async (chunkSamples) => {
-            const stream = loaded.recognizer.createStream();
-            try {
-                stream.acceptWaveform({ sampleRate, samples: chunkSamples });
-                const result = await loaded.recognizer.decodeAsync(stream);
-                return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
-            } finally {
-                freeNativeMemory(stream);
-            }
-        };
+ const decodeChunk = async (chunkSamples) => {
+ const stream = loaded.recognizer.createStream();
+ try {
+ stream.acceptWaveform({ sampleRate, samples: chunkSamples });
+ const result = await loaded.recognizer.decodeAsync(stream);
+ return (result?.text || loaded.recognizer.getResult(stream)?.text || '').trim();
+ } finally {
+ freeNativeMemory(stream);
+ }
+ };
 
-        // Whisper caps each decode at n_text_ctx (~448) tokens, truncating long
-        // dictations. Split long clips into overlapping ~28 s chunks so every
-        // chunk gets its own token budget, then stitch with overlap dedup.
-        const registryModel = getModel(modelKey);
-        if (registryModel.backend === 'whisper' && samples.length > Math.round(WHISPER_CHUNK_SECONDS * sampleRate)) {
-            const parts = [];
-            for (const { start, end } of whisperChunkPlan(samples.length, sampleRate)) {
-                const text = await decodeChunk(samples.subarray(start, end));
-                if (!text) continue;
-                const stitched = parts.length ? dedupeWhisperOverlap(parts[parts.length - 1], text) : text;
-                if (stitched) parts.push(stitched);
-            }
-            return parts.join(' ').replace(/\s+/g, ' ').trim();
-        }
-        return decodeChunk(samples);
-    }
+ // Whisper caps each decode at n_text_ctx (~448) tokens, truncating long
+ // dictations. Split long clips into overlapping ~28 s chunks so every
+ // chunk gets its own token budget, then stitch with overlap dedup.
+ const registryModel = getModel(modelKey);
+ if (registryModel.backend === 'whisper' && samples.length > Math.round(WHISPER_CHUNK_SECONDS * sampleRate)) {
+ const parts = [];
+ for (const { start, end } of whisperChunkPlan(samples.length, sampleRate)) {
+ const text = await decodeChunk(samples.subarray(start, end));
+ if (!text) continue;
+ const stitched = parts.length ? dedupeWhisperOverlap(parts[parts.length - 1], text) : text;
+ if (stitched) parts.push(stitched);
+ }
+ return parts.join(' ').replace(/\s+/g, ' ').trim();
+ }
+ return decodeChunk(samples);
+ }
 }
 
 module.exports = {
-    SherpaAdapter,
-    whisperChunkPlan,
-    dedupeWhisperOverlap,
-    WHISPER_CHUNK_SECONDS,
-    WHISPER_OVERLAP_SECONDS
+ SherpaAdapter,
+ whisperChunkPlan,
+ dedupeWhisperOverlap,
+ WHISPER_CHUNK_SECONDS,
+ WHISPER_OVERLAP_SECONDS
 };

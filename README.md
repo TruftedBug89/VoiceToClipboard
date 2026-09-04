@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="build/icon.png" width="128" alt="VoiceToClipboard icon">
+ <img src="build/icon.png" width="128" alt="VoiceToClipboard icon">
 </p>
 
 <h1 align="center">VoiceToClipboard</h1>
 
-> Made for everything — but built with **vibe coders** in mind. 🎙️→📋
+> Made for everything - but built with **vibe coders** in mind. 🎙️→📋
 
 > A lightweight, always-on-top Windows widget that turns microphone speech into clipboard text.
 
@@ -14,7 +14,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 > [!NOTE]
-> **Project Status:** 🟢 **Official Release — v5.0.0**  
+> **Project Status:** 🟢 **Official Release - v5.0.0** 
 > *This status must not be changed by AI unless explicitly instructed by the repository owner.*
 
 ## Highlights
@@ -22,11 +22,11 @@
 - Global recording shortcut, customizable in Settings.
 - Click-to-record, click again to submit, or press `Esc` to cancel.
 - Gemini cloud transcription with automatic 5-model fallback (rate-limited models are remembered and skipped until the next day).
-- **Six local offline models** — automatic language detection with no language setting (Tiny is English-focused; the rest are multilingual/bilingual):
-  - **Tiny · Zipformer Transducer INT8** (~293 MB) and **Mini · FastConformer Transducer 10 languages** (~102 MB) — tiny footprint, instant low-RAM wake.
-  - **Chinese + English (Light) · SenseVoice** (~158 MB, ~400 MB RAM) and **Chinese + English (Big) · FireRedASR2** (~496 MB, ~1.1 GB RAM) — mainly Mandarin, plus English.
-  - **Light · Whisper Small INT8** (~610 MB, ~550 MB RAM) — the default pick; 99+ languages, high accuracy.
-  - **Big · Whisper Turbo INT8** (~538 MB, ~950 MB RAM) — max precision, distilled 4-layer decoder.
+- **Six local offline models** - automatic language detection with no language setting (Tiny is English-focused; the rest are multilingual/bilingual):
+- **Tiny · Zipformer Transducer INT8** (~293 MB) and **Mini · FastConformer Transducer 10 languages** (~102 MB) - tiny footprint, instant low-RAM wake.
+- **Chinese + English (Light) · SenseVoice** (~158 MB, ~400 MB RAM) and **Chinese + English (Big) · FireRedASR2** (~496 MB, ~1.1 GB RAM) - mainly Mandarin, plus English.
+- **Light · Whisper Small INT8** (~610 MB, ~550 MB RAM) - the default pick; 99+ languages, high accuracy.
+- **Big · Whisper Turbo INT8** (~538 MB, ~950 MB RAM) - max precision, distilled 4-layer decoder.
 - Audio capture uses the native Web Audio API and `MediaRecorder`; no ffmpeg or sox dependency is required.
 - Click-through transparent areas, drag-to-move interaction, system tray controls, visual feedback, silence auto-stop, and idle fade.
 - Frameless, restyled Settings window with a custom drag bar and minimize/close controls.
@@ -49,8 +49,8 @@
 
 Grab the ready-to-run build from the [Releases page](https://github.com/TruftedBug89/VoiceToClipboard/releases):
 
-- **`VoiceToClipboard.exe`** — unpacked app, no installer needed; just download and run.
-- **`VoiceToClipboard-Setup-*.exe`** — NSIS installer that adds a Start-menu shortcut.
+- **`VoiceToClipboard.exe`** - unpacked app, no installer needed; just download and run.
+- **`VoiceToClipboard-Setup-*.exe`** - NSIS installer that adds a Start-menu shortcut.
 
 No Node.js, no npm, no dependencies. The app is a single Windows executable (x64, Windows 10/11).
 
@@ -58,7 +58,7 @@ The API key (only needed for Gemini cloud transcription) can be supplied through
 
 ### Alternative: run from source
 
-For developers or the curious — npm is **not required** to use the app, but if you want to hack on it:
+For developers or the curious - npm is **not required** to use the app, but if you want to hack on it:
 
 ```bash
 git clone https://github.com/TruftedBug89/VoiceToClipboard.git
@@ -73,7 +73,7 @@ Requires Node.js 18+ and Windows 10/11.
 
 Select **Offline Models** in Settings, pick one of the six models from the **Offline Local Models** list, then download the verified model package. The Settings panel shows a model card with the exact download size, RAM estimate, license, and installation state, plus a single **Download & Activate** button with inline progress (no separate modal). Installed models can be removed from the same card. Model data is stored outside the installed application under the canonical Electron user-data directory's `models` folder and is not committed or bundled into releases.
 
-> **Downloads:** `.tar.bz2` model packages are decompressed with `unbzip2-stream` before extraction — the npm `tar` package alone cannot decode bzip2 archives (older builds failed with `invalid base256 encoding`). Extraction keeps only the files the app actually loads (INT8 weights, tokens), skipping the fp32 duplicates bundled in Whisper-style archives. If the GitHub release download fails on your network (TLS resets), every model except `mini-multilingual` automatically falls back to per-file downloads from its HuggingFace mirror.
+> **Downloads:** `.tar.bz2` model packages are decompressed with `unbzip2-stream` before extraction - the npm `tar` package alone cannot decode bzip2 archives (older builds failed with `invalid base256 encoding`). Extraction keeps only the files the app actually loads (INT8 weights, tokens), skipping the fp32 duplicates bundled in Whisper-style archives. If the GitHub release download fails on your network (TLS resets), every model except `mini-multilingual` automatically falls back to per-file downloads from its HuggingFace mirror.
 
 | Model | Languages (auto) | Download | RAM while loaded |
 | :--- | :--- | :--- | :--- |
@@ -84,9 +84,9 @@ Select **Offline Models** in Settings, pick one of the six models from the **Off
 | Big · Whisper Turbo INT8 | 99+ languages | ~538 MB | ~950 MB |
 | Chinese + English (Big) · FireRedASR2 | Mandarin + English (code-switching) | ~496 MB | ~1.1 GB |
 
-All six models detect the language automatically — there is no language setting. The RAM figures are conservative worst-case estimates (peak during transcription plus headroom), so a model that measures ~400 MB at rest is listed around ~550 MB. Model packages carry their own licenses; review the source and license information before redistributing them.
+All six models detect the language automatically - there is no language setting. The RAM figures are conservative worst-case estimates (peak during transcription plus headroom), so a model that measures ~400 MB at rest is listed around ~550 MB. Model packages carry their own licenses; review the source and license information before redistributing them.
 
-Every model above was downloaded through the real install pipeline and verified live on Windows x64 (English/Spanish samples; Mandarin samples for the Chinese+English pair) — all six transcribe correctly.
+Every model above was downloaded through the real install pipeline and verified live on Windows x64 (English/Spanish samples; Mandarin samples for the Chinese+English pair) - all six transcribe correctly.
 
 Gemini remains the recommended cloud option when a local model is unavailable or when broader language coverage is needed.
 

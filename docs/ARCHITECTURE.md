@@ -2,28 +2,28 @@
 
 ```
 ┌────────────────────────────────────────────── Electron ──────────────────────────────────────────────┐
-│                                                                                                      │
-│  MAIN PROCESS (Node.js)                               RENDERER PROCESS (Chromium Sandbox)            │
-│  ──────────────────────                               ────────────────────────────────────            │
-│  main.js                  app coordinator             index.html              markup                 │
-│  src/main/config-store.js config & debounce queue     src/renderer/i18n.js    DOM & status i18n      │
-│  src/main/history-store.js history operations & export src/renderer/audio.js   Web Audio & resampler  │
-│  src/main/recordings-store.js voice audio file saving src/renderer/vad.js     speech RMS & calibrate │
-│  src/main/gemini.js       @google/genai failover      src/renderer/visualizer canvas 4 themes        │
-│  src/main/windows.js      widget & settings windows   src/renderer/interaction drag & click-through   │
-│  src/main/tray.js         tray icon & context menu    src/renderer/settings-ui catalog, modal & forms│
-│  src/main/hotkeys.js      uIOhook low-level hooks     src/renderer/recording.js lifecycle & retries  │
-│  src/main/delivery.js     clipboard/toast/bubble      renderer.js             bootstrap coordinator  │
-│  src/main/hygiene.js      cache & junk cleanup                                                       │
-│  src/main/ipc.js          typed IPC handlers                                                         │
-│                                                                                                      │
-│         │                                                                  ▲                         │
-│         │  contextBridge (window.api)                                      │                         │
-│         ▼  ┌────────────────────────────────────────────────────────┐      │                         │
-│       preload.js  whitelist of IPC channels (no nodeIntegration)   ────────┘                         │
-│                                                                                                      │
-│  Bubble Overlay:  bubble.html + bubble-preload.js + bubble-renderer.js                               │
-│  STT Subsystem:   stt/{index,config,model-registry,model-cache,sherpa-adapter,audio,error-sanitizer} │
+│ │
+│ MAIN PROCESS (Node.js) RENDERER PROCESS (Chromium Sandbox) │
+│ ────────────────────── ──────────────────────────────────── │
+│ main.js app coordinator index.html markup │
+│ src/main/config-store.js config & debounce queue src/renderer/i18n.js DOM & status i18n │
+│ src/main/history-store.js history operations & export src/renderer/audio.js Web Audio & resampler │
+│ src/main/recordings-store.js voice audio file saving src/renderer/vad.js speech RMS & calibrate │
+│ src/main/gemini.js @google/genai failover src/renderer/visualizer canvas 4 themes │
+│ src/main/windows.js widget & settings windows src/renderer/interaction drag & click-through │
+│ src/main/tray.js tray icon & context menu src/renderer/settings-ui catalog, modal & forms│
+│ src/main/hotkeys.js uIOhook low-level hooks src/renderer/recording.js lifecycle & retries │
+│ src/main/delivery.js clipboard/toast/bubble renderer.js bootstrap coordinator │
+│ src/main/hygiene.js cache & junk cleanup │
+│ src/main/ipc.js typed IPC handlers │
+│ │
+│ │ ▲ │
+│ │ contextBridge (window.api) │ │
+│ ▼ ┌────────────────────────────────────────────────────────┐ │ │
+│ preload.js whitelist of IPC channels (no nodeIntegration) ────────┘ │
+│ │
+│ Bubble Overlay: bubble.html + bubble-preload.js + bubble-renderer.js │
+│ STT Subsystem: stt/{index,config,model-registry,model-cache,sherpa-adapter,audio,error-sanitizer} │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -106,10 +106,10 @@
 
 | Channel | Payload | Purpose |
 | :--- | :--- | :--- |
-| `settings-changed` | settings snapshot | Config updated (any source) — renderer refreshes. |
+| `settings-changed` | settings snapshot | Config updated (any source) - renderer refreshes. |
 | `models-changed` | model status list | Model download/install state changed. |
-| `settings-layout-restored` | none | Widget geometry restored after settings closed — re-sync click-through. |
-| `toggle-recording` | none | Global hotkey fired — toggle the recording state machine. |
+| `settings-layout-restored` | none | Widget geometry restored after settings closed - re-sync click-through. |
+| `toggle-recording` | none | Global hotkey fired - toggle the recording state machine. |
 | `open-settings` | none | Main requested the settings modal (after window expansion). |
 | `download-progress` | `{ modelKey, percent, … }` | Live model download progress. |
 | `gemini-fallback` | `{ model, keyIndex }` | Gemini failover: the active model/key index after a fallback. |
